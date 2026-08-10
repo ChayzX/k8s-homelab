@@ -282,6 +282,22 @@ whitelist entries look right once RCON is reachable):
 kubectl logs -n minecraft deploy/minecraft -f
 ```
 
+**`kubectl logs` (or Grafana → Loki, once the observability stack is applied)
+is now the *only* source of truth for Minecraft's logs.** Unlike the
+bare-metal server, the containerized Paper no longer writes
+`logs/latest.log` — it's configured stdout-only
+(`minecraft/log4j2.xml` + `-Dlog4j.configurationFile` in the Dockerfile), on
+the reasoning that containerd already captures stdout and promtail already
+ships it to Loki (which now has a stated 30-day retention, see
+`observability/loki-config.yaml`), so a second, independent, unbounded copy
+under `/data/logs` on the same PVC as the world data was pure duplication.
+There is **no local file fallback** if promtail or Loki is ever down —
+`kubectl logs` still works regardless (that's containerd's own capture, not
+Loki), but there's nothing to `grep` inside the pod at `/data/logs` anymore.
+If that tradeoff ever becomes a problem, see the header comment in
+`minecraft/log4j2.xml` for how to re-add a *bounded* file appender rather
+than reverting to Paper's original unbounded one.
+
 ## Step 6 — Verify RCON in-cluster
 
 ```bash

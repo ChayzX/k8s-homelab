@@ -197,6 +197,7 @@ spec:
                 -XX:MaxMetaspaceSize=512m
                 -Dterminal.jline=false
                 -Dterminal.ansi=false
+                -Dlog4j.configurationFile=/opt/minecraft/log4j2.xml
             - name: PAPER_ARGS
               value: "--nogui"
             - name: RCON_HOST
