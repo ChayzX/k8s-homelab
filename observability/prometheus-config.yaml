@@ -1,0 +1,187 @@
+# ConfigMap holding Prometheus' scrape configuration.
+#
+# Rewritten from
+# /home/chase/docker/observability/monitoring/prometheus/prometheus.yml.
+# Three classes of change:
+#
+#   1. host.docker.internal -> 192.168.40.208
+#      host.docker.internal is a Docker-Desktop-VM-only name. It does not
+#      resolve from a k3s pod. Every host-native exporter is now a static
+#      target on the node's LAN IP.
+#
+#   2. cadvisor container -> kubelet's built-in cAdvisor endpoint
+#      The privileged ghcr.io/google/cadvisor container is dropped
+#      entirely. Every kubelet already serves the same metrics at
+#      /metrics/cadvisor. This removes the stack's only privileged
+#      container.
+#
+#   3. kube-state-metrics added
+#      Object-level state (deployment replicas, pod phase, restart
+#      counts, PVC capacity) that cAdvisor does not provide.
+#
+# LABEL CHANGE, READ THIS: the `instance` label on the node_exporter job
+# changes from "host.docker.internal:9100" to "192.168.40.208:9100".
+# Any dashboard panel pinned to the old instance value will go blank.
+# Dashboards are being rebuilt in /home/chase/k8s-homelab/dashboards/ --
+# make sure they template on instance rather than hardcoding it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: observability
+  labels:
+    app: prometheus
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/part-of: observability
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      scrape_timeout: 10s
+      external_labels:
+        cluster: minecraftmachine
+        node: minecraftmachine
+
+    scrape_configs:
+      # ---------------------------------------------------------------
+      # Self
+      # ---------------------------------------------------------------
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      # ---------------------------------------------------------------
+      # Host-native exporters (systemd/user units on the bare metal, NOT
+      # containers). Reached over the node's LAN IP.
+      # ---------------------------------------------------------------
+
+      # node_exporter, pid 1797, systemd user unit, listening on :9100.
+      # This is why there is deliberately NO node-exporter DaemonSet in
+      # this namespace: a DaemonSet using hostNetwork would collide on
+      # :9100 and never go Ready, and a non-hostNetwork one would report
+      # pod-namespace stats instead of the machine's. The host binary is
+      # already bare-metal-correct.
+      - job_name: node
+        static_configs:
+          - targets: ["192.168.40.208:9100"]
+
+      # >>> TO BE REMOVED AT PHASE 5 <<<
+      # docker_desktop_exporter.py measures the Docker Desktop qemu VM's
+      # RSS on the real host. Once Docker Desktop is uninstalled this
+      # target is permanently down and will fire "target down" noise
+      # forever. Delete this whole job in the same change that retires
+      # Docker Desktop, and delete the exporter's systemd unit with it.
+      # See: monitoring/node_exporter/docker_desktop_exporter.py
+      - job_name: docker-desktop-exporter
+        static_configs:
+          - targets: ["192.168.40.208:9201"]
+
+      # Minecraft TPS/players/JVM, via RCON + process introspection.
+      # NOTE: minecraft_exporter.py itself must be reworked at Phase 4
+      # (RCON_HOST=localhost and its psutil process lookup both break
+      # once the server moves into a pod). Until Phase 4 it keeps working
+      # unchanged against the native msh-managed server.
+      - job_name: minecraft-exporter
+        static_configs:
+          - targets: ["192.168.40.208:9202"]
+
+      # ---------------------------------------------------------------
+      # Kubernetes
+      # ---------------------------------------------------------------
+
+      # Kubelet's own metrics (node-level pod/container lifecycle, volume
+      # stats, runtime operation latency).
+      #
+      # k3s serves the kubelet API with a self-signed cert whose SANs do
+      # not include the address Prometheus dials, so insecure_skip_verify
+      # is required. Traffic stays on the node's own loopback-ish LAN
+      # path and is bearer-token authenticated, so this is acceptable
+      # here; it is not a pattern to copy into a multi-node cluster.
+      - job_name: kubernetes-kubelet
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+
+      # Per-container CPU/memory/network -- kubelet's built-in cAdvisor.
+      # This replaces both the cadvisor container AND, for container
+      # network I/O, the bespoke network-exporter: the Compose-era
+      # cAdvisor network bug came from cAdvisor entering container netns
+      # via /proc/<pid>/ns/net with pid:host. The kubelet's embedded
+      # cAdvisor reads per-pod network counters from the pod sandbox
+      # directly and reports them correctly as
+      # container_network_receive_bytes_total /
+      # container_network_transmit_bytes_total on the pod-level ("POD"
+      # sandbox) series. Verify this against `kubectl top` before
+      # deleting any network dashboards.
+      - job_name: kubernetes-cadvisor
+        scheme: https
+        metrics_path: /metrics/cadvisor
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+        metric_relabel_configs:
+          # cAdvisor emits a series per cgroup level, including the
+          # rollups (id="/", "/kubepods", "/system.slice", ...) that
+          # carry no container identity. Dropping those roughly halves
+          # the active series count, which is a real compaction saving on
+          # a 5900rpm-HDD TSDB.
+          #
+          # DELIBERATELY NARROW: container_network_* legitimately has an
+          # empty `container` label -- those counters live on the pod
+          # sandbox, not on any one container. A blanket
+          # `container_.*` drop would silently delete exactly the
+          # per-pod network I/O series this job is meant to provide.
+          - source_labels: [__name__, container]
+            regex: "container_(cpu|memory|fs|blkio|file_descriptors|sockets|threads|processes|tasks|ulimits)_.*;"
+            action: drop
+
+      # Object-level cluster state.
+      - job_name: kube-state-metrics
+        static_configs:
+          - targets: ["kube-state-metrics.observability.svc.cluster.local:8080"]
+
+      # ---------------------------------------------------------------
+      # The observability stack scraping itself
+      # ---------------------------------------------------------------
+      - job_name: loki
+        static_configs:
+          - targets: ["loki.observability.svc.cluster.local:3100"]
+
+      - job_name: grafana
+        static_configs:
+          # Service port is 3002 (matching the published host port),
+          # targetPort 3000.
+          - targets: ["grafana.observability.svc.cluster.local:3002"]
+
+      # promtail runs as a DaemonSet, so its pod IP is not stable. Scrape
+      # it through its headless-ish ClusterIP Service on 9080.
+      - job_name: promtail
+        static_configs:
+          - targets: ["promtail.observability.svc.cluster.local:9080"]
+
+      # ---------------------------------------------------------------
+      # DROPPED FROM THE COMPOSE CONFIG, on purpose:
+      #
+      #   - job_name: cadvisor  (targets: cadvisor:8080)
+      #       superseded by kubernetes-cadvisor above.
+      #
+      #   - job_name: network-exporter  (targets: network-exporter:9200)
+      #       ghcr.io/chayzx/observability-network-exporter reads the
+      #       Docker socket. It has no published host port, so it is not
+      #       reachable from a pod at all, and it becomes meaningless
+      #       once containers stop being Docker containers. Container
+      #       network I/O comes from kubernetes-cadvisor instead.
+      # ---------------------------------------------------------------

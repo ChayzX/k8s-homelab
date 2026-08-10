@@ -1,0 +1,137 @@
+# =============================================================================
+# jmusicbot — Discord music bot
+# =============================================================================
+# Replaces the `jmusicbot` service in /home/chase/docker/jmusicbot/docker-compose.yml
+#
+# THREE THINGS HERE ARE EASY TO GET WRONG. Read before editing:
+#
+# 1. imagePullPolicy: IfNotPresent — MANDATORY, NOT A PREFERENCE.
+#    `jmusicbot-custom:yts1182` is built locally by auto-update.sh and
+#    side-loaded into k3s's containerd with
+#        docker save jmusicbot-custom:<tag> | sudo k3s ctr images import -
+#    It does NOT exist in any registry. With `Always` (which is also the
+#    implicit default for a `:latest` tag) the kubelet tries to pull from
+#    docker.io/library and the pod goes ErrImagePull forever.
+#
+# 2. runAsUser: 10001 — VERIFIED against the running container, not assumed.
+#    `docker top jmusicbot -o user,group` reports 10001:10001. The files under
+#    /home/chase/docker/jmusicbot are owned 1000:1000 ONLY because Docker
+#    Desktop's virtiofs fakes ownership on the bind mount. Bare-metal k3s
+#    enforces real UIDs, so the migrated PVC contents MUST be chowned to
+#    10001:10001 or the bot cannot write serversettings.json / youtubetoken.txt.
+#    See README.md, step "migrate the data".
+#
+# 3. This Deployment is DELIBERATELY NOT MANAGED BY KEEL.
+#    It carries no keel.sh/* annotations, and it must not gain any. jmusicbot
+#    has its own rebuild pipeline (auto-update.sh, cron, daily) which builds a
+#    uniquely-tagged image each run. The k8s deploy step is therefore
+#        docker save <tag> | sudo k3s ctr images import -
+#        kubectl -n jmusicbot set image deployment/jmusicbot jmusicbot=<tag>
+#    NOT `kubectl rollout restart` — the image reference itself must change.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jmusicbot
+  namespace: jmusicbot
+  labels:
+    app.kubernetes.io/name: jmusicbot
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/component: bot
+spec:
+  replicas: 1
+  # Recreate: the config PVC is RWO and JMusicBot writes serversettings.json /
+  # youtubetoken.txt in place. RollingUpdate would briefly run two pods against
+  # the same files (and the second would fail to mount the RWO volume anyway).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jmusicbot
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jmusicbot
+        app.kubernetes.io/part-of: homelab
+        app.kubernetes.io/component: bot
+      annotations:
+        # Roll the pod automatically when config.txt changes. `kubectl create
+        # secret ... --dry-run=client -o yaml | kubectl apply -f -` updates the
+        # Secret, but a subPath mount (see below) never sees the update — bump
+        # this value, or just `kubectl rollout restart`, to pick it up.
+        homelab/config-revision: "1"
+    spec:
+      serviceAccountName: jmusicbot-sa
+      # Zero Kubernetes API access required. No token is projected.
+      automountServiceAccountToken: false
+      # java is PID 1 inside this image (verified: `docker top` shows only the
+      # java process, so /app/entrypoint.sh exec's it), so SIGTERM reaches the
+      # JVM directly and 30s is ample for a clean Discord disconnect.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        # fsGroup makes the kubelet chgrp+setgid the PVC contents to 10001 on
+        # mount, which fixes ownership for anything the migration copy missed.
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: jmusicbot
+          # Locally built, side-loaded image. Update this tag via
+          # `kubectl set image` from auto-update.sh — see header note 3.
+          image: jmusicbot-custom:yts1182
+          imagePullPolicy: IfNotPresent  # see header note 1 — do not change
+          # No ports. The bot is an outbound Discord gateway client; the Compose
+          # service published nothing and neither does this.
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 1Gi
+          # NOTE — JVM heap sizing changes under a memory limit.
+          # The JVM reads the cgroup limit and defaults MaxRAMPercentage to 25%,
+          # so limits.memory=1Gi gives a ~256Mi max heap. Today the container is
+          # unlimited inside the Docker Desktop VM (3.7GiB) and uses ~285MiB
+          # RSS with a much larger heap available. If you see GC thrash or an
+          # OOMKill after cutover, prefer tuning the JVM over raising the limit:
+          #   env:
+          #     - name: JAVA_OPTS
+          #       value: "-XX:MaxRAMPercentage=70"
+          # (Confirm the image's entrypoint honours JAVA_OPTS before relying on
+          # it; if it does not, raise limits.memory instead.)
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            # readOnlyRootFilesystem is NOT set: the JVM writes to /tmp and
+            # lavaplayer buffers there. Enabling it needs an emptyDir at /tmp.
+          volumeMounts:
+            - name: config
+              mountPath: /musicbot
+            # config.txt is delivered from a Secret and mounted as a single
+            # file INTO the PVC-backed directory. Two consequences to know:
+            #  * subPath mounts do not receive Secret updates — the file is
+            #    snapshotted at pod start. Restart the pod to apply changes.
+            #  * the file is read-only. JMusicBot reads config.txt and writes
+            #    its mutable state to serversettings.json (on the PVC), so this
+            #    is fine. If a future version needs to rewrite config.txt, see
+            #    the initContainer alternative documented in README.md.
+            - name: config-txt
+              mountPath: /musicbot/config.txt
+              subPath: config.txt
+              readOnly: true
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: jmusicbot-config
+        - name: config-txt
+          secret:
+            secretName: jmusicbot-config-txt
+            # 0440 (not 0400): with fsGroup the file is owned root:10001, so
+            # the group bit is what makes it readable by the bot.
+            defaultMode: 0440
+            items:
+              - key: config.txt
+                path: config.txt

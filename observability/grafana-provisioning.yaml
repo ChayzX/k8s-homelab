@@ -1,0 +1,102 @@
+# Grafana provisioning ConfigMaps.
+#
+# WHY TWO ConfigMaps AND NOT ONE: Grafana expects
+# /etc/grafana/provisioning/{datasources,dashboards,plugins,alerting}/ as
+# real subdirectories. ConfigMap keys cannot contain "/", so a single
+# ConfigMap mounted at /etc/grafana/provisioning can only produce flat
+# files there -- Grafana would find no providers at all and silently
+# start with zero datasources and zero dashboards. Mounting each
+# subdirectory from its own ConfigMap gives the right tree AND leaves the
+# image's other provisioning subdirectories intact.
+#
+# The DASHBOARD JSON itself is NOT here. It lives in a third ConfigMap
+# named `grafana-dashboards`, generated from
+# /home/chase/k8s-homelab/dashboards/ by a separate agent, and is mounted
+# at /etc/grafana/dashboards -- the path the provider below points at.
+# See README.md for the generate command.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-provisioning-datasources
+  namespace: observability
+  labels:
+    app: grafana
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: observability
+data:
+  datasources.yaml: |
+    apiVersion: 1
+
+    # The uids MUST stay "Prometheus" and "Loki". Every existing
+    # dashboard JSON references datasources by uid; changing them
+    # detaches every panel.
+    datasources:
+      - name: Prometheus
+        uid: Prometheus
+        type: prometheus
+        access: proxy
+        # Same-namespace Service DNS. Identical to the Compose value, so
+        # nothing in the dashboards has to change.
+        url: http://prometheus:9090
+        isDefault: true
+        jsonData:
+          timeInterval: 15s
+
+      - name: Loki
+        uid: Loki
+        type: loki
+        access: proxy
+        url: http://loki:3100
+        jsonData:
+          maxLines: 5000
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-provisioning-dashboards
+  namespace: observability
+  labels:
+    app: grafana
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: observability
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+
+    providers:
+      - name: default
+        folder: ""
+        type: file
+        updateIntervalSeconds: 30
+        # This path is why grafana.yaml MUST mount the grafana-dashboards
+        # ConfigMap at /etc/grafana/dashboards. If that mount is missing,
+        # Grafana logs a provisioning error and shows an empty dashboard
+        # list -- this is the exact defect rev. 1 of the plan shipped.
+        options:
+          path: /etc/grafana/dashboards
+        # ConfigMap-provisioned dashboards are read-only by definition:
+        # the volume is immutable, so a user "Save" would be lost on the
+        # next pod restart. Say so in the UI rather than letting people
+        # lose work.
+        allowUiUpdates: false
+        disableDeletion: true
+---
+# Placeholder so `kubectl apply -k`/`kubectl apply -f .` of this
+# directory produces a working Grafana even before the dashboards agent
+# lands its JSON. The real ConfigMap is generated from
+# /home/chase/k8s-homelab/dashboards/ -- see README.md. Regenerating it
+# with `kubectl create configmap ... --dry-run=client -o yaml | kubectl
+# apply -f -` replaces this content wholesale.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: observability
+  labels:
+    app: grafana
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: observability
+    homelab.local/generated-from: k8s-homelab/dashboards
+data:
+  .placeholder: |
+    Replaced by the generated dashboard ConfigMap. See README.md.

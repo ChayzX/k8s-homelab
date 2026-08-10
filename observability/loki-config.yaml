@@ -1,0 +1,64 @@
+# ConfigMap holding Loki's config file.
+#
+# Ported near-verbatim from
+# /home/chase/docker/observability/monitoring/loki/loki-config.yaml.
+# The on-disk layout under /loki (chunks/, rules/, compactor/, wal/) is
+# UNCHANGED, which is what makes the "stop old Loki -> cp -a loki-data ->
+# chown -> start new Loki" cutover work without a re-index.
+#
+# Do NOT change schema_config after data has been copied in. The existing
+# data is tsdb / v13 / 24h index period; rewriting that stanza orphans
+# every existing index file.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-config
+  namespace: observability
+  labels:
+    app: loki
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/part-of: observability
+data:
+  loki-config.yaml: |
+    auth_enabled: false
+
+    server:
+      http_listen_port: 3100
+      # grpc is unused in single-binary mode but Loki still binds it;
+      # leaving it on the default avoids a restart loop on 0.
+      grpc_listen_port: 9095
+      log_level: info
+
+    common:
+      path_prefix: /loki
+      storage:
+        filesystem:
+          chunks_directory: /loki/chunks
+          rules_directory: /loki/rules
+      replication_factor: 1
+      ring:
+        kvstore:
+          store: inmemory
+
+    schema_config:
+      configs:
+        - from: 2020-10-24
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+
+    limits_config:
+      retention_period: 168h
+
+    compactor:
+      working_directory: /loki/compactor
+      retention_enabled: true
+      delete_request_store: filesystem
+
+    # No phone-home. Not in the Docker config, added here because this is
+    # a home lab on a metered-ish residential link.
+    analytics:
+      reporting_enabled: false

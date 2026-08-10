@@ -1,0 +1,20 @@
+# Namespace for the observability stack (loki, promtail, prometheus,
+# grafana, uptime-kuma, kube-state-metrics).
+#
+# Pod Security Admission is set to "privileged" DELIBERATELY, not by
+# omission: the promtail DaemonSet mounts hostPath volumes
+# (/var/log/pods, /var/log/containers, /home/chase/minecraft/logs) and
+# runs as UID 0 so it can read root-owned container log files. That
+# violates both the "baseline" and "restricted" PSA profiles. Every other
+# workload in this namespace is hardened individually in its own manifest
+# (runAsNonRoot, drop ALL capabilities, no privilege escalation,
+# seccompProfile RuntimeDefault).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    app.kubernetes.io/part-of: observability
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline

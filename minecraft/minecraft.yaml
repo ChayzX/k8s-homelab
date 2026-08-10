@@ -1,0 +1,407 @@
+# ============================================================================
+#  Minecraft (Paper 1.21.11) on single-node k3s
+# ============================================================================
+#
+#  READ MIGRATION.md BEFORE APPLYING THIS FILE.
+#
+#  This file is applied in TWO passes, distinguished by the label
+#  `homelab.chase/cutover-stage`:
+#
+#    Pass 1 — pre-cutover (msh still live, still serving players on 25565):
+#        kubectl apply -f minecraft.yaml -l homelab.chase/cutover-stage=pre
+#
+#    Pass 2 — cutover (msh stopped and disabled):
+#        kubectl apply -f minecraft.yaml
+#
+#  WHY THE TWO PASSES ARE NOT OPTIONAL
+#  -----------------------------------
+#  The `minecraft` LoadBalancer Service is the ONLY object labelled
+#  `cutover-stage: cutover`. Creating a LoadBalancer Service makes k3s ServiceLB
+#  schedule an `svclb-minecraft-*` pod that declares hostPort 25565. hostPort is
+#  implemented by the CNI portmap plugin as a DNAT rule in the nat PREROUTING
+#  chain, which is evaluated BEFORE local delivery. Applied while msh still owns
+#  25565, that rule hijacks inbound LAN traffic away from the live server and
+#  into a pod that may not be ready — breaking production before the cutover has
+#  even been decided on. Do not apply the whole file early "just to see".
+#
+#  Namespace ownership: _bootstrap/00-namespaces.yaml deliberately does NOT
+#  create the `minecraft` namespace; it is created here, in the directory that
+#  owns it. Keep it that way — one source of truth per object.
+#
+#  Prerequisite not in this file: the `minecraft-rcon` Secret. See secrets.md.
+#  If it is absent the pod stops at CreateContainerConfigError, which is the
+#  correct loud failure.
+# ============================================================================
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minecraft
+  labels:
+    app.kubernetes.io/name: minecraft
+    app.kubernetes.io/part-of: homelab
+    kubernetes.io/metadata.name: minecraft
+    homelab.chase/cutover-stage: pre
+
+---
+# Dedicated ServiceAccount. The server talks to nobody in the cluster and has no
+# business holding a bearer token for the API. Disabled in two places on purpose
+# (here and on the pod spec) so that neither a defaulted pod spec nor an edited
+# SA can quietly re-mount it.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: minecraft-sa
+  namespace: minecraft
+  labels:
+    app.kubernetes.io/name: minecraft
+    app.kubernetes.io/part-of: homelab
+    homelab.chase/cutover-stage: pre
+automountServiceAccountToken: false
+
+---
+# The world volume.
+#
+# Sizing: 1.3 GB of world + ~55 MB jar copy + libraries/versions/cache + logs
+# ≈ 1.6 GB today. 10Gi leaves room for years of world growth and for the
+# region-file churn that comes with new chunk exploration.
+#
+# Honest caveat: local-path-provisioner does not *enforce* capacity — it is a
+# bind mount to a directory on /dev/sda2. The 10Gi is a scheduling hint and a
+# statement of intent, not a quota. The real ceiling is free space on /.
+#
+# Binding mode: local-path uses WaitForFirstConsumer, so no directory exists on
+# disk until a pod that mounts this PVC is scheduled. That is why MIGRATION.md
+# runs a throwaway seed pod before copying the world in.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minecraft-world
+  namespace: minecraft
+  labels:
+    app.kubernetes.io/name: minecraft
+    app.kubernetes.io/part-of: homelab
+    homelab.chase/cutover-stage: pre
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minecraft
+  namespace: minecraft
+  labels:
+    app.kubernetes.io/name: minecraft
+    app.kubernetes.io/part-of: homelab
+    homelab.chase/cutover-stage: pre
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  # Recreate, never RollingUpdate. Two Paper JVMs must never have the same world
+  # directory open at once: session.lock is advisory-only across processes here,
+  # and concurrent region-file writers corrupt chunks. Recreate guarantees the
+  # old pod is fully terminated and the RWO volume released before the new pod
+  # mounts it.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: minecraft
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: minecraft
+        app.kubernetes.io/part-of: homelab
+    spec:
+      serviceAccountName: minecraft-sa
+      automountServiceAccountToken: false
+
+      # ---------------------------------------------------------------------
+      # 120 seconds, not the 30s default.
+      #
+      # The grace clock is a single budget covering preStop AND the SIGTERM
+      # window that follows it; it is not 120s each. Budget:
+      #   t+0    kubelet runs preStop -> rcon `save-all flush`, then `stop`
+      #   t+~0-90 preStop polls until the RCON listener closes, which Minecraft
+      #          does in onServerExit(), i.e. after every chunk is flushed
+      #   then   kubelet sends SIGTERM to PID 1 (java). If the server already
+      #          exited this is a no-op; if not, the JVM shutdown hook saves.
+      #   t+120  SIGKILL. Reaching this line means something went wrong.
+      # 30s is simply not enough to flush a 1.3 GB world to a 5900rpm HDD.
+      # ---------------------------------------------------------------------
+      terminationGracePeriodSeconds: 120
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        # Everything under /home/chase/minecraft is 1000:1000 and stays that way
+        # in the PVC. Docker Desktop's virtiofs used to paper over uid mismatches;
+        # bare-metal k3s enforces them.
+        fsGroup: 1000
+        # OnRootMismatch, not the Always default: Always recursively chowns the
+        # entire volume on EVERY pod start. That is a full walk of 1.3 GB of
+        # region files on a 5900rpm disk before the JVM even starts, on every
+        # restart. OnRootMismatch checks the volume root only and skips the walk
+        # once ownership is correct.
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: minecraft
+          # Side-loaded into k3s containerd, never pulled from a registry:
+          #   docker save localhost/paper-minecraft:1.21.11-b127 | sudo k3s ctr images import -
+          # imagePullPolicy MUST be IfNotPresent (or Never) — with Always, or
+          # with a `:latest` tag, kubelet would try to reach a registry that
+          # does not have this image and the pod would sit in ImagePullBackOff.
+          image: localhost/paper-minecraft:1.21.11-b127
+          imagePullPolicy: IfNotPresent
+
+          # Keep stdin open but unattached. Paper's console reader reads stdin;
+          # with stdin closed it sees EOF immediately at startup. Holding the
+          # pipe open makes the reader simply block forever, which is the quiet,
+          # correct behaviour. tty stays false so log lines reach stdout as
+          # plain text for promtail rather than as terminal-control soup.
+          stdin: true
+          tty: false
+
+          ports:
+            - name: minecraft
+              containerPort: 25566
+              protocol: TCP
+            - name: query
+              containerPort: 25566
+              protocol: UDP
+            - name: rcon
+              containerPort: 25575
+              protocol: TCP
+
+          env:
+            # Mirrors the Dockerfile default; set explicitly here so the running
+            # configuration is visible in `kubectl get deploy -o yaml` and can be
+            # tuned without a rebuild. See the Dockerfile for the rationale on
+            # each flag, especially MaxDirectMemorySize.
+            - name: JVM_OPTS
+              value: >-
+                -Xms2G
+                -Xmx6G
+                -XX:MaxDirectMemorySize=1G
+                -XX:MaxMetaspaceSize=512m
+                -Dterminal.jline=false
+                -Dterminal.ansi=false
+            - name: PAPER_ARGS
+              value: "--nogui"
+            - name: RCON_HOST
+              value: "127.0.0.1"
+            - name: RCON_PORT
+              value: "25575"
+            # Consumed by /opt/minecraft/rcon.jar (preStop hook, and
+            # `kubectl exec` from the backup script). It does NOT configure
+            # Paper — Paper reads rcon.password from server.properties on the
+            # PVC. The two must match; see secrets.md.
+            - name: RCON_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minecraft-rcon
+                  key: rcon.password
+            # Bound below terminationGracePeriodSeconds so preStop always
+            # returns with time left for the SIGTERM fallback.
+            - name: SHUTDOWN_WAIT_MS
+              value: "90000"
+
+          resources:
+            requests:
+              cpu: "2"
+              memory: 3Gi
+            limits:
+              cpu: "6"
+              memory: 8Gi
+            # 6G heap under an 8Gi limit = 0.75 heap:limit. The remaining ~2Gi
+            # is not slack, it is the JVM's actual off-heap footprint: metaspace
+            # (<=512m), code cache, ~100 thread stacks, GC structures, and
+            # netty direct buffers (<=1G). Do NOT tighten this: pods cannot swap
+            # (kubelet sets memory.swap.max=0 on cgroup v2), so exceeding the
+            # limit is an instant cgroup OOM-kill with no GC opportunity and no
+            # world save — the corruption case, not a slowdown.
+
+          # ---------------------------------------------------------------
+          # Readiness only. There is deliberately NO livenessProbe.
+          #
+          # A Paper server that is lagging — a big world-gen burst, a mob farm,
+          # a chunk-saving spike on a slow disk — is alive and will recover. A
+          # livenessProbe would SIGKILL it mid-tick and take the world with it.
+          # The failure mode a livenessProbe protects against (a wedged JVM) is
+          # rarer and less damaging here than the failure mode it creates.
+          #
+          # Readiness gates Service endpoints, which is exactly what is wanted:
+          # players are not routed to a server that has not finished loading.
+          # 30s + 10s * 30 = up to ~5.5 minutes to open the listener, which is
+          # generous for loading a 1.3 GB world from a 5900rpm HDD after a cold
+          # page cache.
+          # ---------------------------------------------------------------
+          readinessProbe:
+            tcpSocket:
+              port: 25566
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 30
+
+          lifecycle:
+            preStop:
+              exec:
+                # Exec form, no shell. Issues `save-all flush` then `stop` over
+                # RCON so shutdown takes the same path as an operator typing
+                # /stop (plugins disabled, players saved, chunks flushed), then
+                # waits for the RCON listener to close before returning.
+                # Failure here is non-fatal: it exits 0 and lets SIGTERM (which
+                # java receives as PID 1) run the JVM shutdown hook instead.
+                # -Xmx32m keeps this helper JVM's footprint inside the cgroup
+                # limit alongside the 6G server heap.
+                command:
+                  - java
+                  - -Xmx32m
+                  - -XX:TieredStopAtLevel=1
+                  - -jar
+                  - /opt/minecraft/rcon.jar
+                  - --graceful-stop
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            # Left writable: netty extracts its native epoll library to
+            # java.io.tmpdir at startup. /tmp is an emptyDir below so that churn
+            # never lands on the world PVC.
+            readOnlyRootFilesystem: false
+
+          volumeMounts:
+            - name: world
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: world
+          persistentVolumeClaim:
+            claimName: minecraft-world
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi
+
+---
+# In-cluster RCON. Reached by the minecraft_exporter pod as
+#   minecraft-rcon.minecraft.svc.cluster.local:25575
+# Deliberately ClusterIP: RCON is an unauthenticated-until-password, plaintext
+# admin channel and must never be exposed on a node port or a LoadBalancer.
+#
+# publishNotReadyAddresses is left at its default (false) so nothing tries to
+# drive RCON against a server that is still loading chunks.
+apiVersion: v1
+kind: Service
+metadata:
+  name: minecraft-rcon
+  namespace: minecraft
+  labels:
+    app.kubernetes.io/name: minecraft
+    app.kubernetes.io/part-of: homelab
+    homelab.chase/cutover-stage: pre
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: minecraft
+  ports:
+    - name: rcon
+      port: 25575
+      targetPort: 25575
+      protocol: TCP
+
+---
+# Pre-cutover verification Service.
+#
+# msh owns 25565 until the moment of cutover, so the pod cannot be tested on its
+# real port. NodePort is the right tool because — unlike LoadBalancer — it does
+# NOT spawn a ServiceLB pod and therefore does NOT install a hostPort DNAT rule
+# that could steal traffic from the live server.
+#
+# 30565 is inside k3s's default service-node-port-range (30000-32767). A port
+# like 25567 would be rejected at apply time.
+#
+# Join from a client as:  192.168.40.208:30565
+apiVersion: v1
+kind: Service
+metadata:
+  name: minecraft-nodeport
+  namespace: minecraft
+  labels:
+    app.kubernetes.io/name: minecraft
+    app.kubernetes.io/part-of: homelab
+    homelab.chase/cutover-stage: pre
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: minecraft
+  ports:
+    - name: minecraft
+      port: 25565
+      targetPort: 25566
+      nodePort: 30565
+      protocol: TCP
+
+---
+# ############################################################################
+#  PRODUCTION SERVICE — CUTOVER ONLY. Applying this while msh.service is
+#  running will hijack inbound 25565 from the live server. See the header.
+# ############################################################################
+#
+# The port mapping is asymmetric ON PURPOSE:
+#     port 25565  = what the world connects to (what msh answers on today)
+#     targetPort 25566 = Paper's own listener (server-port=25566)
+# A 1:1 mapping would point 25565 at a port nothing is listening on.
+#
+# k3s ServiceLB will also allocate an incidental random nodePort in
+# 30000-32767 for this Service. That is normal and harmless; ignore it.
+#
+# Source IP: klipper-lb masquerades, so Paper sees the LoadBalancer pod's
+# address rather than the player's. This is not a regression — msh proxied
+# 25565 and playit.gg tunnels already meant the true client IP never reached
+# the server. It does mean IP bans and log-ips=true are not meaningful; ban by
+# player name.
+apiVersion: v1
+kind: Service
+metadata:
+  name: minecraft
+  namespace: minecraft
+  labels:
+    app.kubernetes.io/name: minecraft
+    app.kubernetes.io/part-of: homelab
+    homelab.chase/cutover-stage: cutover
+spec:
+  type: LoadBalancer
+  # Cluster, not Local: on a single node there is no second hop to avoid, and
+  # klipper-lb masquerades anyway so Local would buy no source-IP preservation.
+  externalTrafficPolicy: Cluster
+  selector:
+    app.kubernetes.io/name: minecraft
+  ports:
+    - name: minecraft
+      port: 25565
+      targetPort: 25566
+      protocol: TCP
+    # Optional: the UDP query protocol (enable-query=true, query.port=25566).
+    # Left commented because nothing consumes it — the exporter uses RCON — and
+    # a mixed TCP/UDP LoadBalancer means the ServiceLB pod must also claim
+    # hostPort 25565/UDP. Uncomment only if you find something that needs it.
+    # - name: query
+    #   port: 25565
+    #   targetPort: 25566
+    #   protocol: UDP

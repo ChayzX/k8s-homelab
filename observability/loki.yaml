@@ -1,0 +1,184 @@
+# Loki -- single-binary log store, filesystem-backed.
+#
+# ============================================================
+# MANUAL STEP REQUIRED AFTER COPYING DATA INTO THE PVC
+# ============================================================
+# The grafana/loki:3.3.2 image runs as UID/GID 10001:10001. The existing
+# data directory (/home/chase/docker/observability/loki-data) is owned
+# 1000:1000. This "works" under Docker Desktop only because virtiofs
+# fakes ownership; bare-metal k3s enforces it and Loki will crash-loop on
+# "permission denied" writing chunks/WAL.
+#
+# fsGroup: 10001 below makes the volume GROUP-readable/writable, but the
+# operator must still fix file ownership after the copy:
+#
+#   LOKI_PV=$(kubectl -n observability get pvc loki-data \
+#     -o jsonpath='{.spec.volumeName}')
+#   LOKI_DIR=$(kubectl get pv "$LOKI_PV" -o jsonpath='{.spec.local.path}')
+#   sudo chown -R 10001:10001 "$LOKI_DIR"
+#
+# Run that with the Loki pod scaled to 0 (kubectl -n observability scale
+# deploy/loki --replicas=0), then scale back to 1.
+# ============================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loki-sa
+  namespace: observability
+  labels:
+    app: loki
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/part-of: observability
+# Loki never talks to the Kubernetes API.
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: loki-data
+  namespace: observability
+  labels:
+    app: loki
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/part-of: observability
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki
+  namespace: observability
+  labels:
+    app: loki
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/part-of: observability
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  # Recreate, never RollingUpdate: the replacement pod must not mount the
+  # same RWO PVC while the old one still holds the Loki WAL open.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: loki
+  template:
+    metadata:
+      labels:
+        app: loki
+        app.kubernetes.io/name: loki
+        app.kubernetes.io/part-of: observability
+      annotations:
+        # Roll the pod when the config changes. Update this by hand (or
+        # via kubectl rollout restart) after editing loki-config.yaml.
+        homelab.local/config-revision: "1"
+    spec:
+      serviceAccountName: loki-sa
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        runAsNonRoot: true
+        # Matches the loki container's GID. See the chown note at the top
+        # of this file -- fsGroup fixes group access, not ownership.
+        fsGroup: 10001
+        # OnRootMismatch: skip the recursive chgrp when the volume root
+        # already has the right group. On a 5900rpm HDD with 20Gi of
+        # chunks, an unconditional recursive walk on every pod start adds
+        # minutes of startup I/O that contends with Minecraft.
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: loki
+          image: grafana/loki:3.3.2
+          imagePullPolicy: IfNotPresent
+          args:
+            - -config.file=/etc/loki/loki-config.yaml
+          ports:
+            - name: http
+              containerPort: 3100
+              protocol: TCP
+            - name: grpc
+              containerPort: 9095
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          # WAL replay off a 5900rpm HDD can take a while after an unclean
+          # stop. The startup probe buys up to 10 minutes before the
+          # liveness probe is allowed to start killing the pod.
+          startupProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/loki
+              readOnly: true
+            - name: data
+              mountPath: /loki
+      volumes:
+        - name: config
+          configMap:
+            name: loki-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: loki-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: observability
+  labels:
+    app: loki
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/part-of: observability
+spec:
+  # ClusterIP on purpose. The name "loki" on port 3100 keeps the existing
+  # Grafana datasource URL (http://loki:3100) and promtail client URL
+  # working verbatim from the Compose stack.
+  type: ClusterIP
+  selector:
+    app: loki
+  ports:
+    - name: http
+      port: 3100
+      targetPort: http
+      protocol: TCP
+    - name: grpc
+      port: 9095
+      targetPort: grpc
+      protocol: TCP

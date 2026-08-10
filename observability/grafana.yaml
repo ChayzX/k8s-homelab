@@ -1,0 +1,234 @@
+# Grafana -- dashboards for Prometheus (metrics) and Loki (logs).
+#
+# ============================================================
+# MANUAL STEP REQUIRED AFTER COPYING DATA INTO THE PVC
+# ============================================================
+# grafana/grafana:11.4.0 runs as UID/GID 472:472. The existing data
+# directory (/home/chase/docker/observability/grafana-data, which holds
+# grafana.db plus the installed plugins) is owned 1000:1000.
+#
+#   GRAF_PV=$(kubectl -n observability get pvc grafana-data \
+#     -o jsonpath='{.spec.volumeName}')
+#   GRAF_DIR=$(kubectl get pv "$GRAF_PV" -o jsonpath='{.spec.local.path}')
+#   sudo chown -R 472:472 "$GRAF_DIR"
+#
+# Copy with the old Grafana container stopped: grafana.db is SQLite and a
+# hot copy can capture a torn WAL.
+#
+# ROLLBACK WARNING (from the plan): the FIRST dashboard saved into this
+# new PVC is the true point of no return for Phase 1. Rolling back after
+# that loses every dashboard built since cutover.
+# ============================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grafana-sa
+  namespace: observability
+  labels:
+    app: grafana
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: observability
+# Grafana never talks to the Kubernetes API.
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data
+  namespace: observability
+  labels:
+    app: grafana
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: observability
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: observability
+  labels:
+    app: grafana
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: observability
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  # Recreate: two Grafana pods must never have grafana.db (SQLite) open
+  # against the same RWO volume.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+        app.kubernetes.io/name: grafana
+        app.kubernetes.io/part-of: observability
+      annotations:
+        homelab.local/config-revision: "1"
+    spec:
+      serviceAccountName: grafana-sa
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 472
+        runAsGroup: 472
+        runAsNonRoot: true
+        # Matches the grafana container's GID. See the chown note above.
+        fsGroup: 472
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.4.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            # Optional secret. If `grafana-admin` does not exist, Grafana
+            # starts with whatever admin credentials already live in the
+            # copied grafana.db -- which is the normal case for this
+            # migration. Create it only if the password needs resetting:
+            #   kubectl -n observability create secret generic \
+            #     grafana-admin --from-literal=admin-password='...'
+            # NO SECRET VALUES ARE STORED IN THIS REPO.
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: admin-password
+                  optional: true
+            - name: GF_PATHS_PROVISIONING
+              value: /etc/grafana/provisioning
+            - name: GF_ANALYTICS_REPORTING_ENABLED
+              value: "false"
+            - name: GF_ANALYTICS_CHECK_FOR_UPDATES
+              value: "false"
+            # Grafana's own port stays 3000 inside the pod; the Service
+            # publishes it on 3002 to match the Compose-era host port.
+            - name: GF_SERVER_HTTP_PORT
+              value: "3000"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            # ---- BOTH mounts are required. ----
+            # The provisioning tree tells Grafana WHERE to look; the
+            # dashboards tree is WHAT it finds there. Dropping either one
+            # yields a Grafana with no dashboards and only a log line to
+            # explain it.
+            - name: provisioning-datasources
+              mountPath: /etc/grafana/provisioning/datasources
+              readOnly: true
+            - name: provisioning-dashboards
+              mountPath: /etc/grafana/provisioning/dashboards
+              readOnly: true
+            - name: dashboards
+              mountPath: /etc/grafana/dashboards
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/grafana
+      volumes:
+        - name: provisioning-datasources
+          configMap:
+            name: grafana-provisioning-datasources
+        - name: provisioning-dashboards
+          configMap:
+            name: grafana-provisioning-dashboards
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+        - name: data
+          persistentVolumeClaim:
+            claimName: grafana-data
+---
+# ============================================================
+# PRIMARY SERVICE -- REAL PORT 3002. EXPECT IT TO BE BROKEN UNTIL
+# THE OLD GRAFANA CONTAINER IS STOPPED. THIS IS NORMAL.
+# ============================================================
+# ServiceLB (klipper) implements type: LoadBalancer by running a
+# DaemonSet that binds a hostPort on the node. Port 3002 is currently
+# held host-wide by Docker Desktop's proxy for the old grafana
+# container, so while both exist:
+#
+#   * the svclb-grafana-* pod sits in CrashLoopBackOff ("bind: address
+#     already in use"), and
+#   * `kubectl get svc grafana` shows EXTERNAL-IP <pending>
+#
+# Nothing surfaces this on the Service object itself -- if you see
+# <pending>, check the svclb pod's logs, not the Service events.
+#
+# The Deployment above is completely unaffected by that. Verify the new
+# Grafana over grafana-verify-nodeport.yaml (http://192.168.40.208:30002)
+# while this Service is still pending. Then, as the LAST step of the
+# Grafana cutover:
+#
+#   1. docker compose -f /home/chase/docker/observability/docker-compose.yml stop grafana
+#   2. kubectl -n observability delete svc grafana        # clears the wedged svclb DaemonSet
+#      kubectl apply -f grafana.yaml                      # recreates it; now 3002 is free
+#   3. kubectl -n observability get svc grafana           # EXTERNAL-IP should be 192.168.40.208
+#   4. kubectl delete -f grafana-verify-nodeport.yaml     # drop the temporary port
+#
+# (Step 2's delete+apply is not optional cosmetics: klipper does not
+# reliably re-attempt the bind on its own once it has backed off.)
+# ============================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: observability
+  labels:
+    app: grafana
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: observability
+spec:
+  type: LoadBalancer
+  selector:
+    app: grafana
+  ports:
+    - name: http
+      # 3002 on the LAN, 3000 in the container -- same mapping the
+      # Compose file published.
+      port: 3002
+      targetPort: http
+      protocol: TCP

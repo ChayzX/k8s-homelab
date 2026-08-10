@@ -1,0 +1,243 @@
+# Prometheus -- metrics store + scraper.
+#
+# ============================================================
+# MANUAL STEP REQUIRED AFTER COPYING DATA INTO THE PVC
+# ============================================================
+# prom/prometheus:v3.1.0 runs as UID/GID 65534:65534 ("nobody"). The
+# existing data directory
+# (/home/chase/docker/observability/prometheus-data) is owned 1000:1000.
+# Bare-metal k3s enforces that; Prometheus will fail to open the WAL.
+#
+#   PROM_PV=$(kubectl -n observability get pvc prometheus-data \
+#     -o jsonpath='{.spec.volumeName}')
+#   PROM_DIR=$(kubectl get pv "$PROM_PV" -o jsonpath='{.spec.local.path}')
+#   sudo chown -R 65534:65534 "$PROM_DIR"
+#
+# Do the copy with BOTH the old container and the new pod stopped --
+# hot-copying a live TSDB WAL produces a corrupt block set that
+# Prometheus will silently truncate on next start.
+# ============================================================
+#
+# HDD TUNING: / is a 5900rpm ST4000DM000. Prometheus compaction is a
+# burst of large sequential reads+writes that directly contends with
+# Minecraft chunk I/O (players feel it as lag spikes). Two mitigations
+# are applied in the args below -- shortened retention and a capped
+# max-block-duration. See the comments there.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus-sa
+  namespace: observability
+  labels:
+    app: prometheus
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/part-of: observability
+# Prometheus DOES need the API: kubernetes_sd_configs (role: node) for
+# kubelet and cAdvisor discovery. Token is mounted.
+automountServiceAccountToken: true
+---
+# Least-privilege read-only cluster access for service discovery and for
+# scraping the kubelet's authenticated metrics endpoints.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: observability-prometheus
+  labels:
+    app: prometheus
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/part-of: observability
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/proxy
+      - services
+      - endpoints
+      - pods
+    verbs: ["get", "list", "watch"]
+  # Required to scrape https://<node>:10250/metrics and
+  # /metrics/cadvisor. Without this the kubelet returns 401 and every
+  # kubernetes-* job sits down.
+  - apiGroups: [""]
+    resources: ["nodes/metrics"]
+    verbs: ["get"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: observability-prometheus
+  labels:
+    app: prometheus
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/part-of: observability
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: observability-prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus-sa
+    namespace: observability
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: observability
+  labels:
+    app: prometheus
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/part-of: observability
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: observability
+  labels:
+    app: prometheus
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/part-of: observability
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+        app.kubernetes.io/name: prometheus
+        app.kubernetes.io/part-of: observability
+      annotations:
+        homelab.local/config-revision: "1"
+    spec:
+      serviceAccountName: prometheus-sa
+      automountServiceAccountToken: true
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        # Matches the prometheus container's GID (nobody). See the chown
+        # note at the top of this file.
+        fsGroup: 65534
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      # Prometheus flushes the head block on SIGTERM. Give it room --
+      # being SIGKILLed mid-flush means a WAL replay next boot, which on
+      # this HDD is minutes.
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.1.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            # Retention shortened from the 15d default. Less data on
+            # disk means smaller compaction passes on the 5900rpm HDD.
+            - --storage.tsdb.retention.time=10d
+            # Hard ceiling so a scrape-cardinality accident can't fill
+            # the 20Gi PVC and wedge the node.
+            - --storage.tsdb.retention.size=15GB
+            # THE IMPORTANT ONE for HDD contention. Default lets
+            # Prometheus compact up to 10% of retention into one block
+            # (~24h blocks at 10d retention), which is a single multi-
+            # hundred-MB read-modify-write burst. Capping at 6h keeps
+            # every compaction small and frequent instead of rare and
+            # enormous, so Minecraft's chunk I/O never queues behind a
+            # giant sequential job. Do not raise this on spinning rust.
+            - --storage.tsdb.max-block-duration=6h
+            - --storage.tsdb.min-block-duration=2h
+            # Allows `curl -XPOST /-/reload` after editing the ConfigMap
+            # instead of restarting (and re-replaying the WAL).
+            - --web.enable-lifecycle
+            - --web.console.libraries=/usr/share/prometheus/console_libraries
+            - --web.console.templates=/usr/share/prometheus/consoles
+          ports:
+            - name: http
+              containerPort: 9090
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          # WAL replay on a 5900rpm disk is the slow path here. 15 min of
+          # startup grace before liveness is armed.
+          startupProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            periodSeconds: 10
+            failureThreshold: 90
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+              readOnly: true
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: prometheus-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: observability
+  labels:
+    app: prometheus
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/part-of: observability
+spec:
+  # ClusterIP: the name "prometheus" on 9090 keeps the existing Grafana
+  # datasource URL (http://prometheus:9090) working unchanged.
+  type: ClusterIP
+  selector:
+    app: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http
+      protocol: TCP

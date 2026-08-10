@@ -1,0 +1,142 @@
+# =============================================================================
+# cloudflared — Cloudflare Tunnel connector for pantry-bot
+# =============================================================================
+# Replaces the `cloudflared` service in
+# /home/chase/Downloads/pantry-bot/docker-compose.prod.yml
+#
+# Stateless. No PVC, no ports published to the node. It makes only OUTBOUND
+# connections to Cloudflare's edge and forwards inbound tunnel traffic to
+# pantry-bot's ClusterIP Service.
+#
+# -----------------------------------------------------------------------------
+# TWO CHANGES FROM THE COMPOSE VERSION, BOTH DELIBERATE
+# -----------------------------------------------------------------------------
+# 1. The token moves out of the command line.
+#    Compose ran: `tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}`
+#    which puts the credential in argv, where it is visible to anything that can
+#    read the process table, and in `kubectl describe pod` output. cloudflared
+#    reads the same value from the TUNNEL_TOKEN environment variable when `run`
+#    is given no token argument, so the token comes from a Secret instead. This
+#    is the documented, supported form — not a workaround.
+#
+# 2. `--metrics 0.0.0.0:2000` is added so there is something real to probe.
+#    cloudflared serves /ready on its metrics listener, which reports whether
+#    the connector actually has registered tunnel connections to Cloudflare's
+#    edge. Without it the only available signal is "the process has not
+#    exited", which stays true while the tunnel is completely down. Drop the
+#    flag and both probes together if you want the command byte-identical to
+#    the Compose one.
+#
+# Ordering: Compose used `depends_on: bot`. Kubernetes has no equivalent and
+# does not need one — cloudflared retries its origin connection, and the
+# Service resolves whether or not a pantry-bot pod is Ready yet.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: cloudflared
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/component: tunnel
+  # No keel.sh annotations. cloudflared:latest is upstream Cloudflare's tag;
+  # auto-updating the ingress path to the only publicly reachable service in
+  # this cluster, unattended, is not a trade this home-lab needs. Update it
+  # deliberately with `kubectl rollout restart` (imagePullPolicy: Always).
+spec:
+  replicas: 1
+  # RollingUpdate is safe here (no volume, no singleton constraint) and gives a
+  # brief overlap so tunnel connections drain rather than drop. Cloudflare
+  # explicitly supports multiple connectors for the same tunnel.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudflared
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cloudflared
+        app.kubernetes.io/part-of: homelab
+        app.kubernetes.io/component: tunnel
+    spec:
+      serviceAccountName: cloudflared-sa
+      # Zero Kubernetes API access required.
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        # UID 65532 = the `nonroot` user in the distroless-style cloudflared
+        # image. Verified against the running container
+        # (`docker top pantry-bot-cloudflared-1 -o user,group`).
+        runAsUser: 65532
+        runAsGroup: 65532
+        runAsNonRoot: true
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:latest
+          imagePullPolicy: Always
+          args:
+            - tunnel
+            - --no-autoupdate
+            - --metrics
+            - 0.0.0.0:2000
+            - run
+          env:
+            # The tunnel token encodes the tunnel ID and its credentials, and
+            # for a remotely-managed tunnel it is also how cloudflared fetches
+            # its ingress configuration from Cloudflare. Anyone holding it can
+            # run this tunnel. See SECRETS.md.
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflared-tunnel
+                  key: TUNNEL_TOKEN
+          ports:
+            - name: metrics
+              containerPort: 2000
+              protocol: TCP
+          readinessProbe:
+            # /ready returns 200 only while the connector has at least one
+            # registered connection to the Cloudflare edge — a genuine health
+            # signal, unlike "process is running".
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            # Generous: a transient Cloudflare edge blip should not restart the
+            # connector, which reconnects on its own. 5 x 30s = 2.5 minutes of
+            # sustained disconnection before a restart.
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            # readOnlyRootFilesystem is left off deliberately. cloudflared may
+            # write to /tmp and to a per-user config dir depending on version
+            # and flags, and a rootfs failure here takes down the only publicly
+            # reachable path into this cluster. If you want it, add:
+            #   readOnlyRootFilesystem: true
+            # together with an emptyDir mounted at /tmp AND at /home/nonroot,
+            # and verify the tunnel actually registers afterwards — the failure
+            # is a silent non-registration, not a crash.

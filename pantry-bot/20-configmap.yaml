@@ -1,0 +1,32 @@
+# Non-secret configuration for pantry-bot.
+#
+# Split from the Compose `.env`, which mixed credentials and plain settings in
+# one file. The four keys here are not credentials; the two Twitch keys and the
+# tunnel token are, and live in Secrets instead (see SECRETS.md).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pantry-bot-config
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: pantry-bot
+    app.kubernetes.io/part-of: homelab
+data:
+  # HTTP server — the port cloudflared and the readiness/liveness probes hit.
+  # Changing this means changing the Service targetPort, both probe ports, the
+  # containerPort, AND the tunnel's origin URL in the Cloudflare dashboard.
+  HTTP_PORT: "3000"
+
+  # WebSocket server, exposed on the Service as a second port.
+  WS_PORT: "8080"
+
+  # SQLite database path. Must stay under the mount path of the
+  # `pantry-bot-data` PVC (/data) — if this ever points outside it, the DB
+  # silently lands on the pod's ephemeral layer and is destroyed on restart.
+  DB_PATH: "/data/pantry.db"
+
+  # Public OAuth callback URL. Not a secret (it is visible in the OAuth
+  # redirect), but it MUST match the redirect URI registered in the Twitch
+  # developer console exactly, and it must resolve through the Cloudflare
+  # tunnel to this pod.
+  TWITCH_OAUTH_REDIRECT_URI: "https://oauth.greeniespantry.uk/oauth/callback"

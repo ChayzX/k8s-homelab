@@ -1,0 +1,32 @@
+# Persistent storage for pantry-bot's SQLite database.
+#
+# Replaces the named Docker volume `pantry-bot_pantry-data` mounted at /data.
+#
+# This is the one PVC in the whole migration where corruption is unrecoverable
+# — it holds live user data with no upstream source to re-derive it from.
+# Two properties protect it:
+#
+#   1. `strategy: Recreate` on the Deployment. SQLite in WAL mode tolerates
+#      multiple readers/writers only through a shared filesystem lock; two pods
+#      on the same volume across a rolling update is exactly the scenario that
+#      produces a corrupt WAL. Recreate guarantees the old pod is fully gone.
+#   2. ReadWriteOnce + single node. The second pod could not mount it anyway.
+#
+# The directory contains pantry.db plus pantry.db-wal and pantry.db-shm while
+# the DB is open. All three must be copied together, from a STOPPED database —
+# copying pantry.db alone from a running bot yields a DB missing every committed
+# transaction still in the WAL.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pantry-bot-data
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: pantry-bot
+    app.kubernetes.io/part-of: homelab
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi

@@ -1,0 +1,48 @@
+# Persistent storage for the jmusicbot namespace.
+#
+# storageClassName is pinned explicitly to `local-path` rather than relying on
+# the default-StorageClass annotation — if the default ever changes, a PVC that
+# silently binds somewhere else is a very quiet way to lose state.
+#
+# accessModes RWO is correct and sufficient: single node, and every consuming
+# Deployment uses `strategy: Recreate` so the old pod fully terminates and
+# releases the volume before the replacement mounts it.
+#
+# local-path provisions with `WaitForFirstConsumer`, so these PVCs will sit in
+# Pending until their Deployment schedules a pod. That is expected, not a fault.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jmusicbot-config
+  namespace: jmusicbot
+  labels:
+    app.kubernetes.io/name: jmusicbot
+    app.kubernetes.io/part-of: homelab
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      # Replaces the bind mount /home/chase/docker/jmusicbot -> /musicbot.
+      # Holds serversettings.json, youtubetoken.txt, .slashcommands.hash and
+      # JMusicBot's own runtime files. Currently a few hundred KB; 1Gi is
+      # generous headroom, and local-path does not pre-allocate.
+      storage: 1Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jmusicbot-notifier-data
+  namespace: jmusicbot
+  labels:
+    app.kubernetes.io/name: jmusicbot-release-notifier
+    app.kubernetes.io/part-of: homelab
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      # Replaces /home/chase/docker/jmusicbot/release-notifier-data -> /data.
+      # Contains exactly one file: last_release.json (17 bytes).
+      storage: 256Mi

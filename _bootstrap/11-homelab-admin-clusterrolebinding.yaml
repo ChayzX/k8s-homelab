@@ -1,0 +1,124 @@
+# =============================================================================
+# homelab-admin ClusterRoleBinding
+# =============================================================================
+# READ THIS BEFORE APPLYING — the subject below is a PLACEHOLDER.
+#
+# -----------------------------------------------------------------------------
+# 1. You probably already have cluster-admin, and that is fine
+# -----------------------------------------------------------------------------
+# The kubeconfig k3s writes to /etc/rancher/k3s/k3s.yaml uses a client cert with
+# CN=system:admin and O=system:masters. The `system:masters` group is hard-wired
+# into the API server as unconditional cluster-admin — it bypasses RBAC entirely
+# and cannot be revoked by any Role or Binding.
+#
+# So: if you only ever use the default k3s kubeconfig, this ClusterRole grants
+# you NOTHING you did not already have. It exists for *additional named users* —
+# a second admin, a laptop with its own client cert, a CI identity, an OIDC
+# subject — that you want to manage the home-lab without handing them
+# system:masters.
+#
+# Verify who you currently are:
+#     kubectl auth whoami
+#     # or, for the raw cert:
+#     openssl x509 -noout -subject -in <(grep client-certificate-data \
+#       /etc/rancher/k3s/k3s.yaml | awk '{print $2}' | base64 -d)
+#
+# Check whether the binding actually did anything for a given user:
+#     kubectl auth can-i create deployments -n pantry-bot --as=chase
+#
+# -----------------------------------------------------------------------------
+# 2. How to bind to a specific user
+# -----------------------------------------------------------------------------
+# Kubernetes has no User object. A "user" is just the string the authenticator
+# produced. Pick ONE of the subject forms below and delete the rest.
+#
+#   (a) x509 client certificate — the normal path on k3s. The username is the
+#       cert's CN and the groups are its O values. Mint one with:
+#           openssl genrsa -out chase.key 2048
+#           openssl req -new -key chase.key -out chase.csr \
+#               -subj "/CN=chase/O=homelab"
+#       then sign it with the k3s CA at
+#           /var/lib/rancher/k3s/server/tls/client-ca.crt / .key
+#           openssl x509 -req -in chase.csr \
+#               -CA /var/lib/rancher/k3s/server/tls/client-ca.crt \
+#               -CAkey /var/lib/rancher/k3s/server/tls/client-ca.key \
+#               -CAcreateserial -out chase.crt -days 365
+#       and build a kubeconfig from chase.crt/chase.key. Then bind to
+#       `kind: User, name: chase` (matches CN) or `kind: Group, name: homelab`
+#       (matches O — preferred, so adding a second admin needs no manifest
+#       change, just a cert with the same O).
+#
+#   (b) OIDC — name is `<oidc-username-prefix><claim>`, e.g. `oidc:chase@…`.
+#       Only applicable if you started k3s with --kube-apiserver-arg=oidc-*.
+#
+#   (c) ServiceAccount — for automation, not humans:
+#           kind: ServiceAccount
+#           name: deployer
+#           namespace: kube-system
+#
+# -----------------------------------------------------------------------------
+# 3. ClusterRoleBinding vs RoleBinding — pick deliberately
+# -----------------------------------------------------------------------------
+# A ClusterRoleBinding grants the ClusterRole in EVERY namespace, including
+# kube-system. The spec asked for a ClusterRoleBinding, so that is what is
+# active below. If you want the grant confined to the home-lab namespaces only,
+# comment out the ClusterRoleBinding and apply the per-namespace RoleBindings at
+# the bottom of this file instead — same ClusterRole, namespace-scoped effect.
+# You cannot get "cluster role, but only in some namespaces" any other way.
+# =============================================================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: homelab-admin
+  labels:
+    app.kubernetes.io/name: homelab-admin
+    app.kubernetes.io/part-of: homelab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: homelab-admin
+subjects:
+  # >>> PLACEHOLDER — REPLACE BEFORE APPLYING <<<
+  # This binds the *group* `homelab`, which matches the O= field of any client
+  # cert you sign with the k3s client CA. Nothing has this group until you mint
+  # such a cert, so applying it as-is is inert and harmless.
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: homelab
+
+  # Alternative: bind one named user (cert CN). Uncomment and set the name.
+  # - apiGroup: rbac.authorization.k8s.io
+  #   kind: User
+  #   name: chase
+
+  # DO NOT add `system:authenticated`, `system:serviceaccounts`, or any group
+  # that pod identities belong to. See the deliberate-decision block in
+  # 10-homelab-admin-clusterrole.yaml — that is a pod-to-cluster privilege
+  # escalation path and was explicitly rejected.
+
+# =============================================================================
+# OPTIONAL, NAMESPACE-SCOPED ALTERNATIVE
+# =============================================================================
+# Uncomment these (and comment out the ClusterRoleBinding above) to grant the
+# homelab-admin ClusterRole ONLY inside the home-lab namespaces. Add one block
+# per namespace you own — including `observability` and `minecraft` once those
+# namespaces exist.
+#
+# apiVersion: rbac.authorization.k8s.io/v1
+# kind: RoleBinding
+# metadata:
+#   name: homelab-admin
+#   namespace: jmusicbot
+#   labels:
+#     app.kubernetes.io/name: homelab-admin
+#     app.kubernetes.io/part-of: homelab
+# roleRef:
+#   apiGroup: rbac.authorization.k8s.io
+#   kind: ClusterRole
+#   name: homelab-admin
+# subjects:
+#   - apiGroup: rbac.authorization.k8s.io
+#     kind: Group
+#     name: homelab
+# ---
+# ... repeat with `namespace: pantry-bot`, `namespace: keel`, etc.

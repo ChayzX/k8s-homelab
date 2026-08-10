@@ -1,0 +1,377 @@
+# ConfigMap holding promtail's config file.
+#
+# ===================================================================
+# WHAT CHANGED FROM THE COMPOSE CONFIG
+# ===================================================================
+#   * docker_sd_configs -> kubernetes_sd_configs. The Docker socket is
+#     gone; targets are now pods discovered from the API and read from
+#     /var/log/pods on the node.
+#   * The /home/chase/minecraft/logs hostPath scrape is RETAINED,
+#     unchanged in spirit. Minecraft does not move into the cluster
+#     until Phase 4. Dropping this mount would blackhole Minecraft logs
+#     for the entire Phase 1 -> Phase 4 window.
+#   * pipeline_stages added to extract a `level` label. This is new
+#     functionality, not a port.
+#
+# ===================================================================
+# THE `level` LABEL -- HOW IT IS DERIVED, AND WHY IT IS SAFE
+# ===================================================================
+# Goal: `{...} | level="error"` in Grafana must return error lines and
+# ONLY error lines. The design biases hard against false positives:
+#
+#   1. Every line starts at level=info via a `static_labels` default.
+#   2. Later stages only ever OVERRIDE that when they positively
+#      recognise a severity token. A line nobody can parse stays "info".
+#      That means the filter can under-report (a missed error shows as
+#      info) but never over-report (an info line never shows as error).
+#      For a triage filter, that is the correct direction to fail.
+#   3. Stages are ordered least-severe to most-severe, so on the rare
+#      line carrying two tokens the most severe one wins.
+#
+# The other half of correctness is MULTILINE. A Java stack trace is ~30
+# physical lines, only the first of which carries "[ERROR]". Without a
+# multiline stage the trace body would be 29 separate entries labelled
+# info, and `level="error"` would return a one-line teaser with no
+# stack. Each Java/Node job below therefore joins continuation lines
+# into the entry that owns them BEFORE severity is extracted.
+#
+# Log formats, confirmed by reading the live logs on 2026-08-10:
+#   jmusicbot   [17:02:11] [WARN] [JDA]: msg      (Log4j; also bare
+#                                                  [INFO] msg at boot)
+#   minecraft   [22:27:36] [Server thread/INFO]: msg   (Paper; level is
+#                                                  after the "/" inside
+#                                                  the thread bracket)
+#   pantry-bot  bare console.log/console.error, no prefix at all, with
+#               indented "    at ..." stack frames -- keyword heuristic
+#               is the only option
+#   k8s system  klog (E0810 12:34:56.789 ...) or logfmt (level=error)
+#               or zerolog JSON ("level":"error")
+#
+# TIMING NOTE: jmusicbot only reaches the cluster at Phase 2 and
+# pantry-bot at Phase 3. Until then their logs still arrive via the OLD
+# Docker promtail, which has no pipeline_stages, so they will show no
+# `level` label at all. Minecraft, and every pod in this namespace, are
+# parsed from day one -- which is enough to satisfy the plan's
+# "level=error across >= 2 apps" verification criterion during Phase 1.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: promtail-config
+  namespace: observability
+  labels:
+    app: promtail
+    app.kubernetes.io/name: promtail
+    app.kubernetes.io/part-of: observability
+data:
+  promtail-config.yaml: |
+    server:
+      http_listen_port: 9080
+      grpc_listen_port: 0
+      log_level: info
+
+    positions:
+      # NOT /tmp. On a hostPath-backed emptyDir this survives pod
+      # restarts, so a promtail restart does not re-ship the tail of
+      # every log file into Loki as duplicates.
+      filename: /run/promtail/positions.yaml
+
+    clients:
+      - url: http://loki:3100/loki/api/v1/push
+        # A 5900rpm HDD under Loki means push latency spikes during
+        # compaction. Back off rather than dropping.
+        backoff_config:
+          min_period: 500ms
+          max_period: 5m
+          max_retries: 10
+
+    scrape_configs:
+
+      # =============================================================
+      # 1. Generic Kubernetes pods
+      # =============================================================
+      # Everything in the cluster EXCEPT the two apps with bespoke
+      # parsers below (they are dropped here and re-scraped in their own
+      # job, so their multiline rules do not leak onto other apps).
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          # promtail drops any target whose __host__ != its own
+          # HOSTNAME. The DaemonSet sets HOSTNAME from spec.nodeName --
+          # NOT the pod name, which is the default and would match
+          # nothing. See promtail.yaml.
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: __host__
+          # Apps with dedicated jobs below.
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: "jmusicbot|pantry-bot"
+            action: drop
+          # Never tail a pod that has no logs yet / is terminating.
+          - source_labels: [__meta_kubernetes_pod_phase]
+            regex: "Pending|Succeeded|Failed"
+            action: drop
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          # `container` keeps the same meaning it had under
+          # docker_sd_configs, so existing dashboard queries such as
+          # {container="loki"} keep working.
+          - source_labels: [__meta_kubernetes_pod_container_name]
+            target_label: container
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - target_label: job
+            replacement: kubernetes-pods
+          # /var/log/pods/<namespace>_<pod>_<uid>/<container>/*.log
+          - source_labels:
+              - __meta_kubernetes_pod_uid
+              - __meta_kubernetes_pod_container_name
+            separator: /
+            replacement: /var/log/pods/*$1/*.log
+            target_label: __path__
+        pipeline_stages:
+          # CRI wraps every line as
+          #   <rfc3339nano> <stdout|stderr> <F|P> <content>
+          # This stage strips that, sets the real timestamp, and
+          # reassembles CRI's own 16KB partial-line splits.
+          - cri: {}
+          - labels:
+              stream:
+
+          # --- severity: default ---
+          - static_labels:
+              level: info
+
+          # --- severity: logfmt / Go slog ---
+          # Covers loki, promtail, grafana ("t=... level=error msg=..."),
+          # prometheus 3.x slog ("time=... level=ERROR msg=..."),
+          # kube-state-metrics, keel. Case-insensitive because
+          # prometheus uppercases and the rest do not.
+          - match:
+              selector: '{job="kubernetes-pods"} |~ `(?i)(^|\s)(level|lvl)=debug`'
+              stages:
+                - static_labels:
+                    level: debug
+          - match:
+              selector: '{job="kubernetes-pods"} |~ `(?i)(^|\s)(level|lvl)=(warn|warning)`'
+              stages:
+                - static_labels:
+                    level: warn
+          - match:
+              selector: '{job="kubernetes-pods"} |~ `(?i)(^|\s)(level|lvl)=(error|eror|fatal|crit)`'
+              stages:
+                - static_labels:
+                    level: error
+
+          # --- severity: JSON / zerolog (traefik, cloudflared) ---
+          - match:
+              selector: '{job="kubernetes-pods"} |~ `"(level|severity)":"(warn|warning)"`'
+              stages:
+                - static_labels:
+                    level: warn
+          - match:
+              selector: '{job="kubernetes-pods"} |~ `"(level|severity)":"(error|fatal|panic)"`'
+              stages:
+                - static_labels:
+                    level: error
+
+          # --- severity: klog (coredns, metrics-server,
+          #     local-path-provisioner, kube-* components) ---
+          # klog prefixes each line with a single severity letter and an
+          # MMDD date: I0810, W0810, E0810, F0810.
+          - match:
+              selector: '{job="kubernetes-pods"} |~ `^W\d{4} \d{2}:\d{2}:\d{2}`'
+              stages:
+                - static_labels:
+                    level: warn
+          - match:
+              selector: '{job="kubernetes-pods"} |~ `^[EF]\d{4} \d{2}:\d{2}:\d{2}`'
+              stages:
+                - static_labels:
+                    level: error
+
+      # =============================================================
+      # 2. jmusicbot -- Java / Log4j
+      # =============================================================
+      # Active from Phase 2. Two line shapes, both handled:
+      #   [17:02:11] [WARN] [JDA]: Automatically disabled CacheFlags...
+      #   [INFO] ========================================
+      - job_name: jmusicbot
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: __host__
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: "jmusicbot"
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_phase]
+            regex: "Pending|Succeeded|Failed"
+            action: drop
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_container_name]
+            target_label: container
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - target_label: job
+            replacement: jmusicbot
+          - source_labels:
+              - __meta_kubernetes_pod_uid
+              - __meta_kubernetes_pod_container_name
+            separator: /
+            replacement: /var/log/pods/*$1/*.log
+            target_label: __path__
+        pipeline_stages:
+          - cri: {}
+          - labels:
+              stream:
+          # Join JDA/Lavaplayer stack traces onto the [ERROR] line that
+          # introduced them. A new entry begins only at "[HH:MM:SS]" or
+          # at a bare "[LEVEL]" -- everything else (indented "at ..."
+          # frames, "Caused by:", "..." elision lines) is a continuation.
+          - multiline:
+              firstline: '^\[(?:\d{2}:\d{2}:\d{2}\]|(?:TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL|SEVERE)\])'
+              max_wait_time: 3s
+              max_lines: 256
+          # The alternation is an explicit whitelist of Log4j level
+          # names on purpose: a permissive [A-Z]+ would happily capture
+          # the "[JDA]" logger bracket as a level.
+          - regex:
+              expression: '^(?:\[\d{2}:\d{2}:\d{2}\]\s+)?\[(?P<level>TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL|SEVERE)\]'
+          # Normalise to the four canonical values. The final `else`
+          # branch is what makes an unmatched line fall back to "info"
+          # rather than producing an empty level label.
+          - template:
+              source: level
+              template: '{{ $l := .Value | ToLower }}{{ if or (eq $l "error") (eq $l "fatal") (eq $l "severe") }}error{{ else if or (eq $l "warn") (eq $l "warning") }}warn{{ else if or (eq $l "debug") (eq $l "trace") }}debug{{ else }}info{{ end }}'
+          - labels:
+              level:
+
+      # =============================================================
+      # 3. pantry-bot -- Node.js console output
+      # =============================================================
+      # Active from Phase 3. There is no severity token to parse: the
+      # app uses bare console.log / console.error, e.g.
+      #   Overlay server listening on port 8080
+      #   EventSub error: Error: getaddrinfo ENOTFOUND eventsub.wss.twitch.tv
+      #       at GetAddrInfoReqWrap.onlookupall (node:dns:122:26) {
+      #     errno: -3008,
+      #   }
+      # So severity is a keyword heuristic, deliberately anchored on
+      # word boundaries and on Node's own error-code vocabulary rather
+      # than on a bare substring match for "error".
+      - job_name: pantry-bot
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: __host__
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: "pantry-bot"
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_phase]
+            regex: "Pending|Succeeded|Failed"
+            action: drop
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_container_name]
+            target_label: container
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - target_label: job
+            replacement: pantry-bot
+          - source_labels:
+              - __meta_kubernetes_pod_uid
+              - __meta_kubernetes_pod_container_name
+            separator: /
+            replacement: /var/log/pods/*$1/*.log
+            target_label: __path__
+        pipeline_stages:
+          - cri: {}
+          - labels:
+              stream:
+          # Node stack frames are indented ("    at ...") and the object
+          # dumps Node appends to an Error are indented too. A new entry
+          # therefore starts at any line whose first character is not
+          # whitespace and not the "}" that closes such a dump.
+          # (RE2 has no lookahead, so this is expressed positively.)
+          - multiline:
+              firstline: '^[^\s}]'
+              max_wait_time: 3s
+              max_lines: 256
+          - static_labels:
+              level: info
+          - match:
+              selector: '{job="pantry-bot"} |~ `(?i)\b(warn|warning|deprecated|deprecation)\b`'
+              stages:
+                - static_labels:
+                    level: warn
+          # Node error vocabulary: the word "error"/"exception"/"fatal",
+          # an unhandled rejection, or any of the libuv/dns errno codes
+          # this bot actually hits (ENOTFOUND and ECONNREFUSED both
+          # appear in its current logs).
+          - match:
+              selector: '{job="pantry-bot"} |~ `(?i)(\b(error|exception|fatal)\b|unhandled\s+(rejection|exception)|\b(ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|EPIPE)\b)`'
+              stages:
+                - static_labels:
+                    level: error
+
+      # =============================================================
+      # 4. Minecraft -- host file, NOT a pod
+      # =============================================================
+      # RETAINED hostPath scrape. Minecraft stays a native msh-managed
+      # process until Phase 4; this is the only thing keeping its logs
+      # in Loki for the whole migration window. Do not delete this job
+      # when the Docker promtail is retired -- delete it only once
+      # Minecraft is itself a pod (at which point it is picked up by the
+      # kubernetes-pods job instead).
+      #
+      # Paper format:  [22:27:36] [Server thread/INFO]: message
+      #                [22:27:36] [Paper Common Worker #1/ERROR]: message
+      # Older/vanilla: [12:34:56 INFO]: message
+      #
+      # NOTE: Minecraft logs carry a time but no date, so no `timestamp`
+      # stage is used -- entries are stamped at ingest. Over a midnight
+      # boundary that is correct; for a backfill of rotated .log.gz
+      # files it would not be, so do not point this at the archive.
+      - job_name: minecraft
+        static_configs:
+          - targets: [localhost]
+            labels:
+              job: minecraft
+              app: minecraft
+              # Kept as `container` for continuity with the Compose-era
+              # label set and the existing dashboards.
+              container: minecraft
+              namespace: host
+              __path__: /var/log/minecraft/latest.log
+        pipeline_stages:
+          # No `cri` stage: this is a plain file, not a CRI log.
+          - multiline:
+              firstline: '^\[\d{2}:\d{2}:\d{2}'
+              max_wait_time: 3s
+              max_lines: 512
+          # Form A -- Paper/Spigot: level sits after "/" inside the
+          # thread bracket. The thread name may contain spaces, "-" and
+          # "#" (e.g. "Async Chat Thread - #10/INFO"), so match anything
+          # that is not "]" up to the final "/".
+          - regex:
+              expression: '^\[\d{2}:\d{2}:\d{2}\]\s+\[[^\]]*/(?P<level>[A-Z]+)\]'
+          # Form B -- older single-bracket layout. Mutually exclusive
+          # with Form A (that one has "]" right after the seconds, this
+          # one has a space), so chaining is safe: whichever matches
+          # sets `level`, and a non-match leaves the other's result
+          # untouched.
+          - regex:
+              expression: '^\[\d{2}:\d{2}:\d{2}\s+(?P<level>[A-Z]+)\]'
+          - template:
+              source: level
+              template: '{{ $l := .Value | ToLower }}{{ if or (eq $l "error") (eq $l "fatal") (eq $l "severe") }}error{{ else if or (eq $l "warn") (eq $l "warning") }}warn{{ else if or (eq $l "debug") (eq $l "trace") }}debug{{ else }}info{{ end }}'
+          - labels:
+              level:

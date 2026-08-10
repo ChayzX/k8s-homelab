@@ -1,0 +1,10 @@
+# The server jar is copied into this directory only as Docker build context.
+# 55 MB of binary does not belong in the repo, and the authoritative copy lives
+# at /home/chase/minecraft/paper.jar (and, post-migration, in the image).
+paper.jar
+
+# Never commit the RCON password / management-server-secret. See secrets.md.
+*.secret
+secret*.yaml
+secret*.yml
+*.env

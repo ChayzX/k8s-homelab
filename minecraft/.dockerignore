@@ -1,0 +1,6 @@
+# Keep the build context to: Dockerfile, Rcon.java, entrypoint.sh, paper.jar.
+*
+!Dockerfile
+!Rcon.java
+!entrypoint.sh
+!paper.jar

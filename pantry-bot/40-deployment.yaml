@@ -1,0 +1,209 @@
+# =============================================================================
+# pantry-bot — Twitch bot + Express HTTP/WS server + SQLite
+# =============================================================================
+# Replaces the `bot` service in
+# /home/chase/Downloads/pantry-bot/docker-compose.prod.yml
+#
+# -----------------------------------------------------------------------------
+# MUST-PRESERVE: the auto-update pipeline
+# -----------------------------------------------------------------------------
+# Today: CI pushes to main -> GitHub Actions publishes ghcr.io/chayzx/pantry-bot
+# :latest -> Watchtower polls every 300s -> container restarted on new digest.
+# End-to-end latency ~5 minutes, unattended.
+#
+# The three keel.sh annotations below reproduce exactly that. They are the
+# reason the `keel` namespace exists at all. Losing them silently converts this
+# into a manual-deploy service and nobody notices until a fix does not ship.
+#
+#   keel.sh/policy: force        -> redeploy when the DIGEST behind the current
+#                                   tag changes, even though the tag string
+#                                   (`latest`) is unchanged. `major`/`minor`/
+#                                   `patch` are semver policies and would never
+#                                   fire on a mutable tag.
+#   keel.sh/trigger: poll        -> poll the registry. The alternative (webhook)
+#                                   would need an inbound route from GitHub into
+#                                   this LAN; poll needs nothing inbound.
+#   keel.sh/pollSchedule: @every 5m -> matches Watchtower's `--interval 300`.
+#
+# The annotations MUST be on the Deployment's own metadata (here), not on the
+# pod template. Keel reads deployment-level annotations.
+#
+# Optional hardening, deliberately left off: `keel.sh/matchTag: "true"` makes
+# Keel only consider the exact tag `latest` rather than any tag on the repo.
+# Add it if CI ever starts publishing additional tags to the same package.
+#
+# -----------------------------------------------------------------------------
+# TWO SEPARATE CREDENTIALS ARE INVOLVED. THIS IS THE #1 FAILURE MODE.
+# -----------------------------------------------------------------------------
+#   * `imagePullSecrets: ghcr-pull-secret` (below) is used by the KUBELET to
+#     PULL the image. Without it: ImagePullBackOff.
+#   * Keel needs its OWN credentials to QUERY the GHCR registry API for the
+#     current digest. Without them: the pod runs fine and Keel silently never
+#     updates it — no error, no alert, just a pipeline that quietly stopped.
+# Both are required. Both live in THIS namespace. See ../keel/SECRETS.md.
+# ghcr.io/chayzx/pantry-bot is private (verified: anonymous manifest fetch
+# returns HTTP 403), so neither can be skipped.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pantry-bot
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: pantry-bot
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/component: bot
+  annotations:
+    keel.sh/policy: force
+    keel.sh/trigger: poll
+    keel.sh/pollSchedule: "@every 5m"
+spec:
+  replicas: 1
+  # Recreate: RWO PVC holding a live SQLite database in WAL mode. A rolling
+  # update would overlap two writers on one DB file — the exact corruption
+  # hazard the migration plan calls out. Also note Keel's `force` policy
+  # triggers a rollout on every new digest, so this path runs unattended
+  # several times a week; it has to be the safe one.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pantry-bot
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pantry-bot
+        app.kubernetes.io/part-of: homelab
+        app.kubernetes.io/component: bot
+    spec:
+      serviceAccountName: pantry-bot-sa
+      # Zero Kubernetes API access required.
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      # 60s (not the 30s default): give the process time to close SQLite
+      # cleanly and checkpoint the WAL back into pantry.db on SIGTERM.
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        # UID 1000 = the `node` user baked into the image. Verified against the
+        # running container (`docker top pantry-bot-bot-1 -o user,group`), not
+        # assumed from the base image. The extracted volume contents must be
+        # chowned to 1000:1000 — see README.md.
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: bot
+          image: ghcr.io/chayzx/pantry-bot:latest
+          # Always: mutable `:latest` tag. Keel patches the pod spec with a
+          # digest-pinned reference on update, but on a manual restart Always is
+          # what guarantees the newest build is fetched rather than a stale
+          # cached layer set.
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+            - name: ws
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: pantry-bot-config
+            # TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET — see SECRETS.md.
+            - secretRef:
+                name: pantry-bot-twitch
+
+          # ===================================================================
+          # PROBES — read this before "simplifying" them to httpGet
+          # ===================================================================
+          # The Compose healthcheck was:
+          #   node -e "require('http').get('http://localhost:3000/',
+          #            r => process.exit(0)).on('error', () => process.exit(1))"
+          # and its own comment says a response "even a 404" proves the server
+          # is alive. That is not a stylistic note — it is load-bearing.
+          #
+          # VERIFIED: GET / on this app returns **404**. Checked through the
+          # live tunnel; the response carries `x-powered-by: Express`, so the
+          # 404 is generated by this Express app, not by Cloudflare. There is
+          # no /health or /healthz either (both 404); /oauth/callback returns
+          # 400, confirming the origin is what is answering.
+          #
+          # Kubernetes httpGet probes succeed ONLY on HTTP 200-399. A
+          # `httpGet: path: /, port: 3000` probe would therefore fail on every
+          # single check: readiness would pin the pod NotReady forever, and
+          # liveness would restart it every ~30s into permanent
+          # CrashLoopBackOff. On a healthy app. This is the single most
+          # dangerous line in the whole pantry-bot migration.
+          #
+          # So the probe below replicates the proven Compose check exactly —
+          # same one-liner, same image, same semantics ("any response = alive").
+          # `node` is guaranteed present (this is a Node app) and the image has
+          # no curl or wget, which is why the original used node in the first
+          # place.
+          #
+          # PREFERRED FIX (do this in the app, then switch the probes):
+          # add a route returning 200:
+          #     app.get('/healthz', (_req, res) => res.status(200).send('ok'))
+          # then replace both probes with the far cheaper:
+          #     httpGet: {path: /healthz, port: http}
+          # Until that route exists and has been verified to return 200, keep
+          # the exec probes.
+          # ===================================================================
+
+          # Replaces Compose's `start_period: 15s`. Until this succeeds the
+          # liveness probe is not armed, so a slow start cannot cause a restart
+          # loop. 10 x 3s = up to 30s of startup grace.
+          startupProbe:
+            exec:
+              command:
+                - node
+                - -e
+                - "require('http').get('http://127.0.0.1:3000/', r => process.exit(0)).on('error', () => process.exit(1))"
+            periodSeconds: 3
+            timeoutSeconds: 5
+            failureThreshold: 10
+
+          readinessProbe:
+            exec:
+              command:
+                - node
+                - -e
+                - "require('http').get('http://127.0.0.1:3000/', r => process.exit(0)).on('error', () => process.exit(1))"
+            periodSeconds: 30      # matches Compose `interval: 30s`
+            timeoutSeconds: 5      # matches Compose `timeout: 5s`
+            failureThreshold: 3    # matches Compose `retries: 3`
+
+          livenessProbe:
+            exec:
+              command:
+                - node
+                - -e
+                - "require('http').get('http://127.0.0.1:3000/', r => process.exit(0)).on('error', () => process.exit(1))"
+            periodSeconds: 30
+            timeoutSeconds: 5
+            # 5, not 3: a liveness failure kills the pod and, with Recreate +
+            # an RWO PVC, means real downtime. Readiness already pulls the pod
+            # out of the Service after 90s; liveness should be the slower,
+            # more certain signal.
+            failureThreshold: 5
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: pantry-bot-data

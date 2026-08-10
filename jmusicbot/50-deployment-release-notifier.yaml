@@ -1,0 +1,103 @@
+# =============================================================================
+# jmusicbot-release-notifier
+# =============================================================================
+# Replaces the `release-notifier` service in
+# /home/chase/docker/jmusicbot/docker-compose.yml
+#
+# Polls arif-banai/MusicBot GitHub releases and posts new release notes to a
+# Discord webhook. Purely informational; it is not the alerting bot.
+#
+# No imagePullSecrets needed: ghcr.io/chayzx/jmusicbot-release-notifier is a
+# PUBLIC package — verified by an anonymous GHCR manifest fetch returning 200
+# (ghcr.io/chayzx/pantry-bot, by contrast, returns 403 and does need one).
+# Re-verify with:
+#   T=$(curl -s 'https://ghcr.io/token?scope=repository:chayzx/jmusicbot-release-notifier:pull&service=ghcr.io' | jq -r .token)
+#   curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $T" \
+#     https://ghcr.io/v2/chayzx/jmusicbot-release-notifier/manifests/latest
+# If that ever returns 403, the package was made private: add
+# `imagePullSecrets: [{name: ghcr-pull-secret}]` and create that Secret in this
+# namespace (Secrets are namespaced — the one in pantry-bot does not apply here).
+#
+# Not Keel-managed. Under Compose this service carried
+# `com.centurylinklabs.watchtower.enable=true`, so Watchtower did auto-update
+# it. That behaviour is intentionally NOT carried over: the migration plan
+# scopes Keel to pantry-bot only. To restore auto-updates later, add the same
+# three keel.sh annotations used in ../pantry-bot/40-deployment.yaml and give
+# Keel RBAC for this namespace (it already has it — the ClusterRole is
+# cluster-wide). Until then, update with `kubectl rollout restart`.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jmusicbot-release-notifier
+  namespace: jmusicbot
+  labels:
+    app.kubernetes.io/name: jmusicbot-release-notifier
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/component: notifier
+spec:
+  replicas: 1
+  # Recreate: RWO PVC holding last_release.json. Two concurrent pods would both
+  # read a stale marker and double-post the same release to Discord.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jmusicbot-release-notifier
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jmusicbot-release-notifier
+        app.kubernetes.io/part-of: homelab
+        app.kubernetes.io/component: notifier
+    spec:
+      serviceAccountName: jmusicbot-release-notifier-sa
+      # Zero Kubernetes API access required.
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      # NOTE: this image runs as root (verified: `docker top
+      # jmusicbot-release-notifier -o user` reports root). No runAsUser is set
+      # here so the image's own default is kept — forcing a non-root UID risks
+      # breaking a write path inside the image that was never tested that way.
+      # Consequence: the PVC contents must be root-owned, which is what
+      # local-path provisions by default, so the migration copy should be done
+      # with sudo and left as 0:0.
+      containers:
+        - name: release-notifier
+          image: ghcr.io/chayzx/jmusicbot-release-notifier:latest
+          # `latest` is a mutable tag with no Keel/Watchtower watching it here,
+          # so Always means "pick up the newest build whenever the pod restarts"
+          # — the closest equivalent to the old Watchtower behaviour without
+          # adding an updater.
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: jmusicbot-release-notifier-config
+            # Provides DISCORD_RELEASE_WEBHOOK_URL. Created imperatively — see
+            # SECRETS.md. Not `optional: true` on purpose: if the Secret is
+            # missing the pod should fail loudly rather than run half-configured
+            # and silently never post.
+            - secretRef:
+                name: jmusicbot-notifier-secrets
+          # No probes. This is a sleep/poll loop with no listening socket and no
+          # health endpoint; there is nothing truthful to probe. A liveness
+          # probe invented here would only add a way to kill a healthy pod.
+          # If the process dies, it exits and the kubelet restarts it.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: jmusicbot-notifier-data

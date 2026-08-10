@@ -1,0 +1,4 @@
+# merged with any existing .gitignore entries below
+paper.jar
+*.pyc
+__pycache__/

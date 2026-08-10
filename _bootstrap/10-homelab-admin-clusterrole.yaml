@@ -1,0 +1,116 @@
+# =============================================================================
+# homelab-admin ClusterRole
+# =============================================================================
+# Purpose: give a *named human kubectl user* the ability to manage every object
+# type this home-lab actually uses, so that every per-app ServiceAccount, Role,
+# RoleBinding, Deployment, Service, ConfigMap, Secret and PVC created by this
+# repo stays admin-modifiable by that user.
+#
+# -----------------------------------------------------------------------------
+# DELIBERATE DECISION (recorded, do not "fix" this later without re-deciding)
+# -----------------------------------------------------------------------------
+# We do NOT grant `system:authenticated` — or any group that every pod's
+# ServiceAccount lands in — edit rights on ServiceAccounts (or on Roles /
+# RoleBindings / Secrets). Doing so is a textbook pod-to-cluster privilege
+# escalation path: any compromised pod could mint or re-point a ServiceAccount,
+# bind itself to a more powerful Role, or read every Secret in the cluster.
+# The user was asked and explicitly chose against it. This ClusterRole is bound
+# only to a named human identity (see 11-homelab-admin-clusterrolebinding.yaml).
+#
+# -----------------------------------------------------------------------------
+# HONEST SECURITY NOTE
+# -----------------------------------------------------------------------------
+# `create` on Deployments + `create` on ServiceAccounts + read on Secrets is,
+# in practice, equivalent to cluster-admin: the holder can create a Deployment
+# that mounts any ServiceAccount's token, including a privileged one. This role
+# is therefore a *convenience/audit-trail* boundary for a trusted human
+# operator, NOT a security boundary against a hostile one. Treat it as such.
+# =============================================================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: homelab-admin
+  labels:
+    app.kubernetes.io/name: homelab-admin
+    app.kubernetes.io/part-of: homelab
+rules:
+  # --- Core managed object types (the set the user specified) ----------------
+  - apiGroups: [""]
+    resources:
+      - serviceaccounts
+      - services
+      - configmaps
+      - secrets
+      - persistentvolumeclaims
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Needed to actually *use* deployment management: `kubectl rollout status`,
+  # `rollout history` and `rollout undo` all read/write ReplicaSets, and
+  # `kubectl scale` hits the deployments/scale subresource.
+  # (There is no `deployments/rollback` subresource in apps/v1 — it was removed
+  # in k8s 1.16; `rollout undo` is implemented client-side via ReplicaSets.)
+  - apiGroups: ["apps"]
+    resources:
+      - replicasets
+      - deployments/scale
+    verbs: ["get", "list", "watch", "update", "patch"]
+
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources:
+      - roles
+      - rolebindings
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # --- Supplementary read access --------------------------------------------
+  # NOT in the original spec, added deliberately: a role that can manage
+  # Deployments but cannot read Pods, Pod logs or Events is useless for the
+  # debugging that this migration will require. Delete this block if you want
+  # the role narrowed strictly to the specified object list.
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - events
+      - namespaces
+      - endpoints
+      - persistentvolumes
+    verbs: ["get", "list", "watch"]
+
+  # Deleting a stuck pod is the single most common home-lab recovery action.
+  - apiGroups: [""]
+    resources:
+      - pods
+    verbs: ["delete"]
+
+  # `kubectl exec` / `kubectl port-forward` into app pods. Note this is a very
+  # powerful grant (shell inside any pod in scope) — remove it if you want the
+  # operator restricted to declarative changes only.
+  - apiGroups: [""]
+    resources:
+      - pods/exec
+      - pods/portforward
+    verbs: ["create", "get"]
+
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+
+  # Reading storage classes is needed to sanity-check that PVCs land on
+  # `local-path` rather than silently binding nothing.
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+
+  # Read-only view of the RBAC this role itself created, plus the cluster-scoped
+  # RBAC (e.g. Keel's ClusterRole). Intentionally read-only: granting write on
+  # ClusterRoles would let the holder self-escalate trivially.
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources:
+      - clusterroles
+      - clusterrolebindings
+    verbs: ["get", "list", "watch"]

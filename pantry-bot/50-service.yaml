@@ -1,0 +1,51 @@
+# ClusterIP Service for pantry-bot.
+#
+# Under Compose, cloudflared reached the bot via Docker's embedded DNS on the
+# service name `bot`, over the project's default bridge network. Nothing was
+# published to the host. This Service is the direct equivalent: internal only,
+# no NodePort, no LoadBalancer, no hostPort.
+#
+# The resulting in-cluster DNS name is:
+#
+#     pantry-bot.pantry-bot.svc.cluster.local:3000
+#     (short form, used in the tunnel config: http://pantry-bot.pantry-bot.svc:3000)
+#
+# i.e. <service>.<namespace>.svc — the Service name and the namespace are both
+# `pantry-bot`, which reads oddly but is correct.
+#
+# >>> MANUAL CUTOVER STEP — the tunnel will NOT work until this is done. <<<
+# The Cloudflare tunnel's ingress rules are configured OUTSIDE this cluster:
+# either in the Cloudflare Zero Trust dashboard (Networks > Tunnels > this
+# tunnel > Public Hostnames) for a remotely-managed tunnel, which is what a
+# token-run tunnel normally is. The origin URL there currently points at the
+# old Docker service name (`http://bot:3000`). It must be changed to
+# `http://pantry-bot.pantry-bot.svc:3000`. See README.md.
+#
+# ClusterIP rather than headless: cloudflared benefits from the stable virtual
+# IP, and a headless Service would hand it the pod IP directly, which changes
+# on every Keel-driven redeploy.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pantry-bot
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: pantry-bot
+    app.kubernetes.io/part-of: homelab
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: pantry-bot
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+      protocol: TCP
+    # WS_PORT from the app config. Exposed because the Compose network made it
+    # reachable to sibling containers too; if the tunnel only ever fronts HTTP,
+    # this port is harmless (ClusterIP, not reachable off-node). Remove it only
+    # after confirming nothing routes WebSocket traffic here.
+    - name: ws
+      port: 8080
+      targetPort: ws
+      protocol: TCP

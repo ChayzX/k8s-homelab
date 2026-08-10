@@ -1,0 +1,199 @@
+# uptime-kuma -- up/down status board and history.
+#
+# ============================================================
+# MANUAL STEP REQUIRED AFTER COPYING DATA INTO THE PVC
+# ============================================================
+# louislam/uptime-kuma:2 runs as ROOT (UID/GID 0:0) -- it is the one app
+# in this namespace that does not have a UID mismatch problem, because
+# root can read the existing 1000:1000 data regardless. The chown is
+# still required so the files are *owned* by the account the process runs
+# as, rather than merely accessible to it:
+#
+#   KUMA_PV=$(kubectl -n observability get pvc uptime-kuma-data \
+#     -o jsonpath='{.spec.volumeName}')
+#   KUMA_DIR=$(kubectl get pv "$KUMA_PV" -o jsonpath='{.spec.local.path}')
+#   sudo chown -R 0:0 "$KUMA_DIR"
+#
+# v2 embeds MariaDB inside the container with its datadir under
+# /app/data. HOT-COPYING THAT IS CORRUPTION. Stop the old container
+# first:
+#   docker compose -f /home/chase/docker/observability/docker-compose.yml stop uptime-kuma
+#   sudo cp -a /home/chase/docker/observability/uptime-kuma-data/. "$KUMA_DIR"/
+# ============================================================
+#
+# TWO BEHAVIOUR CHANGES THE OPERATOR MUST HANDLE BY HAND:
+#
+# 1. NO DOCKER SOCKET. The Compose service bind-mounts
+#    /var/run/docker.sock so Kuma can run "Docker Container" monitors.
+#    That mount is deliberately NOT reproduced here: it is a full
+#    root-equivalent escape hatch on the host, and the containers it
+#    watches stop existing as Docker containers anyway. Every existing
+#    "Docker Container" monitor must be recreated as an HTTP or TCP
+#    monitor against the relevant Service. Do this BEFORE cutover, in
+#    the verification window, or the board will show a wall of red.
+#
+# 2. PAUSE THE MONITORS FOR RELOCATING APPS at the start of each later
+#    phase (jmusicbot at Phase 2, pantry-bot at Phase 3, Minecraft at
+#    Phase 4). Otherwise Kuma alerts continuously about apps that are
+#    fine, just moving -- the same false-alert storm the plan calls out
+#    for observability-watcher.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: uptime-kuma-sa
+  namespace: observability
+  labels:
+    app: uptime-kuma
+    app.kubernetes.io/name: uptime-kuma
+    app.kubernetes.io/part-of: observability
+# Kuma probes endpoints over the network. It never talks to the
+# Kubernetes API.
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: uptime-kuma-data
+  namespace: observability
+  labels:
+    app: uptime-kuma
+    app.kubernetes.io/name: uptime-kuma
+    app.kubernetes.io/part-of: observability
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: uptime-kuma
+  namespace: observability
+  labels:
+    app: uptime-kuma
+    app.kubernetes.io/name: uptime-kuma
+    app.kubernetes.io/part-of: observability
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  # Recreate is load-bearing here more than anywhere else in this
+  # namespace: two uptime-kuma pods with the same embedded MariaDB
+  # datadir open would corrupt it outright. RollingUpdate must never be
+  # used on this Deployment.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: uptime-kuma
+  template:
+    metadata:
+      labels:
+        app: uptime-kuma
+        app.kubernetes.io/name: uptime-kuma
+        app.kubernetes.io/part-of: observability
+    spec:
+      serviceAccountName: uptime-kuma-sa
+      automountServiceAccountToken: false
+      securityContext:
+        # The uptime-kuma image runs its entrypoint as root and drops
+        # privileges internally; forcing runAsNonRoot here makes the
+        # container fail to start. This is the documented upstream shape.
+        runAsUser: 0
+        runAsGroup: 0
+        # fsGroup 0 to match. See the chown note at the top of this file.
+        fsGroup: 0
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      # Embedded MariaDB needs an orderly shutdown; 30s is not enough for
+      # an InnoDB flush on a 5900rpm disk.
+      terminationGracePeriodSeconds: 90
+      containers:
+        - name: uptime-kuma
+          image: louislam/uptime-kuma:2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3001
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          # First start after a datadir move runs MariaDB recovery, which
+          # is slow. 10 minutes of startup grace before liveness arms --
+          # killing it mid-recovery is how you lose the history.
+          startupProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: uptime-kuma-data
+---
+# ============================================================
+# PRIMARY SERVICE -- REAL PORT 3001. EXPECT IT TO BE BROKEN UNTIL
+# THE OLD uptime-kuma CONTAINER IS STOPPED. THIS IS NORMAL.
+# ============================================================
+# Same ServiceLB/hostPort conflict as Grafana: 3001 is held host-wide by
+# Docker Desktop's proxy today, so until the old container stops this
+# Service shows EXTERNAL-IP <pending> and its svclb-uptime-kuma-* pod
+# CrashLoopBackOffs on "address already in use".
+#
+# Verify over uptime-kuma-verify-nodeport.yaml
+# (http://192.168.40.208:30001) first. Then, as the final cutover step:
+#
+#   1. docker compose -f /home/chase/docker/observability/docker-compose.yml stop uptime-kuma
+#   2. kubectl -n observability delete svc uptime-kuma
+#      kubectl apply -f uptime-kuma.yaml
+#   3. kubectl -n observability get svc uptime-kuma   # EXTERNAL-IP 192.168.40.208
+#   4. kubectl delete -f uptime-kuma-verify-nodeport.yaml
+# ============================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: uptime-kuma
+  namespace: observability
+  labels:
+    app: uptime-kuma
+    app.kubernetes.io/name: uptime-kuma
+    app.kubernetes.io/part-of: observability
+spec:
+  type: LoadBalancer
+  selector:
+    app: uptime-kuma
+  ports:
+    - name: http
+      port: 3001
+      targetPort: http
+      protocol: TCP

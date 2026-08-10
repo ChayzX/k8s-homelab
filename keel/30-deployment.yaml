@@ -1,0 +1,148 @@
+# =============================================================================
+# Keel — automated Deployment updater (watches pantry-bot for new GHCR digests)
+# =============================================================================
+# Replaces the `watchtower` service in
+# /home/chase/Downloads/pantry-bot/docker-compose.prod.yml, but scoped: unlike
+# that Watchtower instance (host-wide, --label-enable), Keel here only acts on
+# Deployments carrying `keel.sh/*` annotations. Today that is exactly one
+# Deployment: `pantry-bot` in the `pantry-bot` namespace. jmusicbot and its
+# notifier deliberately carry no such annotations — see ../jmusicbot/README.md.
+#
+# -----------------------------------------------------------------------------
+# IMAGE PIN — read before bumping this
+# -----------------------------------------------------------------------------
+# The latest tagged release, keel-hq/keel:0.21.1, is from Feb 2026. A real fix
+# for digest-polling against MUTABLE tags (e.g. `:latest`, which is exactly
+# what pantry-bot uses) landed on the `master` branch AFTER that release —
+# verified directly against the upstream commit log:
+#
+#     2f245c5  2026-08-10T06:24:40Z  fix(poll): seed digest watcher from the
+#                                     running image digest
+#
+# Running 0.21.1 here would mean deploying Keel in a state its own maintainers
+# have already superseded, for the exact scenario (mutable-tag polling) this
+# home-lab depends on. So this Deployment intentionally does NOT run
+# ghcr.io/keel-hq/keel:0.21.1.
+#
+# Because keel-hq/keel's registry retains only a handful of old, pre-fix
+# `master-<shortsha>` tags (the newest present at write time predate the fix by
+# ~7 months) and there is no versioned release newer than 0.21.1, the only way
+# to run a build that includes the fix is to pin the floating `master` tag BY
+# DIGEST — which freezes it to one specific, inspected build rather than
+# tracking whatever `master` points to on any given day.
+#
+# Digest below was resolved from the `master` tag and verified, at write time,
+# to be built from commit b32ec6d (2026-08-10T14:40:41Z) — AFTER the fix commit
+# above. Confirmed via the image's own OCI label:
+#     org.opencontainers.image.revision = b32ec6d74aa55d0f50fb039a39f84fad4339b542
+#
+#   image: ghcr.io/keel-hq/keel@sha256:b76f24cc17a69ba4b0c15f81641fa4bfa18b7400e6ae416e478fcdd86ae46569
+#
+# This is a TRADEOFF, not a clean answer, and it will go stale:
+#   * `master` is unversioned CI output, not a release — no changelog, no
+#     guaranteed backward compatibility, could contain other in-progress work.
+#   * Pinning by digest means Keel will NOT self-update; it has to be
+#     re-pinned by hand periodically.
+# Re-resolve and re-pin every few months, or once keel-hq cuts a release newer
+# than 0.21.1 that includes the fix — then switch back to a real version tag.
+# To re-check what a tag currently points to:
+#     T=$(curl -s 'https://ghcr.io/token?scope=repository:keel-hq/keel:pull&service=ghcr.io' | jq -r .token)
+#     curl -sI -H "Authorization: Bearer $T" \
+#       -H 'Accept: application/vnd.oci.image.index.v1+json' \
+#       https://ghcr.io/v2/keel-hq/keel/manifests/master | grep -i docker-content-digest
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keel
+  namespace: keel
+  labels:
+    app.kubernetes.io/name: keel
+    app.kubernetes.io/part-of: homelab
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keel
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keel
+        app.kubernetes.io/part-of: homelab
+    spec:
+      serviceAccountName: keel-sa
+      # Keel is the one workload in this whole migration that legitimately
+      # needs the Kubernetes API — this is what its ClusterRole (see
+      # 20-clusterrole-clusterrolebinding.yaml) is for.
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        # UID 666 — the image's own built-in non-root user. Verified via
+        # `docker image inspect ... --format '{{.Config.User}}'` against the
+        # exact pinned digest above, not assumed from convention.
+        runAsUser: 666
+        runAsGroup: 666
+        runAsNonRoot: true
+      containers:
+        - name: keel
+          image: ghcr.io/keel-hq/keel@sha256:b76f24cc17a69ba4b0c15f81641fa4bfa18b7400e6ae416e478fcdd86ae46569
+          # A digest reference is already immutable — Always vs IfNotPresent
+          # makes no behavioural difference here beyond re-pull-if-evicted. Set
+          # to IfNotPresent since there's nothing to gain by re-checking a
+          # pinned digest against the registry on every restart.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: ui
+              containerPort: 9300
+              protocol: TCP
+          env:
+            - name: PROJECT_ROOT
+              value: "/data"
+            # Keel's OWN registry credentials for polling the GHCR API — see
+            # the big comment block in SECRETS.md. This is deliberately
+            # explicit rather than relying on Keel's automatic imagePullSecrets
+            # discovery, because that path depends on pod-selector matching
+            # inside Keel and fails silently (no image update, no error) if it
+            # ever breaks.
+            - name: DOCKER_REGISTRY_CFG
+              valueFrom:
+                secretKeyRef:
+                  name: keel-registry-creds
+                  key: DOCKER_REGISTRY_CFG
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # Keel keeps a small sqlite DB (approvals/history) under
+            # PROJECT_ROOT. readOnlyRootFilesystem requires somewhere writable
+            # for it; an emptyDir is enough since none of this state is worth
+            # persisting across a pod replacement — Keel rebuilds its
+            # understanding of the cluster by watching the API, not from disk.
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            tcpSocket:
+              port: ui
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: ui
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 5
+      volumes:
+        - name: data
+          emptyDir: {}

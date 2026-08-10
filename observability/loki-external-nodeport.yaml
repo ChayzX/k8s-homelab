@@ -1,0 +1,49 @@
+# ============================================================
+# MIGRATION-WINDOW ONLY -- DELETE AT PHASE 5
+# ============================================================
+# The plan keeps the OLD Docker promtail running in parallel with the new
+# in-cluster DaemonSet from Phase 1 through Phase 4, so that apps still
+# living in Docker (jmusicbot, pantry-bot, cloudflared, the bespoke
+# watchers) don't go dark for the whole migration window.
+#
+# That old promtail runs inside Docker Desktop's VM. It CANNOT resolve or
+# reach the in-cluster ClusterIP Service "loki". This NodePort is the
+# bridge: it exposes the new Loki on the node's LAN IP so the old
+# promtail can keep pushing to a single, unified log store.
+#
+# After applying this, edit the OLD stack's promtail config at
+#   /home/chase/docker/observability/monitoring/promtail/promtail-config.yaml
+# and change:
+#     clients:
+#       - url: http://loki:3100/loki/api/v1/push
+# to:
+#     clients:
+#       - url: http://192.168.40.208:31100/loki/api/v1/push
+# then `docker compose up -d promtail` in that directory.
+#
+# NOTE: this puts an unauthenticated Loki push endpoint on the LAN.
+# Acceptable for a home lab behind ufw; delete this Service the moment
+# Docker Desktop is retired:
+#     kubectl delete -f loki-external-nodeport.yaml
+# ============================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki-external
+  namespace: observability
+  labels:
+    app: loki
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/part-of: observability
+    homelab.local/lifecycle: migration-window-only
+spec:
+  type: NodePort
+  selector:
+    app: loki
+  ports:
+    - name: http
+      port: 3100
+      targetPort: http
+      # In the k3s default NodePort range 30000-32767.
+      nodePort: 31100
+      protocol: TCP

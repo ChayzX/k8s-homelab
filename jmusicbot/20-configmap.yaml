@@ -1,0 +1,20 @@
+# Non-secret configuration for the release notifier.
+#
+# Only POLL_INTERVAL_SECONDS lives here; the notifier's other input
+# (DISCORD_RELEASE_WEBHOOK_URL) is a credential-bearing URL and comes from the
+# `jmusicbot-notifier-secrets` Secret instead — see SECRETS.md.
+#
+# jmusicbot itself has no environment configuration at all: everything is in
+# config.txt, which is delivered as a Secret (the file contains the Discord bot
+# token). See SECRETS.md.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jmusicbot-release-notifier-config
+  namespace: jmusicbot
+  labels:
+    app.kubernetes.io/name: jmusicbot-release-notifier
+    app.kubernetes.io/part-of: homelab
+data:
+  # 900s = 15min, unchanged from the Compose deployment.
+  POLL_INTERVAL_SECONDS: "900"
