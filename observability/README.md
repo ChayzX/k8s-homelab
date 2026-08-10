@@ -198,11 +198,22 @@ GRAF_DIR=$(kubectl get pv "$GRAF_PV" -o jsonpath='{.spec.local.path}')
 sudo cp -a /home/chase/docker/observability/grafana-data/. "$GRAF_DIR"/
 sudo chown -R 472:472 "$GRAF_DIR"
 
-# uptime-kuma  (louislam/uptime-kuma:2 runs as root, 0:0)
+# uptime-kuma  (louislam/uptime-kuma:2 -- outer Node.js process runs as
+# root, 0:0, but embedded MariaDB's own mariadbd subprocess is spawned
+# with --user=node, i.e. it runs as UID 1000 regardless of the outer
+# container's UID. The app's own startup script does `fs.chownSync()`
+# on the mariadb/ directory itself to fix that -- but fs.chownSync is
+# NOT recursive, so it only fixes the top-level directory entry. If
+# the whole PVC is blanket-chowned to 0:0 first, everything INSIDE
+# mariadb/ (ibdata1, mysql/, sys/, etc.) stays root-owned and mariadbd
+# gets EACCES trying to write its own data files -- confirmed live
+# during this migration: "Permission denied" creating a lower-test
+# file, "Could not open mysql.plugin table". Fix is two chowns, not one.)
 KUMA_PV=$(kubectl -n observability get pvc uptime-kuma-data -o jsonpath='{.spec.volumeName}')
 KUMA_DIR=$(kubectl get pv "$KUMA_PV" -o jsonpath='{.spec.local.path}')
 sudo cp -a /home/chase/docker/observability/uptime-kuma-data/. "$KUMA_DIR"/
 sudo chown -R 0:0 "$KUMA_DIR"
+sudo chown -R 1000:1000 "$KUMA_DIR"/mariadb
 ```
 
 Notes:
