@@ -2,7 +2,12 @@
 
 **Read this first.** This document is the single source of truth for how this cluster is built: every namespace, every workload, every port, every Service DNS name, the RBAC model, and the storage layout. It's written so a human or an AI agent can understand the whole system without reading every manifest — but the manifests are still the actual source of truth for exact syntax; this is the map, not the territory.
 
-**Status flag — read before trusting anything below as "live":** as of this writing, `k3s` is installed and healthy, but **nothing in this repo has been `kubectl apply`'d yet**. Everything described here is the *designed* target state sitting in `~/k8s-homelab/`, not the current running state. The current running state is still the pre-migration Docker Desktop stack + bare-metal Minecraft. Cross-check `kubectl get pods -A` against this document before assuming anything is deployed.
+**Status flag — read before trusting anything below as "live":** cutover is **in progress, applied namespace-by-namespace**, not all-or-nothing. As of this writing (2026-08-10, ~23:10 UTC, verified directly against the live cluster):
+- **Applied and live**: `_bootstrap` (namespaces + `homelab-admin` RBAC), `observability` (all six workloads `1/1 Running` and healthy, including uptime-kuma — see section 4 for the resolved capability chain it took to get there), `jmusicbot` (fully migrated, both Deployments `1/1 Running`, old Docker containers stopped).
+- **Namespace created, nothing else applied**: `pantry-bot`, `keel` (namespaces exist live via `kubectl get ns`, but no Deployments/workloads in either — old Docker containers `pantry-bot-bot-1`/`pantry-bot-watchtower-1`/`pantry-bot-cloudflared-1` are still the live production path).
+- **Not started at all**: `minecraft` — no `minecraft` namespace exists yet; `msh.service` is still `active` and still holds port 25565.
+
+Cross-check `kubectl get pods -A` / `kubectl get ns` against this document before assuming anything below is deployed — this section is accurate as of the timestamp above, not guaranteed current after it.
 
 **Completeness flag**: sections marked `[PENDING]` are not yet written. Check the section itself for what's missing.
 
@@ -57,6 +62,8 @@
 
 **Important — these three LoadBalancer ports will show `EXTERNAL-IP <pending>` and their `svclb-*` pod will CrashLoopBackOff on first apply**, because Docker Desktop's containers are still holding `3001`/`3002`/`25565` on the host. This is expected, documented per-manifest, and resolved by the two-pass / verify-then-cutover pattern described in section 6. Don't debug it as a fault.
 
+**Confirmed for `observability`, live**: Grafana (`3002`) and Uptime Kuma (`3001`) both bound `EXTERNAL-IP 192.168.40.208` cleanly on first apply (`kubectl -n observability get svc`) — the old Docker containers for both were stopped *before* the Services were applied, so ServiceLB never hit the port conflict above and the delete+reapply workaround this section anticipated wasn't needed in practice. Minecraft's `25565` is still untested — `msh.service` is still live and holding that port as of this writing.
+
 ### In-cluster-only ports (ClusterIP)
 
 | Service DNS name | Port | Purpose |
@@ -90,6 +97,8 @@ Every stateful app uses `Deployment` + `strategy: Recreate` + a `ReadWriteOnce` 
 
 ### `jmusicbot` namespace
 
+**Live status: fully migrated and verified, as of this writing.** Both Deployments `1/1 Running`. `jmusicbot`'s logs confirm `serversettings.json loaded`, `YouTube access token refreshed successfully`, `Login Successful!`, `Finished Loading!` — the PVC data migration and the OAuth token both survived, no Discord re-auth was needed. `jmusicbot-release-notifier`'s log shows `Last seen release: v0.7.0`, matching `last_release.json` on the pre-migration host path — its state survived too. Old Docker containers for this stack are stopped and no longer present in `docker ps`.
+
 | Workload | Image | Ports | Requests/Limits | UID | SA (API access?) | PVC |
 |---|---|---|---|---|---|---|
 | `jmusicbot` (Deployment, Recreate) | `jmusicbot-custom:yts1182` — **locally built, side-loaded, never pulled from a registry**. `imagePullPolicy: IfNotPresent` is mandatory; `Always` breaks it. | none (outbound Discord gateway only) | 500m/2000m CPU, 512Mi/1Gi mem | `10001:10001` (verified via `docker top`) | `jmusicbot-sa`, no API access | `jmusicbot-config` (1Gi) |
@@ -98,6 +107,8 @@ Every stateful app uses `Deployment` + `strategy: Recreate` + a `ReadWriteOnce` 
 **jmusicbot is deliberately NOT managed by Keel.** It has its own rebuild pipeline (`scripts/auto-update.sh`, cron-driven, daily) that builds a uniquely-tagged local image each run and deploys via `docker save ... | sudo k3s ctr images import -` then `kubectl set image` — never `rollout restart`, since the image *reference* itself must change to trigger a rollout.
 
 ### `pantry-bot` namespace
+
+**Live status: not started.** The `pantry-bot` namespace exists (`kubectl get ns`), created by `_bootstrap`, but no Deployments/Secrets/PVCs from this section have been applied. Old Docker containers `pantry-bot-bot-1`, `pantry-bot-watchtower-1`, `pantry-bot-cloudflared-1` are still the live production path (confirmed `Up`/`healthy` in `docker ps`).
 
 | Workload | Image | Ports | Requests/Limits | UID | SA (API access?) | PVC |
 |---|---|---|---|---|---|---|
@@ -110,6 +121,8 @@ Every stateful app uses `Deployment` + `strategy: Recreate` + a `ReadWriteOnce` 
 
 ### `observability` namespace
 
+**Live status, as of this writing**: all six workloads — `loki`, `prometheus`, `grafana`, `uptime-kuma`, `promtail` (DaemonSet), `kube-state-metrics` — are `Running`/`1/1` and healthy. The old Docker promtail container is deliberately still running alongside the new one — it's still the one feeding Loki with Minecraft's host logs until Minecraft migrates; don't stop it early.
+
 | Workload | Image (pinned) | Ports | Requests/Limits | UID | SA (API access?) | PVC |
 |---|---|---|---|---|---|---|
 | `loki` (Deployment, Recreate) | `grafana/loki:3.3.2` | 3100 (http), 9095 (grpc) | 50m/500m CPU, 128Mi/512Mi mem | `10001:10001` | `loki-sa`, no | `loki-data` (20Gi) |
@@ -118,6 +131,13 @@ Every stateful app uses `Deployment` + `strategy: Recreate` + a `ReadWriteOnce` 
 | `uptime-kuma` (Deployment, Recreate) | `louislam/uptime-kuma:2` | 3001 | 50m/500m CPU, 192Mi/768Mi mem | `0:0` (root — upstream-mandated, drops privileges internally; forcing non-root breaks startup) | `uptime-kuma-sa`, no | `uptime-kuma-data` (2Gi, includes embedded MariaDB datadir) |
 | `promtail` (**DaemonSet**, not Deployment — log shipper needs one pod per node) | `grafana/promtail:3.3.2` | 9080 | 50m/200m CPU, 64Mi/256Mi mem | `0:0` (root, required — container logs under `/var/log/pods` are root-owned) | `promtail-sa`, **yes** (`kubernetes_sd_configs`, role: pod) | none (hostPath positions file at `/var/lib/promtail` instead) |
 | `kube-state-metrics` (Deployment, RollingUpdate — stateless) | `registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.13.0` | 8080, 8081 | 10m/100m CPU, 32Mi/128Mi mem | `65534:65534` | `kube-state-metrics-sa`, **yes** (lists/watches nearly every object type, read-only) | none |
+
+**`uptime-kuma` — resolved. Took three rounds to fully nail down, all stemming from the same root cause**: `capabilities.drop: ["ALL"]` genuinely strips a UID-0 process of nearly everything that makes it behave like unconfined root. Full chain, in the order each was found:
+1. `CAP_CHOWN`/`CAP_FOWNER`/`CAP_SETUID`/`CAP_SETGID` — needed for the outer Node.js process's own `chown`/`chmod` on the MariaDB datadir, and for `mariadbd`'s internal privilege-drop to UID 1000 (`--user=node`). Sourced from the actual uptime-kuma and MariaDB code, not guessed — see the manifest's own header comment for exact file/line citations.
+2. A stale root-owned `mysqld.pid` left over from an earlier crash attempt (before fix #1 landed) sat inside an otherwise-correctly-1000:1000-owned `/app/data/run/` — cleared via a temporary debug pod, not a manifest change (it was leftover live data, not a config problem).
+3. `CAP_DAC_OVERRIDE` — the piece the original analysis explicitly (and reasonably, for what it analyzed) left out. It correctly reasoned `mariadbd`'s own bootstrap never needs it, but missed that the *outer* Node.js process — which stays root throughout and never drops privilege, unlike `mariadbd` — separately connects to `/app/data/run/mariadb.sock` as a MySQL client. That socket is owned `1000:1000`, root isn't a member of group 1000 here, and "other" permissions are `r-x` (no write) — so a capability-stripped root process fails `connect()` with `EACCES` exactly like a normal non-root user would. Real/unconfined root only bypasses this via `CAP_DAC_OVERRIDE`.
+
+Final capability set: `add: ["CHOWN", "FOWNER", "SETUID", "SETGID", "DAC_OVERRIDE"]`. Confirmed healthy end-to-end: pod `1/1 Running`, 0 restarts, `http://192.168.40.208:3001` returns a real response, and its pre-migration monitor configuration survived (existing "Discord Music Bot"/"Twitch Bot" monitors are visible and correctly show the already-documented `docker.sock`-unavailable warning — a known, separate follow-up item, not a new bug).
 
 **Dropped from the old Compose stack, deliberately, not an oversight**: standalone `cadvisor` (kubelet exposes the same data natively at `/metrics/cadvisor` — Prometheus scrapes that instead; also removes the one `privileged: true` container from the whole stack) and a `node-exporter` DaemonSet (a **native host `node_exporter` already runs on `:9100`** — a DaemonSet would collide with it; Prometheus scrapes the existing binary as a static target at `192.168.40.208:9100` instead).
 
@@ -133,6 +153,8 @@ Every stateful app uses `Deployment` + `strategy: Recreate` + a `ReadWriteOnce` 
 
 ### `minecraft` namespace
 
+**Live status: not started.** No `minecraft` namespace exists yet (it's created by `minecraft/minecraft.yaml` itself, not `_bootstrap` — see section 2's note on why). `msh.service` is still `active` on the host and still holds port 25565 (`ss -tlnp` confirms). Nothing in this section has been applied.
+
 | Workload | Image | Ports | Requests/Limits | UID | SA (API access?) | PVC |
 |---|---|---|---|---|---|---|
 | `minecraft` (Deployment, Recreate) | `localhost/paper-minecraft:1.21.11-b127` — locally built, side-loaded via `docker save ... \| sudo k3s ctr images import -`, never pulled | 25566/tcp (game), 25566/udp (query), 25575/tcp (rcon) | **requests 2 CPU/3Gi mem, limits 6 CPU/8Gi mem** | `1000:1000` | `minecraft-sa`, no API access | `minecraft-world` (10Gi) |
@@ -143,7 +165,7 @@ Every stateful app uses `Deployment` + `strategy: Recreate` + a `ReadWriteOnce` 
 
 **`terminationGracePeriodSeconds: 120`** (not the 30s default) — not enough time to flush a 1.3GB world on a spinning disk otherwise, which risks corruption. Shutdown path: `preStop` runs an RCON `save-all flush` + `stop` via a small helper JVM (`rcon.jar`, `-Xmx32m`), falling through non-fatally to `SIGTERM` → the JVM's own shutdown hook (java is PID 1, verified) if RCON fails for any reason.
 
-**Two-pass apply, controlled by the label `homelab.chase/cutover-stage`**: everything except the production `minecraft` LoadBalancer Service is labeled `pre` and safe to apply anytime; the LoadBalancer Service alone is labeled `cutover` and **must not be applied while `msh.service` still owns port 25565 on the host** — doing so makes ServiceLB install a hostPort DNAT rule that hijacks live player traffic into a pod that may not even be ready yet. See `minecraft/MIGRATION.md` (pending) for the exact sequencing.
+**Two-pass apply, controlled by the label `homelab.chase/cutover-stage`**: everything except the production `minecraft` LoadBalancer Service is labeled `pre` and safe to apply anytime; the LoadBalancer Service alone is labeled `cutover` and **must not be applied while `msh.service` still owns port 25565 on the host** — doing so makes ServiceLB install a hostPort DNAT rule that hijacks live player traffic into a pod that may not even be ready yet. See `minecraft/MIGRATION.md` for the exact sequencing (written and present in the repo, not pending).
 
 `minecraft-rcon` is a `ClusterIP` Service (never external — RCON is a plaintext, password-gated admin channel) reached at `minecraft-rcon.minecraft.svc.cluster.local:25575` by `scripts/minecraft_backup.py` and `scripts/minecraft_exporter.py`.
 
@@ -154,6 +176,8 @@ Every stateful app uses `Deployment` + `strategy: Recreate` + a `ReadWriteOnce` 
 - `playit.service` gets disabled as the very last cleanup step, only after the new Service is confirmed bound and joinable — not before.
 
 ### `keel` namespace
+
+**Live status: not started.** The `keel` namespace exists but no workload from this section is applied — it deploys alongside `pantry-bot`, not before it.
 
 | Workload | Image | Ports | Requests/Limits | UID | SA (API access?) | PVC |
 |---|---|---|---|---|---|---|
@@ -222,8 +246,10 @@ Not a gap — a documented decision. `_bootstrap/WATCHERS-TODO.md` covers `obser
 - `observability-network-exporter` → likely **fully redundant**, not just unported. It exists specifically to work around cAdvisor's broken per-container network metrics *under Docker Desktop's VM networking* (`pid: host`, misreported host-tunnel interfaces). Bare-metal k3s pods have real veth interfaces on a real netns — the kubelet's built-in `/metrics/cadvisor` almost certainly already reports correct per-pod network I/O with no separate exporter needed. Verify this before writing a single line of a port.
 - **Migration-window hazard, act before Phase 2**: `observability-watcher` watches Docker container *names* (`WATCH_CONTAINERS=jmusicbot,pantry-bot-bot-1`). The moment either is stopped during cutover, it'll fire a false "container down" Discord alert for an app that's actually fine, just relocated. Blank `WATCH_CONTAINERS` and pause the equivalent Uptime Kuma monitors before touching jmusicbot or pantry-bot.
 
-## 9. Status: manifest-writing is complete; nothing has been applied
+## 9. Status: live cutover in progress, applied namespace-by-namespace
 
-Every namespace's manifests, the dashboards, the RBAC model, and the script rewrites are written and reviewed. **Zero `kubectl apply` commands have been run against the live cluster.** The next phase is the actual serial cutover, executed by hand per each namespace's `README.md`/`MIGRATION.md`, in the order: Phase 0 remainder (secrets, storage decisions) → observability → jmusicbot → pantry-bot + Keel → Minecraft (highest risk, most novel, done last) → Docker Desktop retired only after a real soak period. See `~/.claude/plans/i-d-love-to-run-cuddly-flurry.md` for the full sequencing rationale and `~/Documents/k8s-migration-handoff.md` for session narrative/status.
+Every namespace's manifests, the dashboards, the RBAC model, and the script rewrites are written and reviewed (repo `~/k8s-homelab/`, git history: `44f1db9` initial manifest set → `48e09b9` fix an invalid ConfigMap label → `3804dc5` fix three live cutover bugs + log-retention audit → `ad0c0f6` confirm JVM_OPTS/rsync for stdout-only logging). Cutover is being executed by hand per each namespace's `README.md`/`MIGRATION.md`, in the order: Phase 0 remainder (secrets, storage decisions) → observability → jmusicbot → pantry-bot + Keel → Minecraft (highest risk, most novel, done last) → Docker Desktop retired only after a real soak period.
 
-Once these land, update this document — it is meant to stay current, not describe a snapshot.
+**Actual progress as of this writing** (verified live, not transcribed from a plan): `_bootstrap` done. `observability` fully applied and healthy, all six workloads. `jmusicbot` fully migrated and verified. `pantry-bot`, `keel`, and `minecraft` are not started — their old Docker/systemd equivalents are still the live production path. See `~/.claude/plans/i-d-love-to-run-cuddly-flurry.md` for the full sequencing rationale and `~/Documents/k8s-migration-handoff.md` for session narrative/status.
+
+Once the remaining namespaces land, update this document — it is meant to stay current, not describe a snapshot.
