@@ -50,8 +50,20 @@ data:
             prefix: index_
             period: 24h
 
+    # Retention: enforced by the COMPACTOR, not this key alone — both
+    # limits_config.retention_period and compactor.retention_enabled are
+    # required together, or nothing actually gets deleted (verified against
+    # the Loki 3.3.x config reference: retention_delete_delay defaults to 2h
+    # and compaction_interval to 10m, both fine to leave at default here).
+    # Bumped from the original 168h (7d, ported from the Docker config) to
+    # 720h (30d) — this is a home-lab with a handful of low-volume apps
+    # (jmusicbot, pantry-bot, minecraft, the observability stack itself)
+    # against a 20Gi PVC, so 30 days of compressed chunks has plenty of
+    # headroom; 7 days was needlessly short for the "look back at what
+    # happened last week/month" use case this exists for, and retention
+    # requires index period 24h (true here) to function at all.
     limits_config:
-      retention_period: 168h
+      retention_period: 720h
 
     compactor:
       working_directory: /loki/compactor

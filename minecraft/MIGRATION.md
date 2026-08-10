@@ -168,12 +168,23 @@ authoritative copy (done after `msh` is stopped, below) only has to transfer
 the delta.
 
 ```bash
-sudo rsync -a --info=progress2 --exclude='.console_history' \
+sudo rsync -a --info=progress2 --exclude='.console_history' --exclude='logs/' \
   /home/chase/minecraft/ "$PV_PATH"/
 ```
 
 This step is safe to skip if you'd rather take the full ~1.3G copy time
 inside the downtime window instead of splitting it.
+
+**`--exclude='logs/'` is new, and deliberate**: the container image now runs
+Paper with stdout-only logging (`minecraft/log4j2.xml`, wired in via
+`-Dlog4j.configurationFile` in the Dockerfile) instead of Paper's default,
+which also writes `logs/latest.log` + daily-gzipped rotations. Nothing in the
+pod will ever read or write `/data/logs` again, so there's no reason to carry
+the bare-metal server's ~100+ accumulated `.log.gz` files onto the PVC — they
+just sit there as dead weight on the same 10Gi volume as the world data. If
+you ever want that history for reference, it's still on the bare-metal host
+at `/home/chase/minecraft/logs/` (untouched — this whole file only copies
+*into* the PVC, never deletes from the source).
 
 ### The downtime window starts here
 
@@ -218,13 +229,15 @@ Now do the authoritative copy (a second `rsync` pass, safe and fast if you
 did the optional pre-copy above; a full ~1.3-1.6G copy if you didn't):
 
 ```bash
-sudo rsync -a --delete --info=progress2 --exclude='.console_history' \
+sudo rsync -a --delete --info=progress2 --exclude='.console_history' --exclude='logs/' \
   /home/chase/minecraft/ "$PV_PATH"/
 ```
 
 `--delete` matters here: it makes the PVC copy an exact mirror of the
 bare-metal source, not an accumulation of whatever the earlier pre-copy left
-behind.
+behind. `--exclude='logs/'` matches the pre-copy pass above — same reasoning,
+kept consistent so `--delete` doesn't try to reconcile a directory neither
+side actually wants copied.
 
 Fix ownership — every file at the source is `1000:1000`, and `local-path`'s
 directory was created root-owned:

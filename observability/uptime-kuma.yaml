@@ -121,8 +121,44 @@ spec:
               protocol: TCP
           securityContext:
             allowPrivilegeEscalation: false
+            # `drop: ["ALL"]` strips capabilities from this UID-0 process too,
+            # not just from unprivileged ones -- under the modern Linux
+            # capability model, root's powers are gated by its capability
+            # set, not bare UID 0. That is what produced:
+            #   [SERVER] ERROR: Failed to prepare your database: EPERM:
+            #   operation not permitted, chown '/app/data/mariadb'
+            # Verified against upstream source (not guessed):
+            #   - CAP_CHOWN: server/embedded-mariadb.js initDB() runs
+            #     fs.chownSync(mariadbDataDir/runDir, 1000, 1000) on every
+            #     startup, handing the datadir to the "node" (uid 1000)
+            #     account mariadbd runs as. That is the exact call in the
+            #     crash above -- a uid-0 process needs CAP_CHOWN to chown a
+            #     file to a *different* uid.
+            #   - CAP_FOWNER: the next line in that same function does
+            #     fs.chmodSync(dir, 0o755). fs.Stats.mode includes the
+            #     S_IFDIR type bits, so the `!== 0o755` guard is always true
+            #     and this chmod always runs -- against a directory the
+            #     process no longer owns, having just chowned it away to uid
+            #     1000. Chmod-ing a file you don't own needs CAP_FOWNER.
+            #   - CAP_SETUID / CAP_SETGID: mariadbd is launched with
+            #     `--user=node`. MariaDB's privilege-drop routine
+            #     (mysys/my_setuser.c: my_set_user(), invoked from
+            #     set_user() in sql/mysqld.cc very early in main(), before
+            #     any datadir I/O) calls setgid()+initgroups()+setuid() to
+            #     drop from root to uid 1000. Either syscall failing makes
+            #     set_user() call unireg_abort(1) -- mariadbd exits fatally
+            #     and embedded-mariadb.js's "close" handler just respawns
+            #     it, forever. Adding only CAP_CHOWN/CAP_FOWNER trades this
+            #     crash loop for a quieter, harder-to-diagnose one.
+            # CAP_DAC_OVERRIDE is deliberately NOT added: the only datadir
+            # access before the setuid(1000) above (my_setwd()/
+            # check_data_home(), a chdir) only needs directory *execute*
+            # permission, which "other" already has at mode 0755; every real
+            # data-file open happens after the drop, once the process
+            # legitimately owns those files.
             capabilities:
               drop: ["ALL"]
+              add: ["CHOWN", "FOWNER", "SETUID", "SETGID"]
           # First start after a datadir move runs MariaDB recovery, which
           # is slow. 10 minutes of startup grace before liveness arms --
           # killing it mid-recovery is how you lose the history.

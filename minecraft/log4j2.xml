@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Stdout-only Log4j2 config for the containerized Paper server.
+
+  WHY THIS FILE EXISTS
+  =====================================================================
+  This is Paper 1.21.11's own bundled log4j2.xml (extracted from
+  versions/1.21.11/paper-1.21.11.jar, verified byte-for-byte against the
+  live bare-metal server before editing) with exactly one change: the
+  <RollingRandomAccessFile name="File" ...> appender that wrote
+  logs/latest.log + logs/%d{yyyy-MM-dd}-%i.log.gz, and its <AppenderRef
+  ref="File"/> line inside <Async>, have been removed. Everything else —
+  patterns, the plugin-logger prefix-suppression rules, the
+  NETWORK_PACKETS marker filter — is unchanged.
+
+  On bare metal (pre-migration), Paper's default config wrote every line
+  to BOTH the console AND logs/latest.log (rotated daily + gzipped by
+  Log4j2's own TimeBasedTriggeringPolicy, but never deleted — verified
+  live: /home/chase/minecraft/logs held 102 rotated .log.gz files going
+  back to March with no pruning, DefaultRolloverStrategy max="1000" caps
+  the per-day index counter, not retention).
+
+  Once Minecraft runs as a pod, stdout is captured by containerd the
+  standard k8s way and shipped to Loki via promtail
+  (observability/promtail-config.yaml), which is now the durable,
+  retention-bounded copy (observability/loki-config.yaml,
+  limits_config.retention_period: 720h). Keeping the file appender on top
+  of that would mean two independent, unbounded-by-default copies of the
+  same lines accumulating on the same 10Gi minecraft-world PVC that also
+  holds the actual world data, on the same spinning disk Minecraft's own
+  chunk saves compete for. Cut the duplicate at the source instead of
+  bolting a retention policy onto a copy nothing reads.
+
+  TRADEOFF, RECORDED DELIBERATELY: this means there is no local on-disk
+  log if promtail/Loki is ever down, or if disk-level `grep` access is
+  wanted without a Loki round-trip. `kubectl logs -n minecraft
+  deploy/minecraft` still works regardless — that's containerd's stdout
+  capture, independent of this file — so that command (not a file under
+  /data/logs) is the fallback. See minecraft/MIGRATION.md.
+
+  If a local file fallback is ever wanted after all, don't just revert
+  this file — re-add the File appender with an explicit bounded
+  <DefaultRolloverStrategy max="N"> and a <Delete> action (Log4j2's
+  rolling-file deletion mechanism), so it's actually bounded, not a
+  return to the unbounded default this file exists to remove.
+  =====================================================================
+-->
+<Configuration status="WARN" shutdownHook="disable">
+    <Appenders>
+        <Queue name="ServerGuiConsole">
+            <PatternLayout pattern="[%d{HH:mm:ss} %level]: %msg{nolookups}%n" />
+        </Queue>
+        <TerminalConsole name="TerminalConsole">
+            <PatternLayout>
+                <LoggerNamePatternSelector defaultPattern="%highlightError{[%d{HH:mm:ss} %level]: [%logger] %msg%n%xEx{full}}">
+                    <!-- Log root, Minecraft, Mojang and Bukkit loggers without prefix -->
+                    <!-- Disable prefix for various plugins that bypass the plugin logger -->
+                    <PatternMatch key=",net.minecraft.,Minecraft,com.mojang.,com.sk89q.,ru.tehkode.,Minecraft.AWE"
+                                  pattern="%highlightError{[%d{HH:mm:ss} %level]: %msg%n%xEx{full}}" />
+                </LoggerNamePatternSelector>
+            </PatternLayout>
+        </TerminalConsole>
+        <Async name="Async">
+            <AppenderRef ref="TerminalConsole" level="info"/>
+            <AppenderRef ref="ServerGuiConsole" level="info"/>
+        </Async>
+    </Appenders>
+    <Loggers>
+        <Root level="info">
+            <filters>
+                <MarkerFilter marker="NETWORK_PACKETS" onMatch="DENY" onMismatch="NEUTRAL" />
+            </filters>
+            <AppenderRef ref="Async"/>
+        </Root>
+    </Loggers>
+</Configuration>

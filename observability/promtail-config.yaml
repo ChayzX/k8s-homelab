@@ -149,29 +149,29 @@ data:
           # kube-state-metrics, keel. Case-insensitive because
           # prometheus uppercases and the rest do not.
           - match:
-              selector: '{job="kubernetes-pods"} |~ `(?i)(^|\s)(level|lvl)=debug`'
+              selector: '{job="kubernetes-pods"} |~ "(?i)(^|\\s)(level|lvl)=debug"'
               stages:
                 - static_labels:
                     level: debug
           - match:
-              selector: '{job="kubernetes-pods"} |~ `(?i)(^|\s)(level|lvl)=(warn|warning)`'
+              selector: '{job="kubernetes-pods"} |~ "(?i)(^|\\s)(level|lvl)=(warn|warning)"'
               stages:
                 - static_labels:
                     level: warn
           - match:
-              selector: '{job="kubernetes-pods"} |~ `(?i)(^|\s)(level|lvl)=(error|eror|fatal|crit)`'
+              selector: '{job="kubernetes-pods"} |~ "(?i)(^|\\s)(level|lvl)=(error|eror|fatal|crit)"'
               stages:
                 - static_labels:
                     level: error
 
           # --- severity: JSON / zerolog (traefik, cloudflared) ---
           - match:
-              selector: '{job="kubernetes-pods"} |~ `"(level|severity)":"(warn|warning)"`'
+              selector: '{job="kubernetes-pods"} |~ "\"(level|severity)\":\"(warn|warning)\""'
               stages:
                 - static_labels:
                     level: warn
           - match:
-              selector: '{job="kubernetes-pods"} |~ `"(level|severity)":"(error|fatal|panic)"`'
+              selector: '{job="kubernetes-pods"} |~ "\"(level|severity)\":\"(error|fatal|panic)\""'
               stages:
                 - static_labels:
                     level: error
@@ -181,12 +181,12 @@ data:
           # klog prefixes each line with a single severity letter and an
           # MMDD date: I0810, W0810, E0810, F0810.
           - match:
-              selector: '{job="kubernetes-pods"} |~ `^W\d{4} \d{2}:\d{2}:\d{2}`'
+              selector: '{job="kubernetes-pods"} |~ "^W\\d{4} \\d{2}:\\d{2}:\\d{2}"'
               stages:
                 - static_labels:
                     level: warn
           - match:
-              selector: '{job="kubernetes-pods"} |~ `^[EF]\d{4} \d{2}:\d{2}:\d{2}`'
+              selector: '{job="kubernetes-pods"} |~ "^[EF]\\d{4} \\d{2}:\\d{2}:\\d{2}"'
               stages:
                 - static_labels:
                     level: error
@@ -308,7 +308,7 @@ data:
           - static_labels:
               level: info
           - match:
-              selector: '{job="pantry-bot"} |~ `(?i)\b(warn|warning|deprecated|deprecation)\b`'
+              selector: '{job="pantry-bot"} |~ "(?i)\\b(warn|warning|deprecated|deprecation)\\b"'
               stages:
                 - static_labels:
                     level: warn
@@ -317,7 +317,7 @@ data:
           # this bot actually hits (ENOTFOUND and ECONNREFUSED both
           # appear in its current logs).
           - match:
-              selector: '{job="pantry-bot"} |~ `(?i)(\b(error|exception|fatal)\b|unhandled\s+(rejection|exception)|\b(ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|EPIPE)\b)`'
+              selector: '{job="pantry-bot"} |~ "(?i)(\\b(error|exception|fatal)\\b|unhandled\\s+(rejection|exception)|\\b(ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|EPIPE)\\b)"'
               stages:
                 - static_labels:
                     level: error

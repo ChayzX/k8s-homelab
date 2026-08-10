@@ -1,6 +1,7 @@
-# Keep the build context to: Dockerfile, Rcon.java, entrypoint.sh, paper.jar.
+# Keep the build context to: Dockerfile, Rcon.java, entrypoint.sh, paper.jar, log4j2.xml.
 *
 !Dockerfile
 !Rcon.java
 !entrypoint.sh
 !paper.jar
+!log4j2.xml

@@ -84,8 +84,13 @@ RUN set -eux; \
 COPY paper.jar /opt/minecraft/paper.jar
 COPY --from=rcon-build /build/rcon.jar /opt/minecraft/rcon.jar
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+# Stdout-only Log4j2 config — see log4j2.xml's own header for the full
+# rationale. Replaces Paper's bundled default (which also writes
+# logs/latest.log, unbounded, on the same PVC as the world) now that
+# containerd->promtail->Loki is the durable, retention-bounded copy.
+COPY log4j2.xml /opt/minecraft/log4j2.xml
 RUN chmod 0755 /usr/local/bin/entrypoint.sh \
- && chmod 0444 /opt/minecraft/paper.jar /opt/minecraft/rcon.jar
+ && chmod 0444 /opt/minecraft/paper.jar /opt/minecraft/rcon.jar /opt/minecraft/log4j2.xml
 
 ENV MC_DATA_DIR=/data \
     MC_JAR=/opt/minecraft/paper.jar \
@@ -107,6 +112,11 @@ ENV MC_DATA_DIR=/data \
 #   -Dterminal.jline=false     no TTY in a pod; disable JLine and ANSI so stdout
 #   -Dterminal.ansi=false      is plain, line-oriented text that promtail and
 #                              `kubectl logs` can parse without escape codes.
+#   -Dlog4j.configurationFile  points at the stdout-only config above instead
+#                              of Paper's bundled default, which also writes
+#                              an unbounded logs/latest.log to the PVC. See
+#                              log4j2.xml's header comment for the full
+#                              rationale (Loki is now the durable copy).
 #
 # Deliberately NOT set here:
 #   * Aikar's G1 flags — the bare-metal server runs on JVM defaults today.
@@ -119,7 +129,7 @@ ENV MC_DATA_DIR=/data \
 #     whole design is built to avoid.
 #   * -XX:+HeapDumpOnOutOfMemoryError — a 6G dump onto a 10Gi PVC on a 5900rpm
 #     HDD turns one bad day into two.
-ENV JVM_OPTS="-Xms2G -Xmx6G -XX:MaxDirectMemorySize=1G -XX:MaxMetaspaceSize=512m -Dterminal.jline=false -Dterminal.ansi=false"
+ENV JVM_OPTS="-Xms2G -Xmx6G -XX:MaxDirectMemorySize=1G -XX:MaxMetaspaceSize=512m -Dterminal.jline=false -Dterminal.ansi=false -Dlog4j.configurationFile=/opt/minecraft/log4j2.xml"
 
 WORKDIR /data
 USER 1000:1000
