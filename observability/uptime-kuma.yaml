@@ -150,15 +150,28 @@ spec:
             #     and embedded-mariadb.js's "close" handler just respawns
             #     it, forever. Adding only CAP_CHOWN/CAP_FOWNER trades this
             #     crash loop for a quieter, harder-to-diagnose one.
-            # CAP_DAC_OVERRIDE is deliberately NOT added: the only datadir
-            # access before the setuid(1000) above (my_setwd()/
-            # check_data_home(), a chdir) only needs directory *execute*
-            # permission, which "other" already has at mode 0755; every real
-            # data-file open happens after the drop, once the process
-            # legitimately owns those files.
+            #   - CAP_DAC_OVERRIDE: the analysis above covers mariadbd's OWN
+            #     bootstrap (which is fine without it, since mariadbd drops
+            #     to uid 1000 before touching real data files). It misses a
+            #     SEPARATE access path: the outer Node.js process (this
+            #     container's PID 1, uid 0, and unlike mariadbd it never
+            #     drops privilege) connects to mariadbd as a MySQL client
+            #     over the unix socket mariadbd creates at
+            #     /app/data/run/mariadb.sock, owned 1000:1000 mode
+            #     srwxrwxr-x. Root is not in group 1000 here (fsGroup on
+            #     this pod is 0, matching the outer process, not mariadbd's
+            #     1000), so the "other" bits apply -- r-x, no write -- and a
+            #     capability-stripped root process fails `connect()` with
+            #     EACCES exactly like a normal user would. Confirmed live:
+            #     "Failed to prepare your database: connect EACCES
+            #     /app/data/run/mariadb.sock". Real root bypasses this via
+            #     CAP_DAC_OVERRIDE, which is the one capability that makes
+            #     UID 0 actually behave like unconfined root for file/socket
+            #     permission checks -- add it back rather than chasing every
+            #     individual path this touches next.
             capabilities:
               drop: ["ALL"]
-              add: ["CHOWN", "FOWNER", "SETUID", "SETGID"]
+              add: ["CHOWN", "FOWNER", "SETUID", "SETGID", "DAC_OVERRIDE"]
           # First start after a datadir move runs MariaDB recovery, which
           # is slow. 10 minutes of startup grace before liveness arms --
           # killing it mid-recovery is how you lose the history.
