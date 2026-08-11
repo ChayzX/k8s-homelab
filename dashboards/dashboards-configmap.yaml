@@ -1792,14 +1792,14 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "kube_pod_status_phase{namespace=\"kube-system\"} == 1",
+              "expr": "label_replace(kube_pod_status_phase{namespace=\"kube-system\"} == 1, \"pod_short\", \"$1\", \"pod\", \"^(.+?)(-[a-z0-9]{6,12})?-[a-z0-9]{5}$\")",
               "format": "table",
               "instant": true
             },
             {
               "refId": "B",
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum by (pod) (kube_pod_container_status_restarts_total{namespace=\"kube-system\"})",
+              "expr": "label_replace(sum by (pod) (kube_pod_container_status_restarts_total{namespace=\"kube-system\"}), \"pod_short\", \"$1\", \"pod\", \"^(.+?)(-[a-z0-9]{6,12})?-[a-z0-9]{5}$\")",
               "format": "table",
               "instant": true
             }
@@ -1818,9 +1818,11 @@ data:
                   "instance": true,
                   "namespace": true,
                   "uid": true,
+                  "pod": true,
+                  "pod_short 2": true,
                   "Value #A": true
                 },
-                "renameByName": { "pod": "Pod", "phase": "Phase", "Value #B": "Restarts" },
+                "renameByName": { "pod_short": "Pod", "phase": "Phase", "Value #B": "Restarts" },
                 "indexByName": {}
               }
             },
@@ -1881,8 +1883,8 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"kube-system\"}[1h]))",
-              "legendFormat": "{{pod}}"
+              "expr": "sum by (container) (increase(kube_pod_container_status_restarts_total{namespace=\"kube-system\"}[1h]))",
+              "legendFormat": "{{container}}"
             }
           ],
           "options": {
@@ -3431,7 +3433,7 @@ data:
           "id": 19,
           "type": "bargauge",
           "title": "PersistentVolumeClaim Usage",
-          "description": "TODO — VERIFY BEFORE RELYING ON THIS PANEL. kubelet_volume_stats_* is exposed by the kubelet's /metrics endpoint, NOT by /metrics/cadvisor. The migration plan only commits to scraping /metrics/cadvisor, so unless a second scrape job for the kubelet's main /metrics endpoint was also added to prometheus.yml, this panel will be empty. Fix: add a scrape job for https://<node>:10250/metrics (bearer token + insecure_skip_verify), or delete this panel. Every PVC here lives on the 5900rpm root disk, so filling one is a real risk worth watching.",
+          "description": "Verified live (2026-08-11): the kubelet's main /metrics endpoint is scraped (kubernetes-kubelet job, target up) and kubelet_volume_stats_* returns real data for every PVC. Every PVC here lives on the 5900rpm root disk, so filling one is a real risk worth watching.",
           "gridPos": { "h": 7, "w": 24, "x": 0, "y": 55 },
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "targets": [
