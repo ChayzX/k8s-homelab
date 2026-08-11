@@ -1,0 +1,188 @@
+# =============================================================================
+# opsbot RBAC — namespaced Role + RoleBinding, per whitelisted namespace
+# =============================================================================
+# Deliberately NOT a ClusterRole/ClusterRoleBinding. Contrast with Keel
+# (../keel/20-clusterrole-clusterrolebinding.yaml): Keel is cluster-scoped
+# because it has to *discover* annotated Deployments anywhere in the cluster
+# without being told a namespace list. opsbot has the opposite requirement —
+# an explicit, closed allowlist of namespaces the Discord bot is allowed to
+# touch at all — so a Role bound per-namespace is not just adequate, it's the
+# actual security boundary the design calls for (see `bd show k8s-homelab-bi6`
+# and `k8s-homelab-bi6.2`).
+#
+# Whitelist: jmusicbot, pantry-bot, minecraft. Deliberately EXCLUDES keel
+# (nothing to restart there day-to-day; also avoids opsbot ever touching the
+# updater that manages pantry-bot) and observability (out of scope for a
+# Discord ops bot; a bad slash command should not be able to touch metrics
+# infra). Adding a namespace later means adding one more Role+RoleBinding pair
+# below — nothing else changes.
+#
+# The Role is defined identically in each namespace rather than shared,
+# because Roles are namespace-scoped API objects — there is no such thing as
+# one Role object valid across namespaces. Repeating ~6 lines of rules three
+# times is the actual mechanism Kubernetes provides for "same permissions,
+# multiple namespaces, no cluster-scope"; a ClusterRole bound only via
+# namespaced RoleBindings was considered (marginally less repetition) but
+# rejected — it reads as cluster-wide at a glance (`kubectl get clusterrole`
+# would list it) even though it's fully neutralized by scoped bindings, which
+# is a worse audit story than three plainly-namespaced Role objects for a
+# component whose entire design goal is a hard, legible namespace boundary.
+#
+# Verbs, and why each is here (nothing broader):
+#   - pods: get/list/watch     -> `/pods status <ns>` slash command. Read-only.
+#   - deployments: get/list/watch/patch -> `/deploy status` (read) and
+#     `/deploy restart` (patch). `kubectl rollout restart` does no more than
+#     this under the hood: it fetches the Deployment (get) and sends a
+#     strategic-merge PATCH that touches only
+#     spec.template.metadata.annotations (stamping
+#     kubectl.kubernetes.io/restartedAt), which the Deployment controller
+#     then reconciles into a normal rolling update via its own ReplicaSet
+#     controller privileges — the caller never needs `update`, `create`, or
+#     any verb on replicasets/pods to trigger a restart this way.
+#
+# Explicitly NOT granted, anywhere in this file: secrets (any verb — opsbot
+# has no legitimate reason to read a Secret), delete/deletecollection (no
+# command deletes anything), and no rule ever omits an apiGroups/resources/
+# namespace scope to widen it.
+#
+# ONE exception to "no exec": `/mc <command>` (the RCON bridge, bi6.4) has to
+# reach rcon.jar inside the running minecraft pod, and `pods/exec` is the
+# only way the Kubernetes API exposes that — whether the bot shells out to a
+# `kubectl exec` binary or calls the Python client's `kubernetes.stream`
+# API, both go through this exact same RBAC check (`create` on the `exec`
+# subresource of `pods`). Scoped to the `minecraft` namespace ONLY, as its
+# own Role+RoleBinding pair below — deliberately NOT folded into
+# opsbot-workload-viewer above, so that role's rules stay identical across
+# all three namespaces and this one genuinely broader grant (exec is a much
+# bigger capability than get/list/watch/patch) stays separately auditable
+# rather than silently riding along in jmusicbot/pantry-bot's copies too.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: opsbot-workload-viewer
+  namespace: jmusicbot
+  labels:
+    app.kubernetes.io/name: opsbot
+    app.kubernetes.io/part-of: homelab
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: opsbot-workload-viewer
+  namespace: jmusicbot
+  labels:
+    app.kubernetes.io/name: opsbot
+    app.kubernetes.io/part-of: homelab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: opsbot-workload-viewer
+subjects:
+  - kind: ServiceAccount
+    name: opsbot-sa
+    namespace: opsbot
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: opsbot-workload-viewer
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: opsbot
+    app.kubernetes.io/part-of: homelab
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: opsbot-workload-viewer
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: opsbot
+    app.kubernetes.io/part-of: homelab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: opsbot-workload-viewer
+subjects:
+  - kind: ServiceAccount
+    name: opsbot-sa
+    namespace: opsbot
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: opsbot-workload-viewer
+  namespace: minecraft
+  labels:
+    app.kubernetes.io/name: opsbot
+    app.kubernetes.io/part-of: homelab
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: opsbot-workload-viewer
+  namespace: minecraft
+  labels:
+    app.kubernetes.io/name: opsbot
+    app.kubernetes.io/part-of: homelab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: opsbot-workload-viewer
+subjects:
+  - kind: ServiceAccount
+    name: opsbot-sa
+    namespace: opsbot
+---
+# RCON bridge exec grant -- minecraft namespace only, see the header comment
+# above for why this is a separate Role instead of joining opsbot-workload-viewer.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: opsbot-rcon-exec
+  namespace: minecraft
+  labels:
+    app.kubernetes.io/name: opsbot
+    app.kubernetes.io/part-of: homelab
+rules:
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: opsbot-rcon-exec
+  namespace: minecraft
+  labels:
+    app.kubernetes.io/name: opsbot
+    app.kubernetes.io/part-of: homelab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: opsbot-rcon-exec
+subjects:
+  - kind: ServiceAccount
+    name: opsbot-sa
+    namespace: opsbot

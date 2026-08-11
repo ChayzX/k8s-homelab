@@ -1,10 +1,10 @@
 # Namespaces for the application workloads owned by this directory set.
 #
-# Scope note: this file intentionally creates ONLY the three namespaces that
-# the application/RBAC manifests in ../jmusicbot, ../pantry-bot and ../keel
-# depend on. The `observability` and `minecraft` namespaces are owned by their
-# own directories in this repo and are created there — do not add them here or
-# you get two sources of truth for the same object.
+# Scope note: this file intentionally creates ONLY the four namespaces that
+# the application/RBAC manifests in ../jmusicbot, ../pantry-bot, ../keel and
+# ../opsbot depend on. The `observability` and `minecraft` namespaces are
+# owned by their own directories in this repo and are created there — do not
+# add them here or you get two sources of truth for the same object.
 #
 # Apply this FIRST. Everything else in this repo assumes these exist.
 ---
@@ -34,3 +34,12 @@ metadata:
     app.kubernetes.io/name: keel
     app.kubernetes.io/part-of: homelab
     kubernetes.io/metadata.name: keel
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: opsbot
+  labels:
+    app.kubernetes.io/name: opsbot
+    app.kubernetes.io/part-of: homelab
+    kubernetes.io/metadata.name: opsbot

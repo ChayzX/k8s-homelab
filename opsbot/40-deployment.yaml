@@ -1,0 +1,98 @@
+# =============================================================================
+# opsbot — Discord bot: Deployment status/restart + Minecraft RCON console
+# =============================================================================
+# Full design rationale: `bd show k8s-homelab-bi6` (epic) and
+# `bd show k8s-homelab-bi6.2` (RBAC design). Short version: Discord's own
+# mobile app is the phone UI, so the bot only ever makes an OUTBOUND
+# connection to Discord's gateway — zero new inbound network exposure, same
+# trust model jmusicbot/pantry-bot already use in this cluster.
+#
+# NOT BUILDABLE YET. The image below does not exist: `bd show k8s-homelab-bi6.3`
+# (bot source, going to opsbot/bot/*.py) is a separate, not-yet-done task.
+# Once that code exists, build and side-load it the same way
+# ../minecraft/minecraft.yaml does (no registry, no imagePullSecrets needed):
+#   docker build -t localhost/opsbot:dev opsbot/bot/
+#   docker save localhost/opsbot:dev | sudo k3s ctr images import -
+# imagePullPolicy MUST stay IfNotPresent (or Never) for a localhost/ image —
+# Always would send kubelet looking for a registry that doesn't have it and
+# the pod would sit in ImagePullBackOff.
+#
+# Stateless: no PVC, default RollingUpdate strategy is fine (contrast with
+# pantry-bot/jmusicbot-release-notifier's Recreate, which exists only because
+# those have a live SQLite/marker file on an RWO PVC — opsbot has neither).
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opsbot
+  namespace: opsbot
+  labels:
+    app.kubernetes.io/name: opsbot
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/component: bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: opsbot
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: opsbot
+        app.kubernetes.io/part-of: homelab
+        app.kubernetes.io/component: bot
+    spec:
+      serviceAccountName: opsbot-sa
+      # TRUE — the opposite of pantry-bot/jmusicbot's SAs, and deliberately
+      # so. Every other bot in this repo sets this to `false` because it has
+      # nothing to say to the Kubernetes API (pantry-bot talks to Twitch +
+      # SQLite, the release-notifier talks to GitHub + Discord webhooks).
+      # opsbot's entire purpose is to call the Kubernetes API on the
+      # allowlisted user's behalf (pod/deployment status, rollout restart via
+      # 20-rbac.yaml's Role grants), so it genuinely needs the projected
+      # ServiceAccount token mounted — same reasoning as ../keel's SA, which
+      # is this repo's only other `true`.
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        # ponytail: no verified UID yet — opsbot/bot/ doesn't exist, so unlike
+        # pantry-bot's runAsUser: 1000 (verified against a running container)
+        # this is an assumption. Revisit once the image is built: either
+        # confirm 1000 is correct for the base image chosen, or drop
+        # runAsUser and rely on the image's own non-root default the way
+        # jmusicbot-release-notifier does for its (verified root) image.
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: opsbot
+          image: localhost/opsbot:dev
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DISCORD_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: opsbot-discord
+                  key: DISCORD_BOT_TOKEN
+            - name: DISCORD_USER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: opsbot-discord
+                  key: DISCORD_USER_ID
+          # No probes: a Discord gateway client has no listening socket and
+          # no HTTP endpoint to check, same reasoning as
+          # jmusicbot-release-notifier (see its 50-deployment comment). If the
+          # process dies it exits and the kubelet restarts it.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
