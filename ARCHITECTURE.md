@@ -45,7 +45,7 @@ Cross-check `kubectl get pods -A` / `kubectl get ns` against this document befor
 |---|---|---|
 | `jmusicbot` | `_bootstrap/00-namespaces.yaml` | Discord music bot + release notifier |
 | `pantry-bot` | `_bootstrap/00-namespaces.yaml` | Twitch bot + Cloudflare Tunnel |
-| `keel` | `_bootstrap/00-namespaces.yaml` | Auto-update controller for pantry-bot `[PENDING — namespace declared, workload not yet written]` |
+| `keel` | `_bootstrap/00-namespaces.yaml` | Auto-update controller for pantry-bot — **applied and live** |
 | `observability` | `observability/namespace.yaml` | Loki, Prometheus, Grafana, Uptime Kuma, promtail, kube-state-metrics |
 | `minecraft` | `minecraft/minecraft.yaml` (**not** in `_bootstrap`, see note below) | The Minecraft server |
 | `kube-system` | k3s | CoreDNS, Traefik, local-path-provisioner, metrics-server |
@@ -116,7 +116,7 @@ Every stateful app uses `Deployment` + `strategy: Recreate` + a `ReadWriteOnce` 
 
 ### `pantry-bot` namespace
 
-**Live status: not started.** The `pantry-bot` namespace exists (`kubectl get ns`), created by `_bootstrap`, but no Deployments/Secrets/PVCs from this section have been applied. Old Docker containers `pantry-bot-bot-1`, `pantry-bot-watchtower-1`, `pantry-bot-cloudflared-1` are still the live production path (confirmed `Up`/`healthy` in `docker ps`).
+**Live status: applied and live, cut over 2026-08-11.** All 6 manifests applied, both Deployments `1/1 Running`, real production data migrated (zero-downtime `better-sqlite3` backup from the live Docker container), Cloudflare Tunnel fully repointed at the k8s Service — see the top status section for the full incident/fix narrative. Old Docker containers `pantry-bot-bot-1` and `pantry-bot-watchtower-1` are still running but no longer receive traffic — left up deliberately as a fallback during the soak period. `pantry-bot-cloudflared-1` has been stopped (no longer needed once the k8s `cloudflared` connector was verified serving all four tunnel hostnames).
 
 | Workload | Image | Ports | Requests/Limits | UID | SA (API access?) | PVC |
 |---|---|---|---|---|---|---|
@@ -185,7 +185,7 @@ Final capability set: `add: ["CHOWN", "FOWNER", "SETUID", "SETGID", "DAC_OVERRID
 
 ### `keel` namespace
 
-**Live status: not started.** The `keel` namespace exists but no workload from this section is applied — it deploys alongside `pantry-bot`, not before it.
+**Live status: applied and live, cut over 2026-08-11.** Deployment `1/1 Running`, zero errors. `keel-registry-creds` was created by reusing `ghcr-pull-secret`'s existing PAT (same credential is valid for both consumers per this file's own guidance above — no new secret was minted). Live testing found the RBAC comment below was wrong about ungranted resource kinds being silently ignored; see the top status section for the fix (read-only grants added for statefulsets/daemonsets/cronjobs, comment corrected in the manifest itself).
 
 | Workload | Image | Ports | Requests/Limits | UID | SA (API access?) | PVC |
 |---|---|---|---|---|---|---|
@@ -258,6 +258,6 @@ Not a gap — a documented decision. `_bootstrap/WATCHERS-TODO.md` covers `obser
 
 Every namespace's manifests, the dashboards, the RBAC model, and the script rewrites are written and reviewed (repo `~/k8s-homelab/`, git history, oldest to newest: `44f1db9` initial manifest set → `48e09b9` fix an invalid ConfigMap label → `3804dc5` fix three live cutover bugs + log-retention audit → `ad0c0f6` confirm JVM_OPTS/rsync for stdout-only logging → `5dc0e4b` fix uptime-kuma chown instructions (mariadb/ subdirectory needs its own 1000:1000 chown, not just the whole-PVC one) → `f041581` uptime-kuma: add `CAP_DAC_OVERRIDE`, the fifth and final capability needed → `a49626c` ARCHITECTURE.md: mark uptime-kuma fully resolved. Seven commits total; `git status` is clean — nothing uncommitted. Cutover is being executed by hand per each namespace's `README.md`/`MIGRATION.md`, in the order: Phase 0 remainder (secrets, storage decisions) → observability → jmusicbot → pantry-bot + Keel → Minecraft (highest risk, most novel, done last) → Docker Desktop retired only after a real soak period.
 
-**Actual progress as of this writing** (freshly re-verified live against the running cluster, not transcribed from a plan or an earlier doc pass): `_bootstrap` done. `observability` fully applied and healthy, all six workloads `1/1 Running` including uptime-kuma (confirmed via `kubectl -n observability get pods`, `kubectl -n observability logs`, and `curl` against both `http://192.168.40.208:3002/api/health` → `200` and `http://192.168.40.208:3001` → `302`). `jmusicbot` fully migrated and verified (both Deployments `1/1 Running`, logs confirm OAuth token and state survived). `pantry-bot`, `keel`, and `minecraft` are not started — `kubectl -n pantry-bot get all` / `kubectl -n keel get all` both return no resources, and the old Docker containers (`pantry-bot-bot-1`, `pantry-bot-watchtower-1`, `pantry-bot-cloudflared-1`) plus `msh.service` (still bound to `25565` per `ss -tlnp`) remain the live production path for those three. `playit.service` is still `active`/`enabled` on the host, unresolved and flagged, not a blocker. Separately, two GitHub repos (`JuliusBrussee/caveman`, `diegosouzapw/OmniRoute`) are being vetted by a background research task before any install decision — unrelated to this migration, not covered further here. See `~/.claude/plans/i-d-love-to-run-cuddly-flurry.md` for the full sequencing rationale and `~/Documents/k8s-migration-handoff.md` for session narrative/status.
+**Actual progress as of this writing** (freshly re-verified live against the running cluster, not transcribed from a plan or an earlier doc pass): `_bootstrap` done. `observability` fully applied and healthy, all six workloads `1/1 Running` including uptime-kuma (confirmed via `kubectl -n observability get pods`, `kubectl -n observability logs`, and `curl` against both `http://192.168.40.208:3001` → `302` (uptime-kuma) and `http://192.168.40.208:3002/api/health` → `200` (grafana) — note the port pairing is the reverse of an earlier draft of this line; verified directly by content, not assumed from port order). `jmusicbot` fully migrated and verified (both Deployments `1/1 Running`, logs confirm OAuth token and state survived). `pantry-bot` and `keel` are now also applied and live — both Deployments `1/1 Running`, pantry-bot's production data migrated with zero downtime, its Cloudflare Tunnel fully repointed at k8s targets (see top status section for the full incident/fix narrative). Only `minecraft` remains not started — `kubectl get ns` shows no `minecraft` namespace yet, and `msh.service` (still bound to `25565` per `ss -tlnp`) remains the live production path. `playit.service` is still `active`/`enabled` on the host, unresolved and flagged, not a blocker.
 
 Once the remaining namespaces land, update this document — it is meant to stay current, not describe a snapshot.
