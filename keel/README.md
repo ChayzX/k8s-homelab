@@ -1,5 +1,9 @@
 # `keel` namespace
 
+**Status: applied and live (cut over 2026-08-11).** `kubectl -n keel get pods`
+shows `1/1 Running`, zero errors. The sections below describe the deploy
+procedure and design rationale for reference/re-deploy — not a pending TODO.
+
 Deploys Keel, the automated updater that preserves pantry-bot's existing
 CI → GHCR → auto-redeploy-in-~5min pipeline (today handled by Watchtower with
 `--interval 300 --label-enable`, in
@@ -121,11 +125,16 @@ The chart's default (`chart/keel/values.yaml`) additionally grants access to
 StatefulSets, DaemonSets, Jobs, CronJobs, ReplicationControllers, and `delete`
 on pods/replicasets. Nothing in this home-lab uses any of those resource kinds
 under Keel, and `delete` in particular is more than "update an image
-reference" needs. If a future workload here needs Keel to manage one of those
-kinds, extend `20-clusterrole-clusterrolebinding.yaml`'s `apps`/`batch` rule —
-Keel fails closed (silently ignores what it can't see or patch) rather than
-erroring, so an omission here shows up as "Keel just isn't updating that one
-thing," not a crash.
+reference" needs. Note this assumption was wrong for the *watch* path: live
+testing (2026-08-11) showed Keel's provider layer watches StatefulSets,
+DaemonSets, and CronJobs unconditionally at startup regardless of whether
+anything is actually under `keel.sh/policy` — omitting RBAC for them doesn't
+silently no-op, it spams `reflector.go` "Unhandled Error"/"forbidden" every
+few seconds for the pod's lifetime. Read-only (`get,list,watch`) grants for
+those three kinds were added to `20-clusterrole-clusterrolebinding.yaml` to
+stop the log spam, with no `update`/`patch` since nothing here is
+Keel-managed under those kinds today. If a future workload needs Keel to
+*manage* one of those kinds, extend the `update`/`patch` verbs at that point.
 
 **Why `strategy: Recreate` on Keel's own Deployment**, even though Keel itself
 is stateless (its sqlite state lives in an `emptyDir`, intentionally
