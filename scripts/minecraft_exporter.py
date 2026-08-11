@@ -118,6 +118,17 @@ RCON_PASSWORD = os.environ["MINECRAFT_RCON_PASSWORD"]
 WORLD_DIR = os.environ.get("MINECRAFT_WORLD_DIR", "")
 WORLD_FOLDERS = ["world", "world_nether", "world_the_end"]
 
+# scripts/minecraft-auto-update.sh's own state/log files (see its header).
+# Plain text, not JSON: STATE_FILE holds a single line "$MC_VERSION
+# $build_id" (e.g. "1.21.11 127"), rewritten only on a SUCCESSFUL deploy --
+# a no-op run ("nothing new upstream") or a failed run leaves it untouched.
+# LOG_FILE gets at least one timestamped log() line appended every run,
+# success or failure, so its mtime is a reasonable "last attempt" proxy.
+# Neither file exists until the updater has run at least once.
+UPDATE_STATE_FILE = os.environ.get("MINECRAFT_UPDATE_STATE_FILE", "/home/chase/minecraft/.last-built-mc-version")
+UPDATE_LOG_FILE = os.environ.get("MINECRAFT_UPDATE_LOG_FILE", "/home/chase/minecraft/logs/mc-updater.log")
+UPDATE_CHECK_INTERVAL_SECONDS = int(os.environ.get("UPDATE_CHECK_INTERVAL_SECONDS", "300"))
+
 # Same alerting bot/DM pattern as host-health/observability-watcher.
 BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 USER_ID = os.environ.get("DISCORD_USER_ID")
@@ -136,9 +147,19 @@ world_size_bytes = Gauge("minecraft_world_size_bytes", "Disk usage of a world fo
 # minecraft_process_cpu_percent / minecraft_process_memory_bytes intentionally
 # gone -- see "Process metrics: REMOVED" in the module docstring.
 
+# scripts/minecraft-auto-update.sh tracking -- see UPDATE_STATE_FILE/
+# UPDATE_LOG_FILE above for what these are read from.
+update_last_attempt = Gauge("minecraft_update_last_attempt_timestamp_seconds", "Unix time of the last auto-update run (attempt, not necessarily success)")
+update_last_success_ts = Gauge("minecraft_update_last_success_timestamp_seconds", "Unix time of the last auto-update run that actually shipped a new build")
+update_last_success = Gauge("minecraft_update_last_success", "1 if the most recent auto-update run completed without error (including a no-op 'nothing new'), 0 if it failed")
+update_current_build = Gauge("minecraft_update_current_build", "Info-style gauge, always 1, labeled with the build currently on disk per STATE_FILE", ["version", "build"])
+
 MC_COLOR_CODE = re.compile(r"§.")
 TPS_PATTERN = re.compile(r"([\d.]+),\s*([\d.]+),\s*([\d.]+)")
 LIST_PATTERN = re.compile(r"There are (\d+) of a max of (\d+) players online")
+UPDATE_LOG_TS_RE = re.compile(r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]")
+UPDATE_LOG_SUCCESS_RE = re.compile(r"\] (Success: |No change since last build)")
+UPDATE_LOG_FAILURE_RE = re.compile(r"\] (ERROR: |Rolling back: )")
 
 _last_alert_time = {}
 _dm_channel_id = None
@@ -422,6 +443,75 @@ def poll_world_size():
         _world_dir_warned = True
 
 
+# --- auto-update tracking (scripts/minecraft-auto-update.sh) -----------------
+
+
+def _tail_lines(path, max_bytes=8192):
+    """Last `max_bytes` of a file, split into lines. [] if it doesn't exist."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            f.seek(max(0, size - max_bytes))
+            data = f.read()
+    except OSError:
+        return []
+    return data.decode("utf-8", errors="replace").splitlines()
+
+
+_last_update_check = 0
+
+
+def poll_update_status():
+    """Read minecraft-auto-update.sh's state/log files, if they exist yet.
+
+    Neither file exists until the updater has run at least once (it isn't
+    installed in crontab until the `minecraft` namespace does), so every
+    lookup here is best-effort: gauges simply stay at their zero default
+    rather than the process crashing or logging noise every poll.
+    """
+    global _last_update_check
+    now = time.time()
+    if now - _last_update_check < UPDATE_CHECK_INTERVAL_SECONDS:
+        return
+    _last_update_check = now
+
+    # Current build + last successful *update* (as opposed to last successful
+    # no-op check): STATE_FILE is "$MC_VERSION $build_id", rewritten only by
+    # the script's success path.
+    try:
+        with open(UPDATE_STATE_FILE) as f:
+            version, build = f.read().split()
+        update_current_build.clear()  # drop the previous build's label combo
+        update_current_build.labels(version=version, build=build).set(1)
+        update_last_success_ts.set(os.path.getmtime(UPDATE_STATE_FILE))
+    except (OSError, ValueError):
+        pass
+
+    # Last run's outcome (attempt, whether or not it shipped a build): scan
+    # the log tail from the end for the latest terminal marker line. "No
+    # change since last build" counts as success -- the run completed
+    # cleanly, it just found nothing new upstream.
+    for line in reversed(_tail_lines(UPDATE_LOG_FILE)):
+        if UPDATE_LOG_SUCCESS_RE.search(line):
+            update_last_success.set(1)
+        elif UPDATE_LOG_FAILURE_RE.search(line):
+            update_last_success.set(0)
+        else:
+            continue
+        ts_match = UPDATE_LOG_TS_RE.match(line)
+        if ts_match:
+            update_last_attempt.set(time.mktime(time.strptime(ts_match.group(1), "%Y-%m-%d %H:%M:%S")))
+        break
+    else:
+        # No terminal marker in the tail (short/rotated log) -- mtime is a
+        # coarse but reasonable "something happened" fallback.
+        try:
+            update_last_attempt.set(os.path.getmtime(UPDATE_LOG_FILE))
+        except OSError:
+            pass
+
+
 if __name__ == "__main__":
     start_http_server(9202)
     send_discord_alert(
@@ -433,4 +523,5 @@ if __name__ == "__main__":
     while True:
         poll_rcon()
         poll_world_size()
+        poll_update_status()
         time.sleep(POLL_INTERVAL_SECONDS)
