@@ -9,12 +9,17 @@
 # This is trimmed from keel-hq/keel's own Helm chart default ClusterRole
 # (chart/keel/values.yaml, rbac.clusterRole.rules — read directly from the repo
 # to write this, not from memory) down to what THIS home-lab actually uses.
-# Upstream additionally grants blanket `delete` on pods/replicasets and access
-# to statefulsets/daemonsets/jobs/cronjobs/replicationcontrollers — none of
-# which this home-lab has any Keel-managed workload of. If you later put a
-# StatefulSet or DaemonSet under Keel's `keel.sh/policy`, extend the
-# `apps`/`batch` resource list below; Keel will silently no-op on a resource
-# kind it isn't allowed to see or patch, not error.
+# Upstream additionally grants blanket `delete` on pods/replicasets — not
+# granted here, this home-lab has no Keel-managed workload that needs it.
+#
+# statefulsets/daemonsets/cronjobs ARE granted read-only below even though
+# nothing here uses Keel to manage one yet: live testing (2026-08-10) showed
+# Keel's provider layer watches all workload kinds unconditionally at
+# startup, not just the ones actually under `keel.sh/policy` — omitting a
+# kind does NOT make it silently no-op as originally assumed here, it spams
+# `reflector.go` "Unhandled Error" / "forbidden" log lines every few seconds
+# for the life of the pod. get/list/watch only — no update/patch on these
+# three, since nothing here is meant to be Keel-managed today.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -37,6 +42,20 @@ rules:
   - apiGroups: ["apps"]
     resources:
       - replicasets
+    verbs: ["get", "list", "watch"]
+
+  # Read-only. Keel's provider layer watches these kinds unconditionally at
+  # startup regardless of whether anything is under `keel.sh/policy` — see
+  # comment above. No update/patch: nothing here is Keel-managed today.
+  - apiGroups: ["apps"]
+    resources:
+      - statefulsets
+      - daemonsets
+    verbs: ["get", "list", "watch"]
+
+  - apiGroups: ["batch"]
+    resources:
+      - cronjobs
     verbs: ["get", "list", "watch"]
 
   - apiGroups: [""]
