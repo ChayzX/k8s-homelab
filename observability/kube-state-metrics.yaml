@@ -169,6 +169,7 @@ spec:
           args:
             - --port=8080
             - --telemetry-port=8081
+            - --metric-labels-allowlist=pods=[app.kubernetes.io/name]
           ports:
             - name: http-metrics
               containerPort: 8080
