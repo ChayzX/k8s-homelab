@@ -1881,8 +1881,8 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"kube-system\"}[1h]))",
-              "legendFormat": "{{pod}}"
+              "expr": "sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{namespace=\"kube-system\"}[1h])) * on(namespace, pod) group_left(label_app_kubernetes_io_name) kube_pod_labels{namespace=\"kube-system\"}",
+              "legendFormat": "{{label_app_kubernetes_io_name}}"
             }
           ],
           "options": {
@@ -2313,16 +2313,16 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "sum by (namespace, pod) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__auto]))",
+              "expr": "sum by (namespace, app_kubernetes_io_name) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__auto]))",
               "queryType": "range",
-              "legendFormat": "ERROR {{namespace}}/{{pod}}"
+              "legendFormat": "ERROR {{namespace}}/{{app_kubernetes_io_name}}"
             },
             {
               "refId": "B",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "sum by (namespace, pod) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"warn\"} |~ \"(?i)$search\" [$__auto]))",
+              "expr": "sum by (namespace, app_kubernetes_io_name) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"warn\"} |~ \"(?i)$search\" [$__auto]))",
               "queryType": "range",
-              "legendFormat": "warn {{namespace}}/{{pod}}"
+              "legendFormat": "warn {{namespace}}/{{app_kubernetes_io_name}}"
             }
           ],
           "options": {
@@ -2402,10 +2402,10 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "topk(10, sum by (namespace, pod) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__range])))",
+              "expr": "topk(10, sum by (namespace, app_kubernetes_io_name) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__range])))",
               "queryType": "instant",
               "instant": true,
-              "legendFormat": "{{namespace}}/{{pod}}"
+              "legendFormat": "{{namespace}}/{{app_kubernetes_io_name}}"
             }
           ],
           "options": {
@@ -2896,8 +2896,8 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "min by (namespace, pod) (kube_pod_status_ready{namespace=~\"$namespace\", pod=~\"$pod\", condition=\"true\"})",
-              "legendFormat": "{{namespace}}/{{pod}}"
+              "expr": "min by (namespace, pod) (kube_pod_status_ready{namespace=~\"$namespace\", pod=~\"$pod\", condition=\"true\"}) * on(namespace, pod) group_left(label_app_kubernetes_io_name) kube_pod_labels{namespace=~\"$namespace\"}",
+              "legendFormat": "{{namespace}}/{{label_app_kubernetes_io_name}}"
             }
           ],
           "options": {
@@ -3366,14 +3366,14 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum by (namespace, pod) (rate(container_network_receive_bytes_total{namespace=~\"$namespace\", pod=~\"$pod\"}[5m]))",
-              "legendFormat": "{{namespace}}/{{pod}} rx"
+              "expr": "sum by (namespace, pod) (rate(container_network_receive_bytes_total{namespace=~\"$namespace\", pod=~\"$pod\"}[5m])) * on(namespace, pod) group_left(label_app_kubernetes_io_name) kube_pod_labels{namespace=~\"$namespace\"}",
+              "legendFormat": "{{namespace}}/{{label_app_kubernetes_io_name}} rx"
             },
             {
               "refId": "B",
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum by (namespace, pod) (rate(container_network_transmit_bytes_total{namespace=~\"$namespace\", pod=~\"$pod\"}[5m]))",
-              "legendFormat": "{{namespace}}/{{pod}} tx"
+              "expr": "sum by (namespace, pod) (rate(container_network_transmit_bytes_total{namespace=~\"$namespace\", pod=~\"$pod\"}[5m])) * on(namespace, pod) group_left(label_app_kubernetes_io_name) kube_pod_labels{namespace=~\"$namespace\"}",
+              "legendFormat": "{{namespace}}/{{label_app_kubernetes_io_name}} tx"
             }
           ],
           "options": {
@@ -3401,14 +3401,14 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum by (namespace, pod) (rate(container_fs_writes_bytes_total{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\"}[5m]))",
-              "legendFormat": "{{namespace}}/{{pod}} write"
+              "expr": "sum by (namespace, pod) (rate(container_fs_writes_bytes_total{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\"}[5m])) * on(namespace, pod) group_left(label_app_kubernetes_io_name) kube_pod_labels{namespace=~\"$namespace\"}",
+              "legendFormat": "{{namespace}}/{{label_app_kubernetes_io_name}} write"
             },
             {
               "refId": "B",
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum by (namespace, pod) (rate(container_fs_reads_bytes_total{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\"}[5m]))",
-              "legendFormat": "{{namespace}}/{{pod}} read"
+              "expr": "sum by (namespace, pod) (rate(container_fs_reads_bytes_total{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\"}[5m])) * on(namespace, pod) group_left(label_app_kubernetes_io_name) kube_pod_labels{namespace=~\"$namespace\"}",
+              "legendFormat": "{{namespace}}/{{label_app_kubernetes_io_name}} read"
             }
           ],
           "options": {
