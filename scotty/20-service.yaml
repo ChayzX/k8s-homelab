@@ -1,0 +1,29 @@
+# ClusterIP Service for scotty. Same shape as pantry-bot/50-service.yaml —
+# internal only, no NodePort. Resulting in-cluster DNS name:
+#
+#     scotty.scotty.svc.cluster.local:3000
+#     (short form for the tunnel config: http://scotty.scotty.svc:3000)
+#
+# >>> MANUAL CUTOVER STEP — the tunnel will NOT reach this until it's done. <<<
+# The existing cloudflared connector (pantry-bot namespace) is a remotely
+# managed tunnel — ingress rules live in the Cloudflare Zero Trust dashboard,
+# not in this repo. Add a Public Hostname there pointing at
+# http://scotty.scotty.svc:3000. See pantry-bot/50-service.yaml for the same
+# precedent on the existing hostname.
+apiVersion: v1
+kind: Service
+metadata:
+  name: scotty
+  namespace: scotty
+  labels:
+    app.kubernetes.io/name: scotty
+    app.kubernetes.io/part-of: homelab
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: scotty
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+      protocol: TCP

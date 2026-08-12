@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scotty
+  labels:
+    app.kubernetes.io/name: scotty
+    app.kubernetes.io/part-of: homelab

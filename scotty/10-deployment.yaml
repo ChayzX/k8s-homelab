@@ -1,0 +1,80 @@
+# bead-me-up-scotty — web UI for the beads (bd) tracker used by this repo.
+#
+# Single-node cluster, so a hostPath straight at the project's .beads dir is
+# the direct equivalent of the README's `-v $BEADS_REPO:/data` docker run
+# example — no PVC, no sync step. The image bundles its own `bd` binary
+# (see Dockerfile), so nothing from the host's PATH needs to be mounted in.
+#
+# Mounted at /data/k8s-homelab (not bare /data): scotty's project registry
+# seeds the displayed project name from basename(BEADS_REPO) on first run
+# (lib/config.ts), so a bare /data mount showed up in the UI as "data".
+#
+# Runs as uid/gid 1000 to match the host's `chase:chase` ownership (700) on
+# /home/chase/k8s-homelab/.beads — the README calls this out explicitly for
+# permission errors on the mounted volume.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scotty
+  namespace: scotty
+  labels:
+    app.kubernetes.io/name: scotty
+    app.kubernetes.io/part-of: homelab
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: scotty
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: scotty
+        app.kubernetes.io/part-of: homelab
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+      nodeSelector:
+        kubernetes.io/hostname: minecraftmachine
+      containers:
+        - name: scotty
+          image: bead-me-up-scotty:local
+          imagePullPolicy: Never
+          env:
+            - name: BEADS_REPO
+              value: /data/k8s-homelab
+            - name: PORT
+              value: "3000"
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          volumeMounts:
+            - name: beads-repo
+              mountPath: /data/k8s-homelab
+            # Second project: pantry-bot got its own beads board (bd init,
+            # 2026-08-12, per k8s-homelab-zcm) in its own git repo, separate
+            # from this one. scotty can only see paths mounted into its own
+            # container -- add the project via its own UI/API once this is
+            # live, pointed at /data/pantry-bot (repoPath), the same way
+            # /data/k8s-homelab was originally registered.
+            - name: pantry-bot-repo
+              mountPath: /data/pantry-bot
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 512Mi
+      volumes:
+        - name: beads-repo
+          hostPath:
+            path: /home/chase/k8s-homelab
+            type: Directory
+        - name: pantry-bot-repo
+          hostPath:
+            path: /home/chase/Downloads/pantry-bot
+            type: Directory
