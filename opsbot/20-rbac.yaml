@@ -168,7 +168,13 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["pods/exec"]
-    verbs: ["create"]
+    # get, not just create: confirmed live (2026-08-12) -- the Python
+    # kubernetes client's exec_rcon() calls
+    # connect_get_namespaced_pod_exec, which does a GET-based websocket
+    # upgrade, not a POST/create. `kubectl exec` itself uses create; this
+    # client library doesn't, and create-only produced a real 403
+    # ("cannot get resource pods/exec") the first time /mc was used live.
+    verbs: ["get", "create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
