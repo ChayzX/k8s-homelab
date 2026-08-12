@@ -85,8 +85,24 @@ class OpsBotTree(app_commands.CommandTree):
 intents = discord.Intents.none()
 bot = commands.Bot(command_prefix="!", intents=intents, tree_cls=OpsBotTree)
 
-pods_group = app_commands.Group(name="pods", description="Pod status")
-deploy_group = app_commands.Group(name="deploy", description="Deployment control")
+# Discord's API stores contexts/installs on the top-level command object --
+# for a grouped command that's the Group itself, not each subcommand.
+# Decorating pods_status/deploy_restart individually (an earlier attempt)
+# was a silent no-op; confirmed live via GET .../commands showing
+# contexts=None despite the subcommand decorators. Set on the Group's own
+# constructor instead. Same guilds+dms, no private_channels/user-install
+# reasoning as the standalone `mc` command below.
+_dm_contexts = app_commands.AppCommandContext(guild=True, dm_channel=True, private_channel=False)
+_guild_only_install = app_commands.AppInstallationType(guild=True, user=False)
+
+pods_group = app_commands.Group(
+    name="pods", description="Pod status",
+    allowed_contexts=_dm_contexts, allowed_installs=_guild_only_install,
+)
+deploy_group = app_commands.Group(
+    name="deploy", description="Deployment control",
+    allowed_contexts=_dm_contexts, allowed_installs=_guild_only_install,
+)
 
 _namespace_choices = [
     app_commands.Choice(name=ns, value=ns) for ns in sorted(util.ALLOWED_NAMESPACES)
@@ -148,6 +164,8 @@ async def deploy_restart(interaction: discord.Interaction, namespace: str, deplo
 
 
 @app_commands.command(name="mc", description="Run a Minecraft RCON console command")
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=False)
+@app_commands.allowed_installs(guilds=True, users=False)
 async def mc(interaction: discord.Interaction, command: str) -> None:
     await interaction.response.defer(thinking=True)
     command = command.strip()
