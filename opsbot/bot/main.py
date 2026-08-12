@@ -11,6 +11,8 @@ RBAC this code relies on: ../20-rbac.yaml.
 """
 from __future__ import annotations
 
+import asyncio
+import datetime
 import os
 import sys
 
@@ -175,6 +177,45 @@ async def _deployment_autocomplete(
     return [app_commands.Choice(name=n, value=n) for n in matches[:25]]
 
 
+# Discord followup tokens die 15 minutes after the initial response
+# (Discord's docs). k8s_ops.wait_for_rollout's own 120s timeout is well
+# inside that, but a slow event loop / long queue could still eat the
+# margin -- checked for real in _watch_rollout before sending, not assumed.
+_FOLLOWUP_TOKEN_LIFETIME = datetime.timedelta(minutes=15)
+
+
+async def _watch_rollout(interaction: discord.Interaction, namespace: str, deployment: str) -> None:
+    """Background follow-up for /deploy restart -- polls k8s_ops.wait_for_rollout
+    until the new ReplicaSet is actually healthy (or it times out/errors) and
+    sends a second message so 'triggered' doesn't leave the user guessing.
+    Runs the blocking poll via asyncio.to_thread so it never stalls the bot's
+    event loop or gateway connection while it waits. Fail-loud: any exception
+    here, including k8s_ops.RolloutError on timeout, still reaches the user
+    as a distinct follow-up instead of vanishing into pod logs.
+    """
+    try:
+        await asyncio.to_thread(k8s_ops.wait_for_rollout, namespace, deployment)
+        text = f"Rollout complete: {namespace}/{deployment} is healthy."
+        result = "rollout complete"
+    except Exception as e:
+        text = f"Rollout follow-up FAILED for {namespace}/{deployment}: {e} -- check manually."
+        result = f"rollout error: {e}"
+
+    age = discord.utils.utcnow() - interaction.created_at
+    if age >= _FOLLOWUP_TOKEN_LIFETIME:
+        print(
+            f"[opsbot] rollout follow-up for {namespace}/{deployment} suppressed -- "
+            f"interaction token expired ({age} old); result={result}"
+        )
+        return
+    try:
+        await _reply(interaction, text)
+    except discord.HTTPException as e:
+        print(f"[opsbot] failed to send rollout follow-up for {namespace}/{deployment}: {e}")
+        return
+    _audit(interaction, True, result=result)
+
+
 @deploy_group.command(name="restart", description="Restart a Deployment (rollout restart)")
 @app_commands.choices(namespace=_namespace_choices)
 @app_commands.autocomplete(deployment=_deployment_autocomplete)
@@ -195,6 +236,7 @@ async def deploy_restart(interaction: discord.Interaction, namespace: str, deplo
         raise
     await _reply(interaction, f"Restart triggered: {namespace}/{deployment}")
     _audit(interaction, True, result="restarted")
+    asyncio.create_task(_watch_rollout(interaction, namespace, deployment))
 
 
 @app_commands.command(name="mc", description="Run a Minecraft RCON console command")
