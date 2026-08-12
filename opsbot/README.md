@@ -1,10 +1,12 @@
 # `opsbot` namespace
 
-**Status: manifests only, not yet applied.** The Discord application/bot
-token don't exist yet (`bd show k8s-homelab-bi6.1`) and the bot's Python
-source doesn't exist yet (`bd show k8s-homelab-bi6.3`), so `40-deployment.yaml`
-cannot run. This directory is the approved design turned into files, ready to
-apply once both prerequisites land.
+**Status: applied and live.** The bot's Python source (`opsbot/bot/*.py`,
+`bd show k8s-homelab-bi6.3`) landed and `40-deployment.yaml` is running
+(`opsbot` pod `1/1 Running`). `bi6.1` (Discord application/bot token setup)
+is still open in Beads as of this writing even though the Secret exists and
+the pod is healthy — check `bd show k8s-homelab-bi6.1` before assuming that
+task is fully closed out. See `ARCHITECTURE.md`'s `opsbot` section for the
+current live-status summary.
 
 Full design rationale, options compared, and open questions:
 `bd show k8s-homelab-bi6` (epic). RBAC-specific reasoning:
@@ -70,9 +72,8 @@ approved whitelist), any `secrets` verb, `delete`/`deletecollection`,
 
 ## What's still open (tracked in Beads, not blocking these manifests)
 
-- `bi6.1` — Discord application + bot token
-- `bi6.3` — bot source (`opsbot/bot/*.py`) — a separate task/agent, not this directory
-- `bi6.4` — RCON bridge command (will need its own Secret-access decision — see `SECRETS.md`'s "Not in scope" section)
-- `bi6.5` — allowlist + audit logging in bot code
+- `bi6.1` — Discord application + bot token (open in Beads; Secret exists and pod is healthy, ticket not yet formally closed — see status note above)
 - `bi6.7` — end-to-end test from the Discord mobile app
-- `bi6.8` — README/ARCHITECTURE.md updates once this is live
+- `bi6.8` — README/ARCHITECTURE.md updates once this is live (this edit)
+
+Closed: `bi6.3` (bot source), `bi6.4` (RCON bridge command), `bi6.5` (allowlist + audit logging).

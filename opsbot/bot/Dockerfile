@@ -12,6 +12,14 @@
 # compiler toolchain needed in the image at all.
 FROM python:3.12-slim-bookworm
 
+# Unbuffered stdout -- without this, print() output (including the audit
+# log lines bi6.5 requires) sits in a buffer instead of reaching `kubectl
+# logs` immediately. Confirmed live: the bot connected to Discord's gateway
+# but its own startup/audit print() lines didn't appear for 20+ seconds
+# after connection -- classic Python-in-a-container buffering, not a hang.
+# A crash before the buffer flushes would silently lose audit entries.
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
 COPY requirements.txt ./
