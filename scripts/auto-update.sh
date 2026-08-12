@@ -121,6 +121,48 @@ FIX_VERSION="1.18.2"
 STOCK_IMAGE="ghcr.io/arif-banai/musicbot:latest"
 WEBHOOK_URL="$(grep -oP '(?<=DISCORD_RELEASE_WEBHOOK_URL=).*' "$DIR/.env" || true)"
 
+# --- Voice-channel text-chat crash fix (bd issue k8s-homelab-4lj) ---
+#
+# arif-banai/MusicBot's music commands (both the v1 prefix commands and the
+# v2 slash commands) force-cast the invoking channel to TextChannel via
+# CommandEvent#getTextChannel() / SlashCommandEvent#getTextChannel(). Discord
+# exposes a voice channel's built-in text chat as a *VoiceChannel*, which JDA
+# unions together with TextChannel, so that cast throws:
+#   IllegalStateException: Cannot convert channel of type VoiceChannel to TextChannel!
+# every time a music command (e.g. /play) is used from a voice channel's own
+# chat -- the command is silently dropped, no reply, no error visible to the
+# user. Confirmed in production logs (9 occurrences of this exact stack
+# trace); see bd issue k8s-homelab-4lj for the investigation.
+#
+# Tracked upstream at https://github.com/arif-banai/MusicBot/issues/73;
+# fixed, but not yet released, by
+# https://github.com/arif-banai/MusicBot/pull/74 (commit 9563f68, branch
+# fix/voice-channel-text-chat-pr -- 665 tests passing, includes a regression
+# test). scripts/patches/voice-channel-text-chat.patch is that PR's diff,
+# captured verbatim via `gh pr diff 74 --repo arif-banai/MusicBot`, applied
+# below in Step 2 before the youtube-source version patch. It touches
+# production AND test sources -- the Dockerfile builds with
+# `mvn clean package -DskipTests`, which still *compiles* (just doesn't run)
+# tests, so the test-side hunks have to go in too or the build won't compile.
+#
+# Unlike the youtube-source patch, there's no single version number to poll
+# for "has upstream shipped the fix yet" -- PR #74 is unreleased, not a
+# version bump. So this uses a manual, human-flipped gate instead of an
+# automatic version check: leave VOICE_CHAT_FIX_RELEASED=0 (the default)
+# until a human has confirmed (by checking that issue #73 is closed and the
+# fix is in a tagged arif-banai/MusicBot release) that this patch is no
+# longer needed, then flip it to 1 and delete
+# scripts/patches/voice-channel-text-chat.patch.
+#
+# This is deliberately conservative: Step 1 below (the "upstream fixed the
+# youtube-source bug, switch back to stock + hand off to Keel, self-uninstall"
+# path) now ALSO requires VOICE_CHAT_FIX_RELEASED=1. Without that, a
+# youtube-source fix landing upstream on its own would otherwise silently
+# revert the bot to a stock image that's *still* broken for voice-channel
+# chat, and remove the only mechanism (this script) that was patching it.
+VOICE_CHAT_FIX_RELEASED="${VOICE_CHAT_FIX_RELEASED:-0}"
+VOICE_CHAT_PATCH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/patches/voice-channel-text-chat.patch"
+
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
 notify() {
@@ -173,7 +215,12 @@ require_ctr_sudo() {
         log "WARN: k3s resolved to ${K3S_BIN}, not /usr/local/bin/k3s -- the sudoers rule must name this exact path."
     fi
 
-    if ! sudo -n "$K3S_BIN" ctr images ls -q >/dev/null 2>&1; then
+    # No -q here on purpose: the sudoers grant is the bare `ctr images ls`
+    # with no trailing wildcard (confirmed live, 2026-08-11 -- `ls -q`
+    # doesn't match it, sudo demands a password). Bare `ls` is enough to
+    # prove passwordless sudo works; it doesn't need to be quiet for a
+    # preflight check whose output is discarded either way.
+    if ! sudo -n "$K3S_BIN" ctr images ls >/dev/null 2>&1; then
         die "passwordless \`sudo k3s ctr images\` is not available, so the built image can't be imported into k3s containerd. Fix with: sudo visudo -f /etc/sudoers.d/jmusicbot-k3s-ctr  ->  'chase ALL=(root) NOPASSWD: ${K3S_BIN} ctr images *'  (mode 0440). See the header of auto-update.sh."
     fi
 }
@@ -319,7 +366,7 @@ add_keel_annotations_to_manifest() {
     grep -q 'keel\.sh/policy' "$file"
 }
 
-if dpkg --compare-versions "$upstream_yts_version" ge "$FIX_VERSION"; then
+if dpkg --compare-versions "$upstream_yts_version" ge "$FIX_VERSION" && [ "$VOICE_CHAT_FIX_RELEASED" = "1" ]; then
     if grep -q "image: jmusicbot-custom:" "$MANIFEST"; then
         log "Upstream now bundles youtube-source ${upstream_yts_version} (>= ${FIX_VERSION}). Switching back to the stock image."
 
@@ -384,6 +431,7 @@ if [ -z "$latest_yts_tag" ] || [ "$latest_yts_tag" = "null" ]; then
 fi
 
 desired_state="${latest_musicbot_tag} ${latest_yts_tag}"
+[ "$VOICE_CHAT_FIX_RELEASED" != "1" ] && [ -f "$VOICE_CHAT_PATCH" ] && desired_state="${desired_state} voicechat1"
 current_state="$(cat "$STATE_FILE" 2>/dev/null || echo "")"
 
 if [ "$desired_state" = "$current_state" ]; then
@@ -407,10 +455,33 @@ if ! git clone --depth 1 --branch "$latest_musicbot_tag" https://github.com/arif
     exit 1
 fi
 
+# Apply the voice-channel text-chat fix (see the header comment above) before
+# the youtube-source version patch. Tolerant by design: if the patch no
+# longer applies, that most likely means upstream's code has already
+# diverged to include an equivalent fix (e.g. PR #74 merged and this tag
+# includes it) -- in which case failing the whole run would be wrong. Skip
+# it, notify loudly so a human can confirm and flip VOICE_CHAT_FIX_RELEASED,
+# and continue the build without it rather than dying.
+voice_chat_patch_applied=0
+if [ "$VOICE_CHAT_FIX_RELEASED" != "1" ]; then
+    if [ ! -f "$VOICE_CHAT_PATCH" ]; then
+        die "VOICE_CHAT_FIX_RELEASED=0 but ${VOICE_CHAT_PATCH} is missing. Refusing to build an image without the voice-channel-chat fix (bd k8s-homelab-4lj) -- restore the patch file, or set VOICE_CHAT_FIX_RELEASED=1 once arif-banai/MusicBot#73 is confirmed fixed upstream."
+    fi
+    if git -C "$TMP_BUILD" apply --check "$VOICE_CHAT_PATCH" 2>/tmp/jmusicbot-voice-chat-patch-check.log; then
+        git -C "$TMP_BUILD" apply "$VOICE_CHAT_PATCH"
+        voice_chat_patch_applied=1
+        log "Applied voice-channel-text-chat fix (bd k8s-homelab-4lj / arif-banai/MusicBot#73, unreleased upstream PR #74)."
+    else
+        notify "⚠️ scripts/patches/voice-channel-text-chat.patch no longer applies to MusicBot ${latest_musicbot_tag} -- upstream code has likely diverged (possibly arif-banai/MusicBot#73 shipped). Building WITHOUT the patch this run; check https://github.com/arif-banai/MusicBot/issues/73 and either refresh the patch or set VOICE_CHAT_FIX_RELEASED=1."
+        log "WARN: voice-channel-text-chat patch did not apply; see /tmp/jmusicbot-voice-chat-patch-check.log. Continuing build without it."
+    fi
+fi
+
 yts_version_num="${latest_yts_tag#v}"
 sed -i "s|<youtube-source.version>.*</youtube-source.version>|<youtube-source.version>${yts_version_num}</youtube-source.version>|" "$TMP_BUILD/pom.xml"
 
 image_tag="jmusicbot-custom:${latest_musicbot_tag}-yts${yts_version_num}"
+[ "$voice_chat_patch_applied" = "1" ] && image_tag="${image_tag}-voicechat1"
 
 if ! DOCKER_BUILDKIT=1 docker build -t "$image_tag" "$TMP_BUILD" >/tmp/jmusicbot-auto-update-build.log 2>&1; then
     notify "FAILED to build ${image_tag} (MusicBot ${latest_musicbot_tag} + youtube-source ${yts_version_num}). Left the running pod untouched. See /tmp/jmusicbot-auto-update-build.log on the host."
@@ -474,6 +545,7 @@ rm -f "$manifest_backup"
 commit_manifest "jmusicbot: ${image_tag}
 
 MusicBot ${latest_musicbot_tag} + youtube-source ${yts_version_num} (upstream still pins ${upstream_yts_version}).
+Voice-channel text-chat fix (bd k8s-homelab-4lj) applied: ${voice_chat_patch_applied}.
 Committed automatically by scripts/auto-update.sh."
 
 # --- Step 5: prune old builds from BOTH image stores ---
@@ -492,7 +564,9 @@ sudo -n "$K3S_BIN" ctr images ls -q 2>/dev/null \
 
 echo "$desired_state" > "$STATE_FILE"
 
-notify "Rebuilt and redeployed: MusicBot ${latest_musicbot_tag} + youtube-source ${yts_version_num} (image \`${image_tag}\`, rolled out to deployment/${DEPLOYMENT} in \`${NAMESPACE}\`). Still running the patched build -- upstream MusicBot pom.xml still pins youtube-source ${upstream_yts_version}, below the ${FIX_VERSION} fix."
+voice_chat_note="voice-channel-chat fix: NOT applied this run (see the WARN above -- check https://github.com/arif-banai/MusicBot/issues/73)."
+[ "$voice_chat_patch_applied" = "1" ] && voice_chat_note="voice-channel-chat fix (bd k8s-homelab-4lj) applied."
+notify "Rebuilt and redeployed: MusicBot ${latest_musicbot_tag} + youtube-source ${yts_version_num} (image \`${image_tag}\`, rolled out to deployment/${DEPLOYMENT} in \`${NAMESPACE}\`). Still running the patched build -- upstream MusicBot pom.xml still pins youtube-source ${upstream_yts_version}, below the ${FIX_VERSION} fix. ${voice_chat_note}"
 
 # ---------------------------------------------------------------------------
 # crontab line (user crontab, `crontab -e`) -- unchanged from the Compose era
