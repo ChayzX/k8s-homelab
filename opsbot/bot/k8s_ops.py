@@ -13,6 +13,8 @@ never sees or needs the password.
 """
 from __future__ import annotations
 
+import time
+
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream
@@ -30,6 +32,10 @@ MINECRAFT_POD_LABEL_SELECTOR = "app.kubernetes.io/name=minecraft"
 
 class NotFoundError(Exception):
     """A namespace/deployment/pod the caller asked for doesn't exist (or isn't Running)."""
+
+
+class RolloutError(Exception):
+    """A rollout didn't reach a healthy steady state within the timeout."""
 
 
 def init() -> None:
@@ -112,6 +118,53 @@ def restart_deployment(namespace: str, name: str) -> None:
             "value": {"kubectl.kubernetes.io/restartedAt": timestamp},
         }]
     apps.patch_namespaced_deployment(name=name, namespace=namespace, body=patch)
+
+
+def wait_for_rollout(
+    namespace: str, name: str, timeout_seconds: int = 120, poll_interval: float = 2.5
+) -> None:
+    """Blocking equivalent of `kubectl rollout status deployment/<name>`: poll
+    until the NEW ReplicaSet is fully up, or raise. Blocking (time.sleep, not
+    asyncio) on purpose -- callers on the event loop must run this via
+    asyncio.to_thread so a 2-minute poll doesn't stall the gateway connection
+    and every other command in flight.
+
+    observed_generation >= metadata.generation guards the same race
+    `kubectl rollout status` guards: read a status snapshot taken before the
+    controller has even seen our patch, and readyReplicas can still show the
+    OLD (pre-restart) pods as ready -- a false positive returned instantly.
+    updated_replicas == spec.replicas is what actually pins this to the new
+    ReplicaSet specifically, not just "some replicas somewhere are ready".
+    replicas == spec.replicas on top of that means the old ReplicaSet has
+    finished scaling down too, matching kubectl's "fully available" bar.
+    """
+    apps = client.AppsV1Api()
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        try:
+            dep = apps.read_namespaced_deployment(name, namespace)
+        except ApiException as e:
+            if e.status == 404:
+                raise NotFoundError(f"deployment {name!r} not found in namespace {namespace!r}") from e
+            raise
+        spec_replicas = dep.spec.replicas or 0
+        status = dep.status
+        observed_current = (status.observed_generation or 0) >= (dep.metadata.generation or 0)
+        if (
+            observed_current
+            and (status.updated_replicas or 0) == spec_replicas
+            and (status.ready_replicas or 0) == spec_replicas
+            and (status.replicas or 0) == spec_replicas
+        ):
+            return
+        if time.monotonic() >= deadline:
+            raise RolloutError(
+                f"rollout of {namespace}/{name} did not complete within {timeout_seconds}s "
+                f"(ready={status.ready_replicas}/{spec_replicas} "
+                f"updated={status.updated_replicas}/{spec_replicas} "
+                f"total={status.replicas}/{spec_replicas})"
+            )
+        time.sleep(poll_interval)
 
 
 def get_running_minecraft_pod() -> str:
