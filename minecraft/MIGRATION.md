@@ -390,10 +390,10 @@ care what's listening on the other end; once the Service above is bound, the
 existing forward just works. There is nothing to reconfigure externally at
 cutover.
 
-`playit.service` is still `active`/`enabled` on this host — it's a leftover
-from before the router-level forward existed, not a live dependency. Disable
-it as part of cutover cleanup so it doesn't sit there consuming a system slot
-and confusing the next person who reads `systemctl list-units`:
+`playit.service` was a leftover from before the router-level forward
+existed, not a live dependency. Disable it as part of cutover cleanup so it
+doesn't sit there consuming a system slot and confusing the next person who
+reads `systemctl list-units`:
 
 ```bash
 sudo systemctl stop playit.service
@@ -403,6 +403,10 @@ sudo systemctl disable playit.service
 Do **not** do this before the Service is confirmed bound and joinable —
 keep it as the very last cleanup action, in case something about the router
 forward's target needs playit as a fallback path you haven't accounted for.
+
+**Done (2026-08-12)**: stopped and disabled, confirmed inactive + disabled
+— `bd show k8s-homelab-dsg` (closed). This was the last open item from this
+runbook; nothing outstanding remains here.
 
 ## Step 9 — Confirm publicly, then soak
 
