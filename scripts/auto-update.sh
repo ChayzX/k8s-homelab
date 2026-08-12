@@ -106,7 +106,7 @@ BUILD_DIR="$DIR/custom-build"
 STATE_FILE="$BUILD_DIR/.last-built-tag"
 
 # The Kubernetes side.
-MANIFEST="${JMUSICBOT_MANIFEST:-/home/chase/k8s-homelab/jmusicbot/jmusicbot.yaml}"
+MANIFEST="${JMUSICBOT_MANIFEST:-/home/chase/k8s-homelab/jmusicbot/40-deployment-jmusicbot.yaml}"
 NAMESPACE="${JMUSICBOT_NAMESPACE:-jmusicbot}"
 DEPLOYMENT="${JMUSICBOT_DEPLOYMENT:-jmusicbot}"
 CONTAINER="${JMUSICBOT_CONTAINER:-jmusicbot}"   # container name inside the pod spec
