@@ -150,9 +150,14 @@ spec:
           args:
             - --config.file=/etc/prometheus/prometheus.yml
             - --storage.tsdb.path=/prometheus
-            # Retention shortened from the 15d default. Less data on
-            # disk means smaller compaction passes on the 5900rpm HDD.
-            - --storage.tsdb.retention.time=10d
+            # Retention shortened from the 15d default, then again from
+            # 10d to 7d (2026-08-12) -- uptime-kuma already keeps its own
+            # long-term per-service uptime history independently in its
+            # own database (uptime-kuma-data PVC), so Prometheus doesn't
+            # need to carry months of `up`/pod-readiness data just for
+            # that. Less data on disk also means smaller compaction
+            # passes on the 5900rpm HDD.
+            - --storage.tsdb.retention.time=7d
             # Hard ceiling so a scrape-cardinality accident can't fill
             # the 20Gi PVC and wedge the node.
             - --storage.tsdb.retention.size=15GB

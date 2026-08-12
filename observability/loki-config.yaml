@@ -55,15 +55,15 @@ data:
     # required together, or nothing actually gets deleted (verified against
     # the Loki 3.3.x config reference: retention_delete_delay defaults to 2h
     # and compaction_interval to 10m, both fine to leave at default here).
-    # Bumped from the original 168h (7d, ported from the Docker config) to
-    # 720h (30d) — this is a home-lab with a handful of low-volume apps
-    # (jmusicbot, pantry-bot, minecraft, the observability stack itself)
-    # against a 20Gi PVC, so 30 days of compressed chunks has plenty of
-    # headroom; 7 days was needlessly short for the "look back at what
-    # happened last week/month" use case this exists for, and retention
-    # requires index period 24h (true here) to function at all.
+    # History: 168h (7d, ported from Docker) -> 720h (30d, for a longer
+    # "what happened last month" lookback) -> back to 168h (2026-08-12,
+    # user decision) once uptime-kuma was confirmed to already cover the
+    # one thing that actually needed long retention (per-service uptime
+    # history) independently, in its own database -- Loki/Prometheus data
+    # beyond a week wasn't serving that need, just consuming disk on the
+    # 5900rpm HDD for no one's actual use case.
     limits_config:
-      retention_period: 720h
+      retention_period: 168h
 
     compactor:
       working_directory: /loki/compactor
