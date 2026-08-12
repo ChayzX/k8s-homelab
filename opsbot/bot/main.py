@@ -149,7 +149,20 @@ async def _deployment_autocomplete(
     picked -- so 'restart a pod' means tapping a real option, not
     remembering/spelling an exact name (the user's actual friction point).
     Autocomplete callbacks must never raise -- an empty list on any error
-    just shows no suggestions, which is the correct fallback here."""
+    just shows no suggestions, which is the correct fallback here.
+
+    SECURITY: OpsBotTree.interaction_check does NOT run for autocomplete
+    interactions -- confirmed by reading discord.py's tree.py directly,
+    interaction_check is only called from _call (command execution), there
+    is no _call_autocomplete equivalent that gates it. Without this check,
+    ANY Discord user who can see the command (any guild member, or anyone
+    who DMs the bot now that DM context is enabled) could enumerate real
+    Kubernetes Deployment names just by typing here, whether or not they're
+    authorized to actually run anything. This function is the only gate
+    for this specific data path -- do not remove it.
+    """
+    if not util.is_authorized(interaction.user.id, ALLOWLIST):
+        return []
     namespace = interaction.namespace.namespace
     if not namespace or namespace not in util.ALLOWED_NAMESPACES:
         return []
