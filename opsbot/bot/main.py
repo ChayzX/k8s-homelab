@@ -142,8 +142,29 @@ async def pods_status(interaction: discord.Interaction, namespace: str) -> None:
     _audit(interaction, True, result=f"{len(pods)} pods listed")
 
 
+async def _deployment_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    """Live Deployment names for whichever namespace the user already
+    picked -- so 'restart a pod' means tapping a real option, not
+    remembering/spelling an exact name (the user's actual friction point).
+    Autocomplete callbacks must never raise -- an empty list on any error
+    just shows no suggestions, which is the correct fallback here."""
+    namespace = interaction.namespace.namespace
+    if not namespace or namespace not in util.ALLOWED_NAMESPACES:
+        return []
+    try:
+        names = k8s_ops.list_deployment_names(namespace)
+    except Exception:
+        return []
+    current_lower = current.lower()
+    matches = [n for n in names if current_lower in n.lower()]
+    return [app_commands.Choice(name=n, value=n) for n in matches[:25]]
+
+
 @deploy_group.command(name="restart", description="Restart a Deployment (rollout restart)")
 @app_commands.choices(namespace=_namespace_choices)
+@app_commands.autocomplete(deployment=_deployment_autocomplete)
 async def deploy_restart(interaction: discord.Interaction, namespace: str, deployment: str) -> None:
     await interaction.response.defer(thinking=True)
     if namespace not in util.ALLOWED_NAMESPACES:
