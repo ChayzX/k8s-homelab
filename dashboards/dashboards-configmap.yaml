@@ -639,9 +639,9 @@ data:
   cluster-overview.json: |
     {
       "uid": "homelab-cluster-overview",
-      "title": "Cluster Overview — Node & k3s Control Plane",
+      "title": "Host Health / Cluster Overview — Node & k3s Control Plane",
       "description": "Node-level health for MinecraftMachine (single-node k3s). Metrics come from the NATIVE node_exporter binary at 192.168.40.208:9100 — there is deliberately no node-exporter DaemonSet, so 'node' here means the real bare-metal host, not a container view of it.",
-      "tags": ["homelab", "k3s", "node"],
+      "tags": ["homelab", "k3s", "node", "host"],
       "timezone": "browser",
       "editable": true,
       "schemaVersion": 39,

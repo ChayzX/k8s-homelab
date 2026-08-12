@@ -357,16 +357,16 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum by (namespace, pod) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__auto]))",
+          "expr": "sum by (namespace, app_kubernetes_io_name) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__auto]))",
           "queryType": "range",
-          "legendFormat": "ERROR {{namespace}}/{{pod}}"
+          "legendFormat": "ERROR {{namespace}}/{{app_kubernetes_io_name}}"
         },
         {
           "refId": "B",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum by (namespace, pod) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"warn\"} |~ \"(?i)$search\" [$__auto]))",
+          "expr": "sum by (namespace, app_kubernetes_io_name) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"warn\"} |~ \"(?i)$search\" [$__auto]))",
           "queryType": "range",
-          "legendFormat": "warn {{namespace}}/{{pod}}"
+          "legendFormat": "warn {{namespace}}/{{app_kubernetes_io_name}}"
         }
       ],
       "options": {
@@ -446,10 +446,10 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "topk(10, sum by (namespace, pod) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__range])))",
+          "expr": "topk(10, sum by (namespace, app_kubernetes_io_name) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__range])))",
           "queryType": "instant",
           "instant": true,
-          "legendFormat": "{{namespace}}/{{pod}}"
+          "legendFormat": "{{namespace}}/{{app_kubernetes_io_name}}"
         }
       ],
       "options": {

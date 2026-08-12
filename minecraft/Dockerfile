@@ -102,13 +102,13 @@ ENV MC_DATA_DIR=/data \
 # Default JVM flags. The Deployment overrides JVM_OPTS; this default exists so
 # `docker run` behaves the same as the pod.
 #
-#   -Xms2G -Xmx6G              user decision, down from 12G. See the plan.
-#   -XX:MaxDirectMemorySize=1G Netty's direct-buffer pool defaults to ~Xmx when
-#                              unset, which would let off-heap alone reach 6G on
-#                              top of a 6G heap and blow through the 8Gi cgroup
+#   -Xms2G -Xmx3G              user decision, down from 12G. See the plan.
+#   -XX:MaxDirectMemorySize=512M Netty's direct-buffer pool defaults to ~Xmx when
+#                              unset, which would let off-heap alone reach 3G on
+#                              top of a 3G heap and blow through the 5Gi cgroup
 #                              limit. Making the ceiling explicit is what keeps
-#                              the 0.75 heap:limit ratio honest.
-#   -XX:MaxMetaspaceSize=512m  the other unbounded native region.
+#                              the 0.6 heap:limit ratio honest.
+#   -XX:MaxMetaspaceSize=256M  the other unbounded native region.
 #   -Dterminal.jline=false     no TTY in a pod; disable JLine and ANSI so stdout
 #   -Dterminal.ansi=false      is plain, line-oriented text that promtail and
 #                              `kubectl logs` can parse without escape codes.
@@ -129,7 +129,7 @@ ENV MC_DATA_DIR=/data \
 #     whole design is built to avoid.
 #   * -XX:+HeapDumpOnOutOfMemoryError — a 6G dump onto a 10Gi PVC on a 5900rpm
 #     HDD turns one bad day into two.
-ENV JVM_OPTS="-Xms2G -Xmx6G -XX:MaxDirectMemorySize=1G -XX:MaxMetaspaceSize=512m -Dterminal.jline=false -Dterminal.ansi=false -Dlog4j.configurationFile=/opt/minecraft/log4j2.xml"
+ENV JVM_OPTS="-Xms2G -Xmx3G -XX:MaxDirectMemorySize=512M -XX:MaxMetaspaceSize=256M -Dterminal.jline=false -Dterminal.ansi=false -Dlog4j.configurationFile=/opt/minecraft/log4j2.xml"
 
 WORKDIR /data
 USER 1000:1000

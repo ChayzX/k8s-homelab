@@ -305,7 +305,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "kube_pod_status_phase{namespace=~\"$namespace\", pod=~\"$pod\"} == 1",
+          "expr": "(kube_pod_status_phase{namespace=~\"$namespace\", pod=~\"$pod\"} == 1) * on(namespace, pod) group_left(label_app_kubernetes_io_name) kube_pod_labels{namespace=~\"$namespace\"}",
           "format": "table",
           "instant": true
         },
@@ -346,11 +346,12 @@
               "job": true,
               "instance": true,
               "uid": true,
-              "Value #A": true
+              "Value #A": true,
+              "pod": true
             },
             "renameByName": {
               "namespace": "Namespace",
-              "pod": "Pod",
+              "label_app_kubernetes_io_name": "Pod",
               "phase": "Phase",
               "Value #B": "Restarts",
               "Value #C": "Ready",
@@ -433,8 +434,8 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "min by (namespace, pod) (kube_pod_status_ready{namespace=~\"$namespace\", pod=~\"$pod\", condition=\"true\"})",
-          "legendFormat": "{{namespace}}/{{pod}}"
+          "expr": "min by (namespace, pod) (kube_pod_status_ready{namespace=~\"$namespace\", pod=~\"$pod\", condition=\"true\"}) * on(namespace, pod) group_left(label_app_kubernetes_io_name) kube_pod_labels{namespace=~\"$namespace\"}",
+          "legendFormat": "{{namespace}}/{{label_app_kubernetes_io_name}}"
         }
       ],
       "options": {
@@ -750,7 +751,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "kube_pod_container_status_last_terminated_reason{namespace=~\"$namespace\", pod=~\"$pod\"} == 1",
+          "expr": "(kube_pod_container_status_last_terminated_reason{namespace=~\"$namespace\", pod=~\"$pod\"} == 1) * on(namespace, pod) group_left(label_app_kubernetes_io_name) kube_pod_labels{namespace=~\"$namespace\"}",
           "format": "table",
           "instant": true
         }
@@ -765,11 +766,12 @@
               "job": true,
               "instance": true,
               "uid": true,
-              "Value": true
+              "Value": true,
+              "pod": true
             },
             "renameByName": {
               "namespace": "Namespace",
-              "pod": "Pod",
+              "label_app_kubernetes_io_name": "Pod",
               "container": "Container",
               "reason": "Reason"
             },
@@ -903,14 +905,14 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (namespace, pod) (rate(container_network_receive_bytes_total{namespace=~\"$namespace\", pod=~\"$pod\"}[5m]))",
-          "legendFormat": "{{namespace}}/{{pod}} rx"
+          "expr": "sum by (namespace, pod) (rate(container_network_receive_bytes_total{namespace=~\"$namespace\", pod=~\"$pod\"}[5m])) * on(namespace, pod) group_left(label_app_kubernetes_io_name) kube_pod_labels{namespace=~\"$namespace\"}",
+          "legendFormat": "{{namespace}}/{{label_app_kubernetes_io_name}} rx"
         },
         {
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (namespace, pod) (rate(container_network_transmit_bytes_total{namespace=~\"$namespace\", pod=~\"$pod\"}[5m]))",
-          "legendFormat": "{{namespace}}/{{pod}} tx"
+          "expr": "sum by (namespace, pod) (rate(container_network_transmit_bytes_total{namespace=~\"$namespace\", pod=~\"$pod\"}[5m])) * on(namespace, pod) group_left(label_app_kubernetes_io_name) kube_pod_labels{namespace=~\"$namespace\"}",
+          "legendFormat": "{{namespace}}/{{label_app_kubernetes_io_name}} tx"
         }
       ],
       "options": {
@@ -938,14 +940,14 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (namespace, pod) (rate(container_fs_writes_bytes_total{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\"}[5m]))",
-          "legendFormat": "{{namespace}}/{{pod}} write"
+          "expr": "sum by (namespace, pod) (rate(container_fs_writes_bytes_total{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\"}[5m])) * on(namespace, pod) group_left(label_app_kubernetes_io_name) kube_pod_labels{namespace=~\"$namespace\"}",
+          "legendFormat": "{{namespace}}/{{label_app_kubernetes_io_name}} write"
         },
         {
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (namespace, pod) (rate(container_fs_reads_bytes_total{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\"}[5m]))",
-          "legendFormat": "{{namespace}}/{{pod}} read"
+          "expr": "sum by (namespace, pod) (rate(container_fs_reads_bytes_total{namespace=~\"$namespace\", pod=~\"$pod\", container!=\"\"}[5m])) * on(namespace, pod) group_left(label_app_kubernetes_io_name) kube_pod_labels{namespace=~\"$namespace\"}",
+          "legendFormat": "{{namespace}}/{{label_app_kubernetes_io_name}} read"
         }
       ],
       "options": {
@@ -966,7 +968,7 @@
       "id": 19,
       "type": "bargauge",
       "title": "PersistentVolumeClaim Usage",
-      "description": "TODO — VERIFY BEFORE RELYING ON THIS PANEL. kubelet_volume_stats_* is exposed by the kubelet's /metrics endpoint, NOT by /metrics/cadvisor. The migration plan only commits to scraping /metrics/cadvisor, so unless a second scrape job for the kubelet's main /metrics endpoint was also added to prometheus.yml, this panel will be empty. Fix: add a scrape job for https://<node>:10250/metrics (bearer token + insecure_skip_verify), or delete this panel. Every PVC here lives on the 5900rpm root disk, so filling one is a real risk worth watching.",
+      "description": "Verified live (2026-08-11): the kubelet's main /metrics endpoint is scraped (kubernetes-kubelet job, target up) and kubelet_volume_stats_* returns real data for every PVC. Every PVC here lives on the 5900rpm root disk, so filling one is a real risk worth watching.",
       "gridPos": { "h": 7, "w": 24, "x": 0, "y": 55 },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [

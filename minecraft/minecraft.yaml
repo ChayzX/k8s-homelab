@@ -192,9 +192,9 @@ spec:
             - name: JVM_OPTS
               value: >-
                 -Xms2G
-                -Xmx6G
-                -XX:MaxDirectMemorySize=1G
-                -XX:MaxMetaspaceSize=512m
+                -Xmx3G
+                -XX:MaxDirectMemorySize=512M
+                -XX:MaxMetaspaceSize=256M
                 -Dterminal.jline=false
                 -Dterminal.ansi=false
                 -Dlog4j.configurationFile=/opt/minecraft/log4j2.xml
@@ -220,15 +220,15 @@ spec:
 
           resources:
             requests:
-              cpu: "2"
-              memory: 3Gi
+              cpu: "1"
+              memory: 2Gi
             limits:
-              cpu: "6"
-              memory: 8Gi
-            # 6G heap under an 8Gi limit = 0.75 heap:limit. The remaining ~2Gi
+              cpu: "2"
+              memory: 5Gi
+            # 3G heap under a 5Gi limit = 0.6 heap:limit. The remaining ~2Gi
             # is not slack, it is the JVM's actual off-heap footprint: metaspace
-            # (<=512m), code cache, ~100 thread stacks, GC structures, and
-            # netty direct buffers (<=1G). Do NOT tighten this: pods cannot swap
+            # (<=256M), code cache, ~100 thread stacks, GC structures, and
+            # netty direct buffers (<=512M). Do NOT tighten this further: pods cannot swap
             # (kubelet sets memory.swap.max=0 on cgroup v2), so exceeding the
             # limit is an instant cgroup OOM-kill with no GC opportunity and no
             # world save — the corruption case, not a slowdown.
@@ -267,7 +267,7 @@ spec:
                 # Failure here is non-fatal: it exits 0 and lets SIGTERM (which
                 # java receives as PID 1) run the JVM shutdown hook instead.
                 # -Xmx32m keeps this helper JVM's footprint inside the cgroup
-                # limit alongside the 6G server heap.
+                # limit alongside the 3G server heap.
                 command:
                   - java
                   - -Xmx32m

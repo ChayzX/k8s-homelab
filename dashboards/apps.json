@@ -367,7 +367,7 @@
       "gridPos": { "h": 7, "w": 10, "x": 0, "y": 34 },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "kube_pod_status_phase{namespace=\"jmusicbot\"} == 1", "format": "table", "instant": true },
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "(kube_pod_status_phase{namespace=\"jmusicbot\"} == 1) * on(namespace, pod) group_left(label_app_kubernetes_io_name) kube_pod_labels{namespace=\"jmusicbot\"}", "format": "table", "instant": true },
         { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (pod) (kube_pod_container_status_restarts_total{namespace=\"jmusicbot\"})", "format": "table", "instant": true }
       ],
       "transformations": [
@@ -375,8 +375,8 @@
         {
           "id": "organize",
           "options": {
-            "excludeByName": { "Time": true, "Time 1": true, "Time 2": true, "__name__": true, "job": true, "instance": true, "namespace": true, "uid": true, "Value #A": true },
-            "renameByName": { "pod": "Pod", "phase": "Phase", "Value #B": "Restarts" },
+            "excludeByName": { "Time": true, "Time 1": true, "Time 2": true, "__name__": true, "job": true, "instance": true, "namespace": true, "uid": true, "Value #A": true, "pod": true },
+            "renameByName": { "label_app_kubernetes_io_name": "Pod", "phase": "Phase", "Value #B": "Restarts" },
             "indexByName": {}
           }
         }
