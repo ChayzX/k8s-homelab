@@ -79,7 +79,7 @@ spec:
         - name: jmusicbot
           # Locally built, side-loaded image. Update this tag via
           # `kubectl set image` from auto-update.sh — see header note 3.
-          image: jmusicbot-custom:yts1182
+          image: jmusicbot-custom:v0.7.0-yts1.18.2-voicechat1
           imagePullPolicy: IfNotPresent  # see header note 1 — do not change
           # No ports. The bot is an outbound Discord gateway client; the Compose
           # service published nothing and neither does this.
