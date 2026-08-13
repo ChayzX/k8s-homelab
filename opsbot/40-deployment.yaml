@@ -111,13 +111,21 @@ spec:
           # no HTTP endpoint to check, same reasoning as
           # jmusicbot-release-notifier (see its 50-deployment comment). If the
           # process dies it exits and the kubelet restarts it.
+          # Limits sized for a lightweight Discord bot originally; /report
+          # (k8s-homelab-cq8) added `bd` shellouts, which is a Go binary
+          # with an embedded Dolt engine, not lightweight. Confirmed via
+          # cgroup cpu.stat: throttled 4888/6066 periods (~80%), ~465s
+          # accumulated throttle time -- bd never became slow, it was
+          # starved to the point `bd --help` (pure local, no I/O) couldn't
+          # complete in 45s. Bumped limits; requests stay low since the pod
+          # idles except during a /report call.
           resources:
             requests:
               cpu: 50m
-              memory: 64Mi
+              memory: 96Mi
             limits:
-              cpu: 100m
-              memory: 128Mi
+              cpu: 750m
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
