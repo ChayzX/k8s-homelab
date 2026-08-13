@@ -1,57 +1,29 @@
-# Builds opsbot/bot and pushes to GHCR (ghcr.io/chayzx/opsbot), same pattern
-# as pantry-bot's publish.yml. Runs entirely on GitHub-hosted runners -- no
-# Docker or self-hosted machine required, unlike the old localhost/ side-load
-# flow this replaces.
+# Manually-triggered deploy -- see opsbot-publish.yml's header for why this
+# is a separate workflow_dispatch-only workflow instead of an automatic step
+# after publish (free-plan substitute for GitHub's paid-only "required
+# reviewers" environment protection).
+#
+# k8s-homelab-oiv.8: reaches the cluster's private API through a dedicated
+# Cloudflare Tunnel (ci-tunnel/) gated by Cloudflare Access (service
+# token). `cloudflared access tcp` does the Access handshake once and
+# proxies raw bytes after that -- kubectl talks to 127.0.0.1:16443 like
+# it's local. See ci-tunnel/MANUAL-SETUP.md for the full path.
 
 name: Deploy opsbot
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - opsbot/bot/**
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (defaults to the most recent published build)"
+        required: false
+        default: latest
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
-    outputs:
-      digest: ${{ steps.push.outputs.digest }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
-        id: push
-        uses: docker/build-push-action@v6
-        with:
-          context: opsbot/bot
-          push: true
-          tags: |
-            ghcr.io/chayzx/opsbot:latest
-            ghcr.io/chayzx/opsbot:${{ github.sha }}
-
-  # k8s-homelab-oiv.8: reaches the cluster's private API through a dedicated
-  # Cloudflare Tunnel (ci-tunnel/) gated by Cloudflare Access (service
-  # token). `cloudflared access tcp` does the Access handshake once and
-  # proxies raw bytes after that -- kubectl talks to 127.0.0.1:16443 like
-  # it's local. See ci-tunnel/MANUAL-SETUP.md for the full path. Verified
-  # end-to-end manually before wiring this in.
   deploy:
-    needs: publish
     runs-on: ubuntu-latest
     steps:
       - name: Install cloudflared
@@ -92,9 +64,18 @@ jobs:
           echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/opsbot.kubeconfig"
 
       - name: Update deployment image
+        # `kubectl set image` is a no-op if the tag STRING doesn't change --
+        # deploying the default `latest` when the Deployment's already on
+        # `latest` wouldn't restart anything even though a new image was
+        # just published under that tag. `rollout restart` after it forces
+        # a fresh pull regardless (imagePullPolicy: Always), harmless when
+        # set image DID already trigger one.
         env:
           KUBECONFIG: ${{ runner.temp }}/opsbot.kubeconfig
-        run: kubectl set image deployment/opsbot opsbot=ghcr.io/chayzx/opsbot:${{ github.sha }} -n opsbot
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          kubectl set image deployment/opsbot "opsbot=ghcr.io/chayzx/opsbot:${IMAGE_TAG}" -n opsbot
+          kubectl rollout restart deployment/opsbot -n opsbot
 
       - name: Wait for rollout
         env:
