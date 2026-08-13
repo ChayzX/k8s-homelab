@@ -81,7 +81,16 @@ Prometheus and one Loki source configured.
 
 ## The dashboards
 
-### `cluster-overview.json` — Cluster Overview — Node & k3s Control Plane
+### `cluster-overview.json` — Host Health / Cluster Overview — Node & k3s Control Plane
+
+**This is the host-health dashboard.** If you're looking for "where is the
+host / host-health dashboard in Grafana", this is it — the k8s successor to
+the old Docker `host-overview` dashboard (from the four retired above). It
+ships a stable `uid: homelab-cluster-overview`, tags `homelab, k3s, node,
+host`, and the title/tags have carried the `Host Health` name since commit
+`5b2f7b2` (k8s-homelab-8nc). Because Grafana's file provisioning keys on the
+JSON `uid` — never the title — renaming it did not change URLs/bookmarks and
+cannot duplicate the dashboard.
 
 Node-level health for the bare-metal host (`MinecraftMachine`), sourced
 from the **native `node_exporter` binary at `192.168.40.208:9100`** —
@@ -107,6 +116,40 @@ all contend for the same spindle. Also: kube-system pod table/restarts
 they run inside the single k3s process, so there's no `kube_pod_*`
 series for them; use the Node-Ready stat for that), scrape-target-down
 count, node-pressure-condition count, and hwmon temperatures.
+
+**Long-term host-health metrics — Uptime Kuma, open decision
+(k8s-homelab-8nc).** Prometheus is pinned to **7d / 15 GB retention**
+(`observability/prometheus.yaml`), deliberately — this host's `/` is a
+5900rpm HDD and huge TSDB blocks are hostile to it (HDD-tuning note in
+`ARCHITECTURE.md`). Kuma is the intentional long-term store, but it keeps
+**up/down history per monitor, not metric series** — nothing Kuma accepts can
+give it CPU/mem/disk trends. So "long-term host health in Kuma" is really one
+of two narrower options:
+
+- **(b) — recommended: accept the 7d Grafana window as the metric-trend
+  source.** The dashboard above *is* the 7d host trend view, and Kuma's
+  existing HTTP/TCP pings against node_exporter (`:9100`), Grafana (`:3002`)
+  and Kuma itself (`:3001`) already cover host reachability for the same
+  window. Rationale: option (a) adds a host cron + a Kuma push monitor and
+  still ends up with *up/down history only* — Kuma has no metric TSDB, so it
+  can never store the trends this request names. A >7d host trend would
+  require a real long-term TSDB (remote-write to VictoriaMetrics/Mimir), a
+  much bigger call than this card. Zero new moving parts.
+- **(a) — the only thing Kuma can genuinely add: long-term *host-alive*
+  history (up/down beyond 7d).** Proposed, NOT implemented — needs the
+  decision first. Exact mechanism: add a **push-type monitor** in Kuma
+  (Uptime Kuma → Add Monitor → **Push**), which generates a token and listens
+  at `https://status.greeniespantry.uk/api/push/<token>`; a host cron running
+  `scripts/kuma-host-heartbeat.sh` (proposed new file, user crontab every
+  minute) pushes a heartbeat — the script runs *on* the host, so a delivered
+  push proves host-up, not just app-up:
+  `curl -fsS -m 10 -X POST "https://status.greeniespantry.uk/api/push/<token>?status=up&msg=host-alive"`.
+  Monitor interval 2m (one push/minute ⇒ 2 missed pushes = down). Long-term
+  record = that monitor's history, for the life of the `uptime-kuma-data` PVC.
+  Needed from the user to proceed: confirm (b), or pick (a) and (1) confirm
+  `status.greeniespantry.uk` as the Kuma base URL and (2) create the push
+  monitor in the Kuma UI — the token is generated there and must never be
+  committed.
 
 ### `pods-and-workloads.json` — Pods & Workloads — Usage vs Limits
 
