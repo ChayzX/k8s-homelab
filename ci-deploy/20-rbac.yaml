@@ -1,0 +1,98 @@
+# =============================================================================
+# ci-deploy RBAC — namespaced Role + RoleBinding, per deployed namespace
+# =============================================================================
+# Deliberately NOT a ClusterRole/ClusterRoleBinding, and deliberately NOT the
+# cluster-admin kubeconfig that was about to be handed to the self-hosted
+# GitHub Actions runner by mistake (`k8s-homelab-oiv.2`). Same reasoning as
+# ../opsbot/20-rbac.yaml: this credential's whole job is a closed, explicit
+# allowlist of exactly the namespaces/Deployments a deploy pipeline is
+# supposed to touch, and nothing else — a Role bound per-namespace IS that
+# boundary, not an approximation of it.
+#
+# Two namespaces, two Roles, because Roles are namespace-scoped API objects —
+# there is no such thing as one Role valid across namespaces. See
+# ../opsbot/20-rbac.yaml's header comment for the fuller argument against
+# collapsing this into a ClusterRole bound only via namespaced RoleBindings
+# (rejected there for the same reason it's rejected here: it reads as
+# cluster-wide in `kubectl get clusterrole` even when neutralized by scoping).
+#
+# Verbs, and why each is here (nothing broader):
+#   - deployments: get/list/watch -> `kubectl rollout status` needs to read
+#     the Deployment and its status conditions.
+#   - deployments: patch -> `kubectl set image` and `kubectl rollout undo`
+#     are both strategic-merge PATCHes against the Deployment (image
+#     reference forward, or a stored rollout history entry backward). Neither
+#     needs `update`, `create`, or `delete`.
+#   - deployments/scale: get/list/watch/patch -> covers `kubectl scale` and
+#     any rollout tooling that reads/writes the scale subresource directly
+#     instead of the whole Deployment object. Same verb set as `deployments`
+#     itself, kept identical rather than trimmed further, since the scale
+#     subresource has no separate "read status" vs "write" split worth
+#     modeling here.
+#
+# Explicitly NOT granted, anywhere in this file: pods (no verb at all — this
+# pipeline never needs to look at a Pod, unlike opsbot's read-only pods grant
+# for `/pods status`), pods/exec, secrets (any verb), replicasets, delete/
+# deletecollection on anything, and no rule ever omits an apiGroups/resources/
+# namespace scope to widen it. This is deliberately narrower than opsbot's own
+# bot RBAC (../opsbot/20-rbac.yaml), which needs pods/exec for the Minecraft
+# RCON console — a deploy pipeline has no equivalent need.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ci-deploy
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: ci-deploy
+    app.kubernetes.io/part-of: homelab
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    verbs: ["get", "list", "watch", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-deploy
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: ci-deploy
+    app.kubernetes.io/part-of: homelab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ci-deploy
+subjects:
+  - kind: ServiceAccount
+    name: ci-deploy
+    namespace: pantry-bot
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ci-deploy
+  namespace: opsbot
+  labels:
+    app.kubernetes.io/name: ci-deploy
+    app.kubernetes.io/part-of: homelab
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    verbs: ["get", "list", "watch", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-deploy
+  namespace: opsbot
+  labels:
+    app.kubernetes.io/name: ci-deploy
+    app.kubernetes.io/part-of: homelab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ci-deploy
+subjects:
+  - kind: ServiceAccount
+    name: ci-deploy
+    namespace: opsbot

@@ -1,0 +1,44 @@
+# Automates opsbot build, side-load, and restart. Replaces manual workflow:
+# docker build → docker save | sudo k3s ctr images import → kubectl rollout restart
+# Triggered on source changes to opsbot/bot/; runs on self-hosted runner with sudoers
+# configured for passwordless `k3s ctr images import` (see step 3 comment).
+
+name: Deploy opsbot
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - opsbot/bot/**
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, opsbot-deploy]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t opsbot:${{ github.sha }} opsbot/bot
+
+      - name: Side-load into k3s containerd
+        run: docker save opsbot:${{ github.sha }} | sudo k3s ctr images import -
+        # NOTE: Runner unix user requires sudoers entry for passwordless:
+        #   <runner-user> ALL=(ALL) NOPASSWD:/usr/local/bin/k3s ctr images import
+
+      - name: Update deployment image
+        env:
+          KUBECONFIG: /etc/ci-deploy/opsbot.kubeconfig
+        run: kubectl set image deployment/opsbot bot=opsbot:${{ github.sha }} -n opsbot
+
+      - name: Wait for rollout
+        env:
+          KUBECONFIG: /etc/ci-deploy/opsbot.kubeconfig
+        run: kubectl rollout status deployment/opsbot -n opsbot --timeout=60s
+
+      - name: Rollback on failure
+        if: failure()
+        env:
+          KUBECONFIG: /etc/ci-deploy/opsbot.kubeconfig
+        run: kubectl rollout undo deployment/opsbot -n opsbot
