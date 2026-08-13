@@ -102,8 +102,14 @@ data:
           # nothing. See promtail.yaml.
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: __host__
-          # Apps with dedicated jobs below.
+          # Apps with dedicated jobs below. The homelab manifests label pods
+          # with app.kubernetes.io/name (never the legacy `app` label), so
+          # drop on both keys or the pods stay here and the dedicated jobs
+          # below would double-scrape them.
           - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: "jmusicbot|pantry-bot"
+            action: drop
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
             regex: "jmusicbot|pantry-bot"
             action: drop
           # Never tail a pod that has no logs yet / is terminating.
@@ -199,13 +205,16 @@ data:
       # Active from Phase 2. Two line shapes, both handled:
       #   [17:02:11] [WARN] [JDA]: Automatically disabled CacheFlags...
       #   [INFO] ========================================
+      # Label-keying note: same as job 3 -- the `keep` matches the pod's
+      # app.kubernetes.io/name label, not the legacy `app` label (none of
+      # the homelab manifests set `app`).
       - job_name: jmusicbot
         kubernetes_sd_configs:
           - role: pod
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: __host__
-          - source_labels: [__meta_kubernetes_pod_label_app]
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
             regex: "jmusicbot"
             action: keep
           - source_labels: [__meta_kubernetes_pod_phase]
@@ -268,13 +277,22 @@ data:
       # So severity is a keyword heuristic, deliberately anchored on
       # word boundaries and on Node's own error-code vocabulary rather
       # than on a bare substring match for "error".
+      #
+      # Label-keying note: this job's `keep` matches the pod's
+      # app.kubernetes.io/name label, NOT the legacy `app` label -- the
+      # homelab manifests label every pod with app.kubernetes.io/name and
+      # none of them set `app`. (The original `app`-based keep matched
+      # nothing, so this job was dead and the pod was mis-scraped by the
+      # generic kubernetes-pods job with no severity heuristics -- every
+      # line came out level=info.) The generic job drops on the same key,
+      # see job 1.
       - job_name: pantry-bot
         kubernetes_sd_configs:
           - role: pod
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: __host__
-          - source_labels: [__meta_kubernetes_pod_label_app]
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
             regex: "pantry-bot"
             action: keep
           - source_labels: [__meta_kubernetes_pod_phase]
