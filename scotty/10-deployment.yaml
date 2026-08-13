@@ -12,6 +12,10 @@
 # Runs as uid/gid 1000 to match the host's `chase:chase` ownership (700) on
 # /home/chase/k8s-homelab/.beads — the README calls this out explicitly for
 # permission errors on the mounted volume.
+#
+# User/auth model: scotty is single-user (one shared humanActor for all UI
+# writes, humanAllowlist only for origin badges, no login). See scotty/README.md
+# "User model TODAY" + options before adding any per-user behaviour.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

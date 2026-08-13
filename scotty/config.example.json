@@ -1,0 +1,20 @@
+{
+  "humanActor": "node",
+  "humanAllowlist": [
+    "node",
+    "HomeyBeam"
+  ],
+  "pollIntervalMs": 30000,
+  "projects": [
+    {
+      "id": "k8s-homelab",
+      "path": "/data/k8s-homelab"
+    },
+    {
+      "id": "pantry-bot",
+      "path": "/data/pantry-bot"
+    }
+  ],
+  "orders": {},
+  "gamification": false
+}
