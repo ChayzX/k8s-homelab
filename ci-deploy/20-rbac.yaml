@@ -30,13 +30,22 @@
 #     subresource has no separate "read status" vs "write" split worth
 #     modeling here.
 #
+#   - replicasets: get/list/watch -> READ-ONLY, added after a real
+#     `kubectl rollout undo` failure in production
+#     ("replicasets.apps is forbidden ... cannot list"). Wrong assumption
+#     corrected: `rollout undo` doesn't just PATCH the Deployment, it first
+#     LISTS the Deployment's ReplicaSets client-side to find the prior
+#     revision to roll back to. No write verb needed — undo's actual mutation
+#     is still a patch against the Deployment object itself.
+#
 # Explicitly NOT granted, anywhere in this file: pods (no verb at all — this
 # pipeline never needs to look at a Pod, unlike opsbot's read-only pods grant
-# for `/pods status`), pods/exec, secrets (any verb), replicasets, delete/
-# deletecollection on anything, and no rule ever omits an apiGroups/resources/
-# namespace scope to widen it. This is deliberately narrower than opsbot's own
-# bot RBAC (../opsbot/20-rbac.yaml), which needs pods/exec for the Minecraft
-# RCON console — a deploy pipeline has no equivalent need.
+# for `/pods status`), pods/exec, secrets (any verb), any write verb on
+# replicasets, delete/deletecollection on anything, and no rule ever omits an
+# apiGroups/resources/namespace scope to widen it. This is deliberately
+# narrower than opsbot's own bot RBAC (../opsbot/20-rbac.yaml), which needs
+# pods/exec for the Minecraft RCON console — a deploy pipeline has no
+# equivalent need.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -49,6 +58,9 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments", "deployments/scale"]
     verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -79,6 +91,9 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments", "deployments/scale"]
     verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
