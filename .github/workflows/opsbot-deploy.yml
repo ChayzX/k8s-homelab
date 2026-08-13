@@ -26,6 +26,14 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        # Needed for opsbot/40-deployment.yaml -- k8s-homelab-0br: deploys
+        # used to only run `kubectl set image`, so non-image manifest
+        # changes (probes, resources, ports) silently never reached the
+        # cluster. Bit us directly: the health-endpoint probes/port added
+        # tonight never actually applied until a manual `kubectl apply`.
+        uses: actions/checkout@v4
+
       - name: Install cloudflared
         # Pinned version + checksum, not `latest` -- an unpinned download-and-
         # exec-with-sudo step is a real supply-chain risk. Bump both together
@@ -62,6 +70,15 @@ jobs:
           KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_OPSBOT }}
         run: |
           echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/opsbot.kubeconfig"
+
+      - name: Apply deployment manifest
+        # Picks up any non-image change (probes, resources, ports, env) --
+        # ci-deploy's RBAC only grants get/patch on deployments (no create,
+        # no services/RBAC), which is exactly what applying an
+        # already-existing Deployment needs -- no permission widening.
+        env:
+          KUBECONFIG: ${{ runner.temp }}/opsbot.kubeconfig
+        run: kubectl apply -f opsbot/40-deployment.yaml -n opsbot
 
       - name: Update deployment image
         # `kubectl set image` is a no-op if the tag STRING doesn't change --

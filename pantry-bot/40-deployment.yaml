@@ -1,6 +1,10 @@
 # =============================================================================
 # pantry-bot — Twitch bot + Express HTTP/WS server + SQLite
 # =============================================================================
+# THIS IS THE CANONICAL SOURCE (k8s-homelab-0br). A deploy-time copy lives at
+# pantry-bot repo's k8s/deployment.yaml, applied by that repo's deploy.yml --
+# no automated sync, whenever this file changes, copy it there too.
+#
 # Replaces the `bot` service in
 # /home/chase/Downloads/pantry-bot/docker-compose.prod.yml
 #
