@@ -554,3 +554,60 @@ cutover-snapshot tarball from Step 8 is the newest guaranteed-good copy you
 have, and the loss is exactly "everything since that tarball was taken" —
 say so plainly to anyone who was playing, don't discover it silently with
 them.
+
+## Post-migration: automatic Paper build updates
+
+Separate from everything above — this covers ongoing operation of the
+now-live `minecraft` Deployment, not the one-time cutover. Full
+implementation detail lives in `scripts/minecraft-auto-update.sh`'s own
+header comment; this is the operator-facing summary.
+
+**Mechanism.** A cron job (`0 3 * * *`, installed by hand — see the script's
+footer, not yet installed as of this writing, tracked by `k8s-homelab-338.7`)
+runs `scripts/minecraft-auto-update.sh`, which polls the PaperMC v3 API for
+the highest-`id` **STABLE** build of the currently-pinned Minecraft version,
+and if it's newer than the last build this script deployed
+(`~/minecraft/.last-built-mc-version`): downloads the jar, verifies its
+sha256, `docker build`s a new image, side-loads it into k3s containerd
+(`docker save | sudo k3s ctr images import -`), rewrites `minecraft.yaml`'s
+`image:` line, and `kubectl set image`s the Deployment. That last step is
+what actually triggers `minecraft.yaml`'s existing `Recreate` strategy +
+RCON `preStop` safe-shutdown — the script doesn't reimplement a safe restart,
+it just points the Deployment at a new tag and lets the manifest do what it
+already does. After rollout, the script confirms the new pod actually
+answers `java -jar rcon.jar list` over RCON (not just that it passed its
+readiness probe) before declaring success, committing the manifest change
+locally (never pushed), and notifying Discord if a webhook is configured.
+
+**Policy: patch/build auto, major/minor manual.** The script walks
+`bNNN → bNNN+1 → ...` for the pinned `MC_VERSION` automatically, on Paper's
+own STABLE-channel judgement, unreviewed. It never changes `MC_VERSION`
+itself — bumping to a new Minecraft release (e.g. 1.21.x → 1.22.x) is a
+manual edit to the script by a human, because that can carry new Java
+version requirements, `server.properties` keys, or plugin/data-format
+breaks that deserve a changelog read, not a cron job's judgement.
+
+**Rollback.** If the rollout never becomes Ready within
+`ROLLOUT_TIMEOUT` (600s), or it becomes Ready but the post-deploy RCON check
+fails, the script automatically runs `kubectl rollout undo`, waits for that
+to complete, and restores `minecraft.yaml` from its pre-edit in-memory
+backup — so a failed auto-update self-heals back to the previous build
+without operator involvement. `$STATE_FILE` is deliberately left untouched
+on failure, so the next cron run retries the same build rather than
+concluding it already shipped. A Discord notification (if configured) names
+the failure reason and the image it rolled back to. To roll back by hand to
+an older build after a *successful* deploy that turns out to be bad in some
+way the RCON check can't catch (e.g. a gameplay-breaking Paper regression):
+`kubectl rollout undo deployment/minecraft -n minecraft`, then hand-edit
+`minecraft.yaml`'s `image:` line to match and commit, since the script's own
+state file and manifest only track the version it most recently deployed.
+Locally-built images are pruned to the last 3 (in both docker's and
+containerd's stores), which bounds how far back an image-level rollback can
+reach without rebuilding from a still-available `paper.jar` or re-downloading
+an older build from the PaperMC API.
+
+**Manual test/verification of this whole path (success + induced-failure
+rollback) is tracked separately and not yet done as of this writing** — see
+`k8s-homelab-338.7`. Treat the above as the designed and implemented
+behavior per `scripts/minecraft-auto-update.sh`, not yet exercised against
+the live pod.

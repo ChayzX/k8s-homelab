@@ -69,37 +69,23 @@ one workflow's access without affecting the other.)
 
 ## 6. Workflow side — the client proxy pattern
 
-Once the above is live, each `deploy` job (currently stubbed with a
-`# TODO(k8s-homelab-oiv.8)` comment in both workflows) needs, before the
-`kubectl` steps:
-
-```yaml
-      - name: Install cloudflared
-        run: |
-          curl -sSL -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-          chmod +x cloudflared
-          sudo mv cloudflared /usr/local/bin/
-
-      - name: Open Access-authenticated tunnel to k8s API
-        run: |
-          cloudflared access tcp \
-            --hostname k8s-api.greeniespantry.uk \
-            --url 127.0.0.1:6443 \
-            --service-token-id "${{ secrets.CF_ACCESS_CLIENT_ID }}" \
-            --service-token-secret "${{ secrets.CF_ACCESS_CLIENT_SECRET }}" &
-          sleep 3   # give the local listener a moment before kubectl steps
-
-      - name: Update deployment image
-        env:
-          KUBECONFIG: ...   # server: https://127.0.0.1:6443, same CA/token as today
-        run: kubectl set image ...
-```
+Already implemented and live -- see the actual `deploy` jobs for the exact
+steps: `.github/workflows/opsbot-deploy.yml` (this repo) and
+`.github/workflows/deploy.yml` (pantry-bot repo). Both follow the same
+shape: install `cloudflared` (pinned version + sha256 checksum, not
+`latest` -- see that step's own comment for why), open the Access-
+authenticated tunnel via `cloudflared access tcp` (service token passed as
+env vars `TUNNEL_SERVICE_TOKEN_ID`/`TUNNEL_SERVICE_TOKEN_SECRET`, not CLI
+args -- args are visible in the runner's process table), write the scoped
+kubeconfig from a base64 GitHub Actions secret (`KUBE_CONFIG_OPSBOT` /
+`KUBE_CONFIG_PANTRYBOT`) to `$RUNNER_TEMP`, pointed at
+`https://127.0.0.1:16443`, then the `kubectl` steps.
 
 `cloudflared access tcp` does the Access handshake once and then proxies raw
 bytes — kubectl never needs to know Access exists, it just talks to
-`127.0.0.1:6443` like it's local. The scoped `ci-deploy` ServiceAccount
-kubeconfig from `../ci-deploy/` is unchanged; only the `server:` field and
-this proxy step are new.
+`127.0.0.1:16443` like it's local. The scoped `ci-deploy` ServiceAccount
+kubeconfig from `../ci-deploy/` is unchanged; only the `server:` field points
+at the local proxy port instead of the cluster directly.
 
 ## 7. Verify before trusting it
 
