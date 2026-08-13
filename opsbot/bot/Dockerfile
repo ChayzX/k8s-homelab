@@ -47,7 +47,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY --from=beads /usr/local/bin/bd /usr/local/bin/bd
 
-COPY main.py bd_ops.py k8s_ops.py util.py ./
+COPY main.py bd_ops.py health.py k8s_ops.py util.py ./
 
 # uid/gid 1000 to match ../40-deployment.yaml's securityContext
 # (runAsNonRoot, runAsUser: 1000, runAsGroup: 1000) -- python:*-slim has no
