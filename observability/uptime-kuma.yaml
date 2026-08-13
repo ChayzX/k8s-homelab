@@ -37,6 +37,45 @@
 #    Phase 4). Otherwise Kuma alerts continuously about apps that are
 #    fine, just moving -- the same false-alert storm the plan calls out
 #    for observability-watcher.
+#
+# ============================================================
+# MONITOR RECONCILIATION RUNBOOK (bd k8s-homelab-6ba)
+# ============================================================
+# The two legacy "Docker Container" monitors (the migration's wall of red)
+# are, as of 2026-08-12 (live DB read-only check):
+#   id 1  "Discord Music Bot"  type=docker  docker_container=jmusicbot
+#   id 2  "Twitch Bot"         type=docker  docker_container=pantry-bot-bot-1
+# Both active, both failing every 60s on ENOENT /var/run/docker.sock.
+# They can only be edited from the Kuma UI (in-cluster MariaDB, no
+# sqlite3/API tooling). Plan:
+#
+# NOW -- make the board honest (no deps, can be done immediately):
+#   * Pause or delete both docker monitors (delete recommended: they are
+#     unrecoverable and pod health is visible in Grafana's
+#     pods-and-workloads dashboard).
+#   * To PAUSE instead: open each monitor -> Pause (reversible).
+#
+# AFTER k8s-homelab-aos deploys the health1 image + manifests (jmusicbot/
+# 40-deployment-jmusicbot.yaml + 45-service-health.yaml; image build is
+# manual -- see jmusicbot/README.md "Health endpoint"):
+#   * Add monitor  "jmusicbot"      type=HTTP(S)
+#       URL http://jmusicbot-health.jmusicbot.svc.cluster.local:9091/health
+#       interval 60s, accepted status codes ["200-299"] (200=up, 503=starting
+#       and connection-refused=down -- on a status page "starting" reads as
+#       down and that is the correct answer for "is the bot up?"), timeout 10s.
+#       If you would rather see "process alive regardless of Discord login",
+#       target http://jmusicbot-health.jmusicbot.svc.cluster.local:9091/live
+#       instead (200 whenever the HTTP server is bound).
+#   * Add monitor  "pantry-bot"     type=HTTP(S)
+#       URL http://pantry-bot.pantry-bot.svc.cluster.local:3000/
+#       interval 60s. THIS APP RETURNS 404 ON / BY DESIGN (verified:
+#       Express-generated 404, see pantry-bot/40-deployment.yaml probe
+#       comments) -- accepted status codes MUST include 200 and 404,
+#       or Kuma will mark a healthy app down.
+#   * Twitch Bot was the pantry-bot/Twitch container in Docker; the single
+#     pantry-bot monitor above replaces id 2.
+# Do NOT add a Minecraft monitor here: Minecraft is checked elsewhere
+# (minecraft-exporter in prometheus-config.yaml).
 apiVersion: v1
 kind: ServiceAccount
 metadata:
