@@ -1,0 +1,17 @@
+# Dedicated namespace for the CI/CD Cloudflare Tunnel connector -- see
+# ../ci-deploy/README.md and bd show k8s-homelab-oiv.8.
+#
+# Deliberately its own namespace, own connector, own Cloudflare Tunnel --
+# NOT added as a fifth hostname on pantry-bot's existing connector. That
+# connector already serves four public hostnames (oauth/overlay/status/
+# grafana); bolting the one path that reaches the cluster's control plane
+# onto the same process means a compromise of any of those four now has a
+# route to the k8s API too. Isolating it costs one more small pod.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ci-tunnel
+  labels:
+    app.kubernetes.io/name: ci-tunnel
+    app.kubernetes.io/part-of: homelab
+    kubernetes.io/metadata.name: ci-tunnel
