@@ -107,10 +107,35 @@ spec:
             # to restrict to DISCORD_USER_ID.
             - name: REPORT_OPEN_ACCESS
               value: "true"
-          # No probes: a Discord gateway client has no listening socket and
-          # no HTTP endpoint to check, same reasoning as
-          # jmusicbot-release-notifier (see its 50-deployment comment). If the
-          # process dies it exits and the kubelet restarts it.
+          ports:
+            - name: health
+              containerPort: 9091
+              protocol: TCP
+          # Readiness: GET /health -- 503 while bot/health.py's `_ready` flag
+          # is unset (not yet logged into Discord), 200 once on_ready fires.
+          # While 503 the pod stays NotReady (no Service endpoints, Kuma sees
+          # the monitor as down). Same pattern as jmusicbot's health endpoint
+          # (bd k8s-homelab-aos).
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Liveness: GET /live -- 200 whenever the process is alive.
+          # Deliberately NOT /health: a Discord auth/connect failure must not
+          # make the kubelet restart the pod (discord.py retries the login
+          # itself). Liveness only catches a wedged/dead process.
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
           # Limits sized for a lightweight Discord bot originally; /report
           # (k8s-homelab-cq8) added `bd` shellouts, which is a Go binary
           # with an embedded Dolt engine, not lightweight. Confirmed via

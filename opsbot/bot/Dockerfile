@@ -1,11 +1,9 @@
 # syntax=docker/dockerfile:1
 #
-# opsbot -- Discord bot, Python. Locally-built-only, no registry: sideload
-# exactly like ../../minecraft/Dockerfile does, per ../40-deployment.yaml's
-# header comment.
-#
-#   docker build -t localhost/opsbot:dev .
-#   docker save localhost/opsbot:dev | sudo k3s ctr images import -
+# opsbot -- Discord bot, Python. Built + pushed to GHCR by
+# .github/workflows/opsbot-publish.yml on every push to opsbot/bot/**, then
+# deployed via opsbot-deploy.yml (manual workflow_dispatch). No more local
+# sideload -- see ../40-deployment.yaml's header comment (k8s-homelab-oiv).
 #
 # python:3.12-slim-bookworm (glibc, not Alpine/musl) so discord.py's and the
 # kubernetes client's dependencies install from prebuilt wheels -- no

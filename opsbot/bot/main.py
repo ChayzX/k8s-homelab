@@ -21,6 +21,7 @@ from discord import app_commands
 from discord.ext import commands
 
 import bd_ops
+import health
 import k8s_ops
 import util
 
@@ -323,11 +324,13 @@ async def setup_hook() -> None:
     bot.tree.add_command(report)
     await bot.tree.sync()
     print("[opsbot] slash commands synced")
+    await health.start()
 
 
 @bot.event
 async def on_ready() -> None:
     print(f"[opsbot] logged in as {bot.user} (id={bot.user.id if bot.user else '?'})")
+    health.mark_ready()
 
 
 def main() -> None:
