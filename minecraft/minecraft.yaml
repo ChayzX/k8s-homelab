@@ -162,7 +162,7 @@ spec:
           # imagePullPolicy MUST be IfNotPresent (or Never) — with Always, or
           # with a `:latest` tag, kubelet would try to reach a registry that
           # does not have this image and the pod would sit in ImagePullBackOff.
-          image: localhost/paper-minecraft:1.21.11-b127
+          image: localhost/paper-minecraft:1.21.11-b132
           imagePullPolicy: IfNotPresent
 
           # Keep stdin open but unattached. Paper's console reader reads stdin;
