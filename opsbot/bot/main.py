@@ -137,7 +137,8 @@ async def pods_status(interaction: discord.Interaction, namespace: str) -> None:
         text = f"No pods in {namespace}."
     else:
         text = "\n".join(
-            f"{p['name']}  phase={p['phase']}  ready={p['ready']}  restarts={p['restarts']}"
+            f"{p['name']}  phase={p['phase']}  ready={p['ready']}  "
+            f"restarts={p['restarts']}  age={util.format_pod_age(p['created'])}"
             for p in pods
         )
     await _reply(interaction, text)
