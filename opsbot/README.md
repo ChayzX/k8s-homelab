@@ -30,8 +30,8 @@ needs client apps on the phone).
 ## Apply order
 
 ```bash
-# 0. prerequisite — namespaces exist (this also creates jmusicbot, pantry-bot
-#    and keel's namespaces, which this doesn't touch, but opsbot's own
+# 0. prerequisite — namespaces exist (this also creates jmusicbot and
+#    pantry-bot's namespaces, which this doesn't touch, but opsbot's own
 #    namespace comes from here too — namespaces are centralized, see
 #    ../_bootstrap/00-namespaces.yaml)
 kubectl apply -f ../_bootstrap/00-namespaces.yaml
@@ -43,12 +43,13 @@ kubectl apply -f 10-serviceaccount.yaml
 #    (minecraft's own namespace must already exist — see ../minecraft/)
 kubectl apply -f 20-rbac.yaml
 
-# 3. secret (imperative, never in git) — see SECRETS.md
-#    creates: opsbot-discord (DISCORD_BOT_TOKEN, DISCORD_USER_ID)
+# 3. secrets (imperative, never in git) — see SECRETS.md
+#    creates: opsbot-discord (DISCORD_BOT_TOKEN, DISCORD_USER_ID),
+#    ghcr-pull-secret (private GHCR image pull)
 
-# 4. workload — will not come up until the opsbot-discord Secret exists AND
-#    localhost/opsbot:dev has been built and side-loaded (see
-#    40-deployment.yaml's header comment)
+# 4. workload — will not come up until both secrets exist AND
+#    ghcr.io/chayzx/opsbot:latest has been published (see
+#    .github/workflows/opsbot-publish.yml, or build manually per SECRETS.md)
 kubectl apply -f 40-deployment.yaml
 ```
 
@@ -60,36 +61,36 @@ databases (`/home/chase/k8s-homelab/.beads` → k8s-homelab board,
 `/home/chase/Downloads/pantry-bot/.beads` → pantry-bot board). The reporter's
 Discord identity is baked into the bead; open to any Discord user by default
 (`REPORT_OPEN_ACCESS`, flip to `false` to restrict to `DISCORD_USER_ID`).
-Requires a rebuilt+side-loaded image (the `bd` binary is baked in, pinned to
-the host's version) and the two hostPath volumes in `40-deployment.yaml`:
-
-```bash
-docker build -t localhost/opsbot:dev opsbot/bot/
-docker save localhost/opsbot:dev | sudo k3s ctr images import -
-kubectl apply -f 40-deployment.yaml
-```
+Requires a rebuilt image (the `bd` binary is baked in, pinned to the host's
+version) and the two hostPath volumes in `40-deployment.yaml`. Rebuild via
+`.github/workflows/opsbot-publish.yml` (push to `opsbot/bot/**`, or
+`workflow_dispatch`) then `.github/workflows/opsbot-deploy.yml`
+(`workflow_dispatch`, manual-click) — see `ARCHITECTURE.md`'s CI/CD note.
 
 Because the pod writes the host's own Dolt databases, a filed bug appears in
 the board immediately and reaches GitHub on the host's next `bd dolt push`
-— no new credentials, no push-from-pod, no Keel dependency. Known limits:
-single-node only (node == workstation), and pod/host `bd` writes serialize on
-the embedded Dolt lock (bd_ops.py retries).
+— no new credentials, no push-from-pod. Known limits: single-node only
+(node == workstation), and pod/host `bd` writes serialize on the embedded
+Dolt lock (`bd_ops.py` retries on lock contention, including on the host's
+own `bd` writes racing the pod's — see its own comments).
 
 ---
 
 ## RBAC summary
 
-Namespaced `Role` + `RoleBinding` pairs — deliberately NOT a ClusterRole,
-unlike `../keel`. Full reasoning in `20-rbac.yaml`'s header comment.
+Namespaced `Role` + `RoleBinding` pairs — deliberately NOT a ClusterRole.
+Full reasoning in `20-rbac.yaml`'s header comment.
 
 | Namespace | Resource | Verbs |
 |---|---|---|
 | `jmusicbot`, `pantry-bot`, `minecraft` | `pods` | `get`, `list`, `watch` |
 | `jmusicbot`, `pantry-bot`, `minecraft` | `deployments` (apps) | `get`, `list`, `watch`, `patch` |
 
-Excluded on purpose: `keel` and `observability` namespaces (not in the
-approved whitelist), any `secrets` verb, `delete`/`deletecollection`,
-`exec`/`attach`/`portforward`, and anything cluster-scoped.
+Excluded on purpose: `observability` namespace (not in the approved
+whitelist), any `secrets` verb, `delete`/`deletecollection`,
+`exec`/`attach`/`portforward`, and anything cluster-scoped. (Contrast with
+`../ci-deploy/`'s Role, a separate narrower credential used only by the
+GitHub Actions deploy pipeline, not this bot.)
 
 ---
 

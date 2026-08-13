@@ -1,9 +1,8 @@
 # Secrets — `opsbot` namespace
 
-No secret values live in this repo. Create the Secret below imperatively,
+No secret values live in this repo. Create the Secrets below imperatively,
 **before** applying `40-deployment.yaml`. This mirrors every other bot in
-this repo — see `../pantry-bot/SECRETS.md`, `../keel/SECRETS.md`,
-`../minecraft/secrets.md`.
+this repo — see `../pantry-bot/SECRETS.md`, `../minecraft/secrets.md`.
 
 ---
 

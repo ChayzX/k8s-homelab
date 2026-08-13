@@ -3,9 +3,13 @@
 No secret values live in this repo. Create these imperatively on the node,
 **before** applying the Deployments.
 
-Three Secrets are needed here, and one of them (`ghcr-pull-secret`) does double
-duty for Keel — see the section at the bottom, it is the most commonly missed
-part of this migration.
+Three Secrets are needed here. Deploy pipeline is GitHub Actions
+(`.github/workflows/publish.yml` + `deploy.yml` in the pantry-bot repo,
+manual-click `workflow_dispatch` for deploy) — GitHub Actions secrets
+(`CF_ACCESS_CLIENT_ID`/`SECRET`, `KUBE_CONFIG_PANTRYBOT`) live in the GitHub
+repo settings, not here; this file only covers Secrets applied to the
+cluster. Keel (previously the deploy mechanism, retired 2026-08-13) is gone
+— see `ARCHITECTURE.md`'s CI/CD note.
 
 ---
 
@@ -103,37 +107,14 @@ resulting pull Secret will silently be empty. In that case use the explicit
 
 ---
 
-## The part everyone misses: Keel needs registry credentials too
+## Verify the pipeline actually works — do not assume
 
-`imagePullSecrets` is consumed by the **kubelet**, to pull. Keel never sees it
-by that route — Keel is a separate process asking the **registry API** "what
-digest is behind `:latest` right now?". That query is authenticated separately.
+Without `ghcr-pull-secret`: pod stuck in `ImagePullBackOff` -- loud and
+obvious, the kubelet needs it to pull the private image.
 
-For a private GHCR repo this means:
-
-- **Without a pull secret:** pod stuck in `ImagePullBackOff`. Loud and obvious.
-- **Without Keel registry credentials:** the pod runs perfectly, and Keel's poll
-  gets a 401/403 every 5 minutes and updates nothing. **Silent.** The CI →
-  production pipeline is dead and nothing reports it.
-
-Keel's primary mechanism is to read the `imagePullSecrets` referenced by the
-Deployment it is watching, from that Deployment's own namespace — which is why
-`ghcr-pull-secret` above must live here, in `pantry-bot`, and why Keel's
-ClusterRole includes `get` on Secrets cluster-wide.
-
-The fallback mechanism (a `DOCKER_REGISTRY_CFG` docker config mounted into the
-Keel pod itself) is documented in `../keel/SECRETS.md`. Set that up if the
-verification below fails.
-
-### Verify the pipeline actually works — do not assume
-
-```bash
-# after everything is applied and pantry-bot is Running:
-kubectl -n keel logs deploy/keel | grep -iE 'pantry|unauthor|401|403|digest'
-```
-
-Then force a real end-to-end test before trusting it unattended: push a trivial
-commit to `main`, wait ~5-6 minutes, and confirm the pod's age resets:
+Force a real end-to-end test rather than trusting it unattended: push to
+`main` (auto-builds via `publish.yml`), then manually trigger `deploy.yml`
+(Actions tab -> Run workflow) and confirm the pod's age resets:
 
 ```bash
 kubectl -n pantry-bot get pods -w
