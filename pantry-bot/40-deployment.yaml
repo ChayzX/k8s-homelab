@@ -94,6 +94,13 @@ spec:
             # TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET — see SECRETS.md.
             - secretRef:
                 name: pantry-bot-twitch
+            # DISCORD_ALERT_WEBHOOK_URL — optional (bot degrades gracefully
+            # without it, see src/discordAlert.ts). Not required: create it
+            # only if you want operational alerts (fatal errors, lost
+            # Twitch connections) posted to a Discord channel. See SECRETS.md.
+            - secretRef:
+                name: pantry-bot-discord-alerts
+                optional: true
 
           # ===================================================================
           # PROBES — read this before "simplifying" them to httpGet

@@ -107,6 +107,27 @@ resulting pull Secret will silently be empty. In that case use the explicit
 
 ---
 
+## 4. `pantry-bot-discord-alerts` — optional operational alert webhook
+
+Not required — `envFrom` references it with `optional: true`, and
+`src/discordAlert.ts` no-ops gracefully (with a console log) if unset. Create
+it only if you want fatal errors, lost Twitch/EventSub connections, and
+broken channel-point setup posted to a Discord channel (typically a second
+server's mod/ops channel — separate from k3s-watcher's personal DM alerts,
+which cover cluster/pod health, not bot-internal application state).
+
+```bash
+kubectl -n pantry-bot create secret generic pantry-bot-discord-alerts \
+  --from-literal=DISCORD_ALERT_WEBHOOK_URL='https://discord.com/api/webhooks/REPLACE/ME'
+```
+
+Key must be exactly `DISCORD_ALERT_WEBHOOK_URL` — that's what `discordAlert.ts`
+reads. Create the webhook in the target channel's settings (Integrations ->
+Webhooks -> New Webhook -> Copy URL) in whichever Discord server should
+receive these.
+
+---
+
 ## Verify the pipeline actually works — do not assume
 
 Without `ghcr-pull-secret`: pod stuck in `ImagePullBackOff` -- loud and
