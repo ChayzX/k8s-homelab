@@ -52,6 +52,29 @@ kubectl apply -f 20-rbac.yaml
 kubectl apply -f 40-deployment.yaml
 ```
 
+## `/report` — bug beads from Discord (k8s-homelab-cq8)
+
+`/report <bot> <what happened>` files a bug bead on the correct board by
+running `bd create` inside the pod against hostPath-mounted **live** beads
+databases (`/home/chase/k8s-homelab/.beads` → k8s-homelab board,
+`/home/chase/Downloads/pantry-bot/.beads` → pantry-bot board). The reporter's
+Discord identity is baked into the bead; open to any Discord user by default
+(`REPORT_OPEN_ACCESS`, flip to `false` to restrict to `DISCORD_USER_ID`).
+Requires a rebuilt+side-loaded image (the `bd` binary is baked in, pinned to
+the host's version) and the two hostPath volumes in `40-deployment.yaml`:
+
+```bash
+docker build -t localhost/opsbot:dev opsbot/bot/
+docker save localhost/opsbot:dev | sudo k3s ctr images import -
+kubectl apply -f 40-deployment.yaml
+```
+
+Because the pod writes the host's own Dolt databases, a filed bug appears in
+the board immediately and reaches GitHub on the host's next `bd dolt push`
+— no new credentials, no push-from-pod, no Keel dependency. Known limits:
+single-node only (node == workstation), and pod/host `bd` writes serialize on
+the embedded Dolt lock (bd_ops.py retries).
+
 ---
 
 ## RBAC summary

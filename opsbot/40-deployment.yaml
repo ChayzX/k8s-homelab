@@ -20,6 +20,17 @@
 # Stateless: no PVC, default RollingUpdate strategy is fine (contrast with
 # pantry-bot/jmusicbot-release-notifier's Recreate, which exists only because
 # those have a live SQLite/marker file on an RWO PVC — opsbot has neither).
+#
+# /report beads mounts (k8s-homelab-cq8): the bug-report command files beads
+# by running `bd create` inside this pod against the project's beads databases
+# (bd_ops.py). Each volume is a hostPath to the LIVE `.beads/` dir of a board
+# -- this single-node cluster runs ON the workstation where those repos live
+# (verified: node "minecraftmachine" hosts /home/chase/...), and the pod runs
+# as uid 1000 == the owner of those dirs, so no chmod/secrets are needed. The
+# embedded Dolt backend serializes writers with an exclusive lock, so pod and
+# host sharing the DB is safe; bd_ops.py retries on lock contention. These
+# mounts are the ONLY reason this manifest is single-node-bound -- a
+# multi-node move needs PVC-backed copies + `bd dolt pull` instead.
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -81,6 +92,18 @@ spec:
                 secretKeyRef:
                   name: opsbot-discord
                   key: DISCORD_USER_ID
+            # Beads checkouts /report writes into (bd_ops.py / util.py). The
+            # defaults in code already match these mount paths; the env vars
+            # exist so a future path change is a manifest edit, not a code
+            # edit.
+            - name: BEADS_CHECKOUT_K8S_HOMELAB
+              value: /boards/k8s-homelab
+            - name: BEADS_CHECKOUT_PANTRY_BOT
+              value: /boards/pantry-bot
+            # Open /report to any Discord user (the point of cq8); set "false"
+            # to restrict to DISCORD_USER_ID.
+            - name: REPORT_OPEN_ACCESS
+              value: "true"
           # No probes: a Discord gateway client has no listening socket and
           # no HTTP endpoint to check, same reasoning as
           # jmusicbot-release-notifier (see its 50-deployment comment). If the
@@ -96,3 +119,20 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
+          volumeMounts:
+            # Live beads databases for /report (see header comment) --
+            # hostPath because the cluster node IS the workstation hosting
+            # these repos; pod uid 1000 == the dir owner.
+            - name: beads-k8s-homelab
+              mountPath: /boards/k8s-homelab/.beads
+            - name: beads-pantry-bot
+              mountPath: /boards/pantry-bot/.beads
+      volumes:
+        - name: beads-k8s-homelab
+          hostPath:
+            path: /home/chase/k8s-homelab/.beads
+            type: Directory
+        - name: beads-pantry-bot
+          hostPath:
+            path: /home/chase/Downloads/pantry-bot/.beads
+            type: Directory

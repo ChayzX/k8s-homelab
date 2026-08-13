@@ -8,12 +8,36 @@ exercised with plain `assert`s and no live token/cluster (see the
 from __future__ import annotations
 
 import datetime
+import os
 
 # Namespace allowlist -- mirrors ../20-rbac.yaml's Role/RoleBinding set
 # exactly (jmusicbot, pantry-bot, minecraft). Checked here too as defense in
 # depth even though RBAC already enforces it server-side: a clean "not
 # allowed" message beats an opaque 403 from the Kubernetes API.
 ALLOWED_NAMESPACES = frozenset({"jmusicbot", "pantry-bot", "minecraft"})
+
+# /report (see bd_ops.py) -- which Discord-facing bot label maps to which
+# beads board. Each value is the --directory to run `bd create` against: a
+# checkout whose only content is the project's `.beads/` dir (mounted into
+# the pod by ../40-deployment.yaml's hostPath volumes). Defaults are the
+# pod mount paths; overridable per-deployment so the command can be
+# exercised without the mounts (and so a path change is a manifest edit,
+# not a code edit). The embedded Dolt backend serializes writers with an
+# exclusive lock, so pod and host can safely share these databases -- see
+# bd_ops.py's retry logic.
+BOT_LABELS = {
+    "music": "music bot (jmusicbot)",
+    "pantry": "pantry-bot",
+}
+BOARD_CHECKOUTS = {
+    "music": os.environ.get("BEADS_CHECKOUT_K8S_HOMELAB", "/boards/k8s-homelab"),
+    "pantry": os.environ.get("BEADS_CHECKOUT_PANTRY_BOT", "/boards/pantry-bot"),
+}
+# If truthy (default), /report is usable by ANY Discord user who can see the
+# bot -- the point of the card is server members filing bugs. The reporter's
+# Discord identity is still recorded in the bead and the audit log. Set to
+# "false" to fall back to the DISCORD_USER_ID allowlist for everything.
+REPORT_OPEN_ACCESS = os.environ.get("REPORT_OPEN_ACCESS", "true").strip().lower() == "true"
 
 MINECRAFT_NAMESPACE = "minecraft"
 
@@ -97,6 +121,43 @@ def chunk_for_discord(text: str) -> list[str]:
     return chunks
 
 
+_REPORT_TITLE_MAX = 120
+
+
+def report_title(bot_label: str, what: str) -> str:
+    """Derive a bead title from the reporter's free text: first ~120 chars on
+    one line, so Discord text with newlines becomes a clean one-line title.
+    Never returns empty -- a blank description still produces a title."""
+    summary = " ".join(what.split())[:_REPORT_TITLE_MAX].strip() or "no description"
+    return f"{bot_label} bug: {summary}"
+
+
+def bug_template(bot_label: str, reporter: str, reporter_id: int, what: str) -> str:
+    """Fixed bug-bead template for /report (k8s-homelab-cq8). Every field is
+    present even if the reporter's text is short; the section headers match
+    what `bd create --validate` expects for the bug type, so the pod's create
+    can validate and the resulting bead reads the same as a hand-filed one.
+    `reporter` is the Discord display name, `reporter_id` the numeric snowflake
+    -- both go into the description (durable in the DB) as well as the audit
+    log."""
+    return (
+        "## Reported By\n"
+        f"{reporter} (discord id {reporter_id}) via opsbot /report\n"
+        "\n"
+        "## Bot\n"
+        f"{bot_label}\n"
+        "\n"
+        "## What Happened\n"
+        f"{what}\n"
+        "\n"
+        "## Steps to Reproduce\n"
+        "Filed from Discord; reproduction steps TBD by the maintainer.\n"
+        "\n"
+        "## Acceptance Criteria\n"
+        "Issue triaged; the reporter can verify the fix in Discord."
+    )
+
+
 def demo() -> None:
     """Smallest runnable self-check for this module's logic. No network, no cluster."""
     assert parse_user_allowlist("929216447723499562") == frozenset({929216447723499562})
@@ -146,6 +207,29 @@ def demo() -> None:
     # Reassembling the fenced bodies should give back the original text.
     reassembled = "".join(c[len(_CODE_FENCE) + 1 : -(len(_CODE_FENCE) + 1)] for c in long_chunks)
     assert reassembled == long_text
+
+    # /report board routing: both boards must resolve to a directory.
+    assert set(BOT_LABELS) == set(BOARD_CHECKOUTS) == {"music", "pantry"}
+    for label in BOT_LABELS.values():
+        assert label
+
+    # report_title: one-line, bounded, never empty.
+    assert report_title("pantry-bot", "snacks not showing") == "pantry-bot bug: snacks not showing"
+    assert report_title("music bot (jmusicbot)", "  multi\nline\n  text  ") == (
+        "music bot (jmusicbot) bug: multi line text"
+    )
+    assert report_title("pantry-bot", "   ") == "pantry-bot bug: no description"
+    long = report_title("pantry-bot", "x" * 1000)
+    assert len(long) <= _REPORT_TITLE_MAX + len("pantry-bot bug: ")
+
+    # bug_template: reporter identity and every bug section present.
+    t = bug_template("pantry-bot", "alice", 12345, "snacks not showing")
+    assert "alice (discord id 12345) via opsbot /report" in t
+    assert "## Bot\npantry-bot\n" in t
+    assert "## What Happened\nsnacks not showing\n" in t
+    for section in ("## Reported By", "## Steps to Reproduce", "## Acceptance Criteria"):
+        assert section in t
+    assert len(bug_template("pantry-bot", "bob", 9, "")) > 0
 
     print("[opsbot] util.py self-check: OK")
 
