@@ -1,12 +1,24 @@
-# Dedicated namespace for the CI/CD Cloudflare Tunnel connector -- see
+# Dedicated namespace for the CI/CD Cloudflare Tunnel connector pod -- see
 # ../ci-deploy/README.md and bd show k8s-homelab-oiv.8.
 #
-# Deliberately its own namespace, own connector, own Cloudflare Tunnel --
-# NOT added as a fifth hostname on pantry-bot's existing connector. That
-# connector already serves four public hostnames (oauth/overlay/status/
-# grafana); bolting the one path that reaches the cluster's control plane
-# onto the same process means a compromise of any of those four now has a
-# route to the k8s API too. Isolating it costs one more small pod.
+# INTENT vs REALITY (2026-08-13 correction): this namespace/connector was
+# designed to be a fully separate Cloudflare Tunnel from pantry-bot's
+# existing one -- own tunnel ID, own token -- specifically so a compromise
+# of pantry-bot's four public hostnames (oauth/overlay/status/grafana)
+# wouldn't have any path to the cluster's control plane. In practice,
+# creating the tunnel via Cloudflare's dashboard consolidated pantry-bot's
+# existing routes onto THIS tunnel instead of keeping two -- confirmed by
+# both connectors' TUNNEL_TOKENs decoding to the same account+tunnel ID.
+# pantry-bot's own `cloudflared` Deployment (../pantry-bot/60-deployment-
+# cloudflared.yaml) now runs as a second, redundant connector for this same
+# tunnel (a pattern Cloudflare explicitly supports) rather than a separate
+# one. User decision: accept the consolidation rather than redo the
+# dashboard split -- isolation goal not currently met, noting it here so a
+# future reader doesn't take the "deliberately separate" framing below at
+# face value.
+#
+# Namespace/pod is still kept separate for the usual reasons (own RBAC-free
+# ServiceAccount, own lifecycle) even though the underlying tunnel is shared.
 apiVersion: v1
 kind: Namespace
 metadata:
