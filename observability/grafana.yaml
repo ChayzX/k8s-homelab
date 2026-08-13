@@ -74,7 +74,7 @@ spec:
         app.kubernetes.io/name: grafana
         app.kubernetes.io/part-of: observability
       annotations:
-        homelab.local/config-revision: "1"
+        homelab.local/config-revision: "2"
     spec:
       serviceAccountName: grafana-sa
       automountServiceAccountToken: false
@@ -110,6 +110,23 @@ spec:
                   name: grafana-admin
                   key: admin-password
                   optional: true
+            # Discord webhook URL for the pantry-bot/Twitch alerting contact
+            # point (grafana-provisioning-alerting ConfigMap -> alerting.yaml
+            # interpolates $PANTY_TWITCH_DISCORD_WEBHOOK_URL from this env
+            # var). Created imperatively -- see SECRETS.md in this directory.
+            # Deliberately NOT optional: with the var unset the interpolation
+            # is empty, the provisioned Discord contact point fails its
+            # validation and Grafana refuses to start. A missing Secret is a
+            # loud CreateContainerConfigError instead. Create the Secret
+            # BEFORE applying this file:
+            #   kubectl -n observability create secret generic \
+            #     grafana-discord-webhooks \
+            #     --from-literal=pantry-twitch-webhook-url='https://discord.com/api/webhooks/REPLACE/ME'
+            - name: PANTY_TWITCH_DISCORD_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-discord-webhooks
+                  key: pantry-twitch-webhook-url
             - name: GF_PATHS_PROVISIONING
               value: /etc/grafana/provisioning
             - name: GF_ANALYTICS_REPORTING_ENABLED
@@ -152,16 +169,19 @@ spec:
               cpu: 500m
               memory: 512Mi
           volumeMounts:
-            # ---- BOTH mounts are required. ----
+            # ---- ALL THREE mounts are required. ----
             # The provisioning tree tells Grafana WHERE to look; the
-            # dashboards tree is WHAT it finds there. Dropping either one
-            # yields a Grafana with no dashboards and only a log line to
-            # explain it.
+            # dashboards tree is WHAT it finds there. Dropping any of them
+            # yields a Grafana missing that subsystem with only a log line
+            # to explain it.
             - name: provisioning-datasources
               mountPath: /etc/grafana/provisioning/datasources
               readOnly: true
             - name: provisioning-dashboards
               mountPath: /etc/grafana/provisioning/dashboards
+              readOnly: true
+            - name: provisioning-alerting
+              mountPath: /etc/grafana/provisioning/alerting
               readOnly: true
             - name: dashboards
               mountPath: /etc/grafana/dashboards
@@ -175,6 +195,9 @@ spec:
         - name: provisioning-dashboards
           configMap:
             name: grafana-provisioning-dashboards
+        - name: provisioning-alerting
+          configMap:
+            name: grafana-provisioning-alerting
         - name: dashboards
           configMap:
             name: grafana-dashboards
