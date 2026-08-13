@@ -5,44 +5,30 @@
 # /home/chase/Downloads/pantry-bot/docker-compose.prod.yml
 #
 # -----------------------------------------------------------------------------
-# MUST-PRESERVE: the auto-update pipeline
+# DEPLOY PIPELINE (k8s-homelab-oiv, cut over 2026-08-13)
 # -----------------------------------------------------------------------------
-# Today: CI pushes to main -> GitHub Actions publishes ghcr.io/chayzx/pantry-bot
-# :latest -> Watchtower polls every 300s -> container restarted on new digest.
-# End-to-end latency ~5 minutes, unattended.
+# CI pushes to main -> GitHub Actions publishes ghcr.io/chayzx/pantry-bot:latest
+# (publish.yml, automatic) -> a human clicks "Run workflow" on deploy.yml,
+# which reaches this cluster's private API through a dedicated Cloudflare
+# Tunnel + Access route (../k8s-homelab/ci-tunnel/) and runs `kubectl set
+# image` + `rollout restart` + `rollout status`, with `rollout undo` on
+# failure. Manual-click by design -- GitHub's paid-only "required reviewers"
+# environment protection isn't available on this private repo's free plan,
+# so a workflow_dispatch-only deploy workflow is the substitute: build
+# feedback stays automatic, nothing touches the cluster unattended.
 #
-# The three keel.sh annotations below reproduce exactly that. They are the
-# reason the `keel` namespace exists at all. Losing them silently converts this
-# into a manual-deploy service and nobody notices until a fix does not ship.
-#
-#   keel.sh/policy: force        -> redeploy when the DIGEST behind the current
-#                                   tag changes, even though the tag string
-#                                   (`latest`) is unchanged. `major`/`minor`/
-#                                   `patch` are semver policies and would never
-#                                   fire on a mutable tag.
-#   keel.sh/trigger: poll        -> poll the registry. The alternative (webhook)
-#                                   would need an inbound route from GitHub into
-#                                   this LAN; poll needs nothing inbound.
-#   keel.sh/pollSchedule: @every 5m -> matches Watchtower's `--interval 300`.
-#
-# The annotations MUST be on the Deployment's own metadata (here), not on the
-# pod template. Keel reads deployment-level annotations.
-#
-# Optional hardening, deliberately left off: `keel.sh/matchTag: "true"` makes
-# Keel only consider the exact tag `latest` rather than any tag on the repo.
-# Add it if CI ever starts publishing additional tags to the same package.
+# Previously Keel (poll-based, fully automatic, `keel.sh/*` annotations here)
+# filled this role -- retired after a real incident (k8s-homelab-9nb: Keel's
+# separate registry credential silently expired, deploys stopped for a full
+# day with zero alerting) exposed its main weakness: a background process
+# whose failure nobody watches. Manual-click means whoever deploys directly
+# sees the GitHub Actions result in real time. `keel` namespace/manifests
+# removed from this repo; see k8s-homelab-oiv.6.
 #
 # -----------------------------------------------------------------------------
-# TWO SEPARATE CREDENTIALS ARE INVOLVED. THIS IS THE #1 FAILURE MODE.
-# -----------------------------------------------------------------------------
-#   * `imagePullSecrets: ghcr-pull-secret` (below) is used by the KUBELET to
-#     PULL the image. Without it: ImagePullBackOff.
-#   * Keel needs its OWN credentials to QUERY the GHCR registry API for the
-#     current digest. Without them: the pod runs fine and Keel silently never
-#     updates it — no error, no alert, just a pipeline that quietly stopped.
-# Both are required. Both live in THIS namespace. See ../keel/SECRETS.md.
-# ghcr.io/chayzx/pantry-bot is private (verified: anonymous manifest fetch
-# returns HTTP 403), so neither can be skipped.
+# `imagePullSecrets: ghcr-pull-secret` (below) is used by the KUBELET to PULL
+# the image. Without it: ImagePullBackOff. ghcr.io/chayzx/pantry-bot is
+# private (verified: anonymous manifest fetch returns HTTP 403).
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -53,17 +39,11 @@ metadata:
     app.kubernetes.io/name: pantry-bot
     app.kubernetes.io/part-of: homelab
     app.kubernetes.io/component: bot
-  annotations:
-    keel.sh/policy: force
-    keel.sh/trigger: poll
-    keel.sh/pollSchedule: "@every 5m"
 spec:
   replicas: 1
   # Recreate: RWO PVC holding a live SQLite database in WAL mode. A rolling
   # update would overlap two writers on one DB file — the exact corruption
-  # hazard the migration plan calls out. Also note Keel's `force` policy
-  # triggers a rollout on every new digest, so this path runs unattended
-  # several times a week; it has to be the safe one.
+  # hazard the migration plan calls out.
   strategy:
     type: Recreate
   selector:
