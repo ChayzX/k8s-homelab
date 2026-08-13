@@ -29,9 +29,16 @@ import time
 from util import BOT_LABELS, bug_template, report_title
 
 BD_BIN = os.environ.get("BD_BIN", "bd")
-# subprocess timeout: creates take ~5-8s on the host; 90s leaves huge margin
-# even while the host's bd is mid-write.
-_CREATE_TIMEOUT = 90
+# Per-attempt subprocess timeout. Originally 90s on the theory that lock
+# contention fails fast with "exclusive lock" in stderr (the retryable path
+# below) -- wrong in practice: a live collision with the host's `bd` (which
+# runs against this same .beads/ dir constantly) can make `bd create` BLOCK
+# on the lock instead of erroring, so the first live /report timed out and
+# gave up with zero retries (TimeoutExpired used to raise immediately,
+# skipping the retry loop entirely -- fixed below). 20s per attempt, across
+# up to _MAX_ATTEMPTS, catches a genuine hang far faster while still giving
+# the host's write a real window to finish.
+_CREATE_TIMEOUT = 20
 _LOCK_SUBSTR = "exclusive lock"
 _MAX_ATTEMPTS = 4
 _BACKOFF_SECONDS = (5, 10, 20)
@@ -100,8 +107,13 @@ def create_report(
                 timeout=_CREATE_TIMEOUT,
                 check=False,
             )
-        except subprocess.TimeoutExpired as e:
-            raise ReportError(f"`bd create` timed out after {_CREATE_TIMEOUT}s: {e}") from e
+        except subprocess.TimeoutExpired:
+            # Treat a hang the same as fail-fast lock contention: retryable,
+            # not an immediate give-up. A hang while the host holds the
+            # write lock is the expected failure mode here, not the
+            # exception -- see _CREATE_TIMEOUT's comment.
+            last_err = f"`bd create` timed out after {_CREATE_TIMEOUT}s (attempt {attempt + 1}/{_MAX_ATTEMPTS})"
+            continue
         except FileNotFoundError as e:
             raise ReportError(f"`{BD_BIN}` is not installed in this image (see Dockerfile)") from e
 

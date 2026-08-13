@@ -307,6 +307,7 @@ async def report(interaction: discord.Interaction, bot: str, what: str) -> None:
         _audit(interaction, True, result=f"error: {e}")
         return
     await _reply(
+        interaction,
         f"Bug filed on the {util.BOT_LABELS[bot]} board: `{issue_id}` "
         f"(reported by {interaction.user})"
     )
