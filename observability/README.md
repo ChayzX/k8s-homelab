@@ -19,7 +19,7 @@ Node LAN IP: `192.168.40.208`. StorageClass: `local-path`.
 | `prometheus.yaml` | Prometheus SA, ClusterRole/Binding (API access for `kubernetes_sd_configs`), PVC (20Gi), Deployment, ClusterIP Service (9090). |
 | `prometheus-config.yaml` | ConfigMap: Prometheus' `prometheus.yml`, rewritten scrape config. |
 | `grafana.yaml` | Grafana SA, PVC (2Gi), Deployment, primary `LoadBalancer` Service (3002). |
-| `grafana-provisioning.yaml` | ConfigMaps: `grafana-provisioning-datasources`, `grafana-provisioning-dashboards`, and a placeholder `grafana-dashboards`. **See "Grafana dashboard ConfigMap" below before applying.** |
+| `grafana-provisioning.yaml` | ConfigMaps: `grafana-provisioning-datasources`, `grafana-provisioning-dashboards`, `grafana-provisioning-alerting`, and a placeholder `grafana-dashboards`. **See "Grafana dashboard ConfigMap" below before applying.** |
 | `grafana-verify-nodeport.yaml` | **Verification only.** NodePort 30002. |
 | `uptime-kuma.yaml` | uptime-kuma SA, PVC (2Gi), Deployment, primary `LoadBalancer` Service (3001). |
 | `uptime-kuma-verify-nodeport.yaml` | **Verification only.** NodePort 30001. |
@@ -40,14 +40,15 @@ explicit about the split, since it's easy to end up with two conflicting
 `provisioning/datasources` or `provisioning/dashboards` ConfigMaps:
 
 - **This directory (`observability/`) owns the *provisioning*
-  ConfigMaps** -- `grafana-provisioning-datasources` and
-  `grafana-provisioning-dashboards`, both defined in
-  `grafana-provisioning.yaml`. These are mounted by `grafana.yaml` at
-  `/etc/grafana/provisioning/{datasources,dashboards}`. This is the
+  ConfigMaps** -- `grafana-provisioning-datasources`,
+  `grafana-provisioning-dashboards`, and `grafana-provisioning-alerting`,
+  all defined in `grafana-provisioning.yaml`. These are mounted by
+  `grafana.yaml` at
+  `/etc/grafana/provisioning/{datasources,dashboards,alerting}`. This is the
   wiring the migration plan calls out explicitly (rev. 2, "Grafana
   manifest dropped the `dashboards` mount that the provisioning config
   references") -- getting it wrong yields a Grafana with zero
-  dashboards and no obvious error, so treat these two ConfigMaps as
+  dashboards and no obvious error, so treat these ConfigMaps as
   authoritative and don't duplicate them elsewhere.
 
 - **A separate agent, writing into `/home/chase/k8s-homelab/dashboards/`,
@@ -109,6 +110,11 @@ kubectl apply -f promtail-config.yaml
 # copy+chown before apply to avoid the noise.
 kubectl apply -f loki.yaml
 kubectl apply -f prometheus.yaml
+
+# grafana.yaml REQUIRES the grafana-discord-webhooks Secret to exist first
+# (see SECRETS.md in this directory) -- the alerting contact point env var
+# is a required secretKeyRef. Without it the pod sits in
+# CreateContainerConfigError.
 kubectl apply -f grafana.yaml
 kubectl apply -f uptime-kuma.yaml
 
@@ -122,6 +128,47 @@ block that is safe to apply any time, plus a **primary Service** on the
 real port (3002 / 3001) that will sit `EXTERNAL-IP <pending>` until the
 matching old Docker container is stopped -- see "Verification-only
 files" below for the actual cutover sequence for those two ports.
+
+## Pantry-bot / Twitch alerting to a Discord DM
+
+`grafana-provisioning.yaml` carries a `grafana-provisioning-alerting`
+ConfigMap (mounted by `grafana.yaml` at
+`/etc/grafana/provisioning/alerting`) that provisions:
+
+- a **Discord contact point** (`discord-pantry-twitch-dm`) whose webhook URL
+  is interpolated from the `PANTY_TWITCH_DISCORD_WEBHOOK_URL` env var (never
+  committed here) and whose message pings `<@204282471506771971>`;
+- a **notification policy** that routes pantry-bot/Twitch alert rules to that
+  contact point **in addition to** the existing root receiver
+  (`continue: true`), matching rules either in a `pantry-bot`/`twitch`-named
+  folder (the `grafana_folder` label) or carrying an `app` label matching
+  `pantry-bot|pantry|twitch`.
+
+Facts that shape how you use this:
+
+- **Grafana ships no alert rules today.** The live grafana.db (inspected
+  2026-08-12) has zero alert rules and only the stock placeholder contact
+  point (`grafana-default-email`). There were no Twitch rules to reproduce,
+  so the provisioning file deliberately provisions no rules. Create rules in
+  the UI and keep them in a pantry-bot/Twitch folder (or add an
+  `app="pantry-bot"` label) and this policy DMs 204282471506771971.
+- **The current Pantry Twitch-bot alerts come from elsewhere.** The host
+  `k3s-watcher` systemd service
+  (`/home/chase/.config/systemd/user/k3s-watcher.service` →
+  `/home/chase/docker/observability/monitoring/k3s-watcher/watcher.py`)
+  polls Loki and DMs log-error/restart-loop alerts to user
+  `929216447723499562`. It is untouched by this change, so the existing
+  recipient keeps receiving alerts; Grafana is the *additional* channel to
+  `204282471506771971`. Do not expect this provisioning to make Grafana
+  duplicate k3s-watcher's messages.
+- **Restart required to apply changes.** Alerting provisioning is read once
+  at Grafana startup, not watched. After changing either this provisioning
+  file or the `grafana-discord-webhooks` Secret, `kubectl -n observability
+  rollout restart deploy/grafana`.
+- **Policy tree is replaced wholesale.** The `policies` block in
+  `alerting.yaml` is the complete tree; any policy you later create in the UI
+  is overwritten at the next Grafana restart. Keep editing the provisioning
+  file, not the UI.
 
 ## Verification-only files -- when to apply, when to delete
 

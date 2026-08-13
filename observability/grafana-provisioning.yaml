@@ -1,6 +1,6 @@
 # Grafana provisioning ConfigMaps.
 #
-# WHY TWO ConfigMaps AND NOT ONE: Grafana expects
+# WHY ONE ConfigMap PER SUBDIRECTORY AND NOT ONE BIG ONE: Grafana expects
 # /etc/grafana/provisioning/{datasources,dashboards,plugins,alerting}/ as
 # real subdirectories. ConfigMap keys cannot contain "/", so a single
 # ConfigMap mounted at /etc/grafana/provisioning can only produce flat
@@ -9,7 +9,13 @@
 # subdirectory from its own ConfigMap gives the right tree AND leaves the
 # image's other provisioning subdirectories intact.
 #
-# The DASHBOARD JSON itself is NOT here. It lives in a third ConfigMap
+# The alerting ConfigMap (grafana-provisioning-alerting) below is mounted
+# by grafana.yaml at /etc/grafana/provisioning/alerting. Alerting
+# provisioning files are read ONCE, at Grafana startup -- they are not
+# watched. See SECRETS.md in this directory for the Discord webhook Secret
+# that the alerting file references by env var.
+#
+# The DASHBOARD JSON itself is NOT here. It lives in a separate ConfigMap
 # named `grafana-dashboards`, generated from
 # /home/chase/k8s-homelab/dashboards/ by a separate agent, and is mounted
 # at /etc/grafana/dashboards -- the path the provider below points at.
@@ -80,6 +86,114 @@ data:
         # lose work.
         allowUiUpdates: false
         disableDeletion: true
+---
+# Grafana Alerting provisioning -- Pantry-bot / Twitch-bot alerts to a
+# Discord DM.
+#
+# Mounted by grafana.yaml at /etc/grafana/provisioning/alerting. Read ONCE
+# at Grafana startup (not watched): after changing this file you must
+# restart the grafana pod for it to take effect.
+#
+# What this delivers, and what it deliberately does NOT:
+#   * A Discord contact point whose webhook posts where user
+#     204282471506771971 can be pinged. The webhook URL is NOT in this
+#     repo -- it is injected from the PANTY_TWITCH_DISCORD_WEBHOOK_URL env
+#     var (Grafana interpolates $VAR in provisioning settings from the
+#     process environment; grafana.yaml sources that var from the
+#     grafana-discord-webhooks Secret). See SECRETS.md in this directory.
+#   * A notification policy that routes pantry-bot/Twitch alert rules to
+#     that contact point IN ADDITION to the existing root receiver
+#     (continue: true), matched on the grafana_folder label (rules kept in
+#     a "pantry-bot"/"twitch"-named folder) or on an app label.
+#   * NO alert rules. Grafana 11.4's DB (grafana.db, inspected 2026-08-12)
+#     contains zero alert rules -- there were no Twitch rules to reproduce,
+#     so none are shipped here. Create your rules in the UI and put them in
+#     a pantry-bot/Twitch folder (or add an app=~"pantry-bot" label); this
+#     policy then DMs 204282471506771971 in addition to the default
+#     receiver. Provisioned rules would go under the `groups:` top-level
+#     key if this ever grows rules -- do not invent a top-level key.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-provisioning-alerting
+  namespace: observability
+  labels:
+    app: grafana
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: observability
+data:
+  alerting.yaml: |
+    # Grafana Alerting provisioning -- apiVersion 1 (see
+    # pkg/services/provisioning/alerting in the Grafana source).
+    apiVersion: 1
+
+    # Pantry-bot / Twitch-bot Discord contact point.
+    #
+    # The webhook URL is interpolated from the process environment at
+    # provisioning-read time (os.ExpandEnv, so the value in this file is a
+    # $VAR reference, never a real URL). If the env var is missing, the
+    # expansion is empty and Grafana's provisioning validation fails the
+    # contact point -- which is why grafana.yaml wires this env var to a
+    # REQUIRED secretKeyRef (fail-loud CreateContainerConfigError, never a
+    # silently-broken webhook). See SECRETS.md in this directory.
+    contactPoints:
+      - orgId: 1
+        name: discord-pantry-twitch-dm
+        receivers:
+          - uid: discord-pantry-twitch-dm
+            type: discord
+            disableResolveMessage: false
+            settings:
+              # PLACEHOLDER -- resolved from the environment, not stored here.
+              url: $PANTY_TWITCH_DISCORD_WEBHOOK_URL
+              # Discord webhooks post into the channel they were created in,
+              # so to reach user 204282471506771971 the webhook should be
+              # created in a channel or DM that user is in, and this mention
+              # is what pings them there. use_embed_description stays unset
+              # (false) on purpose: Discord only pings for mentions in the
+              # main message content, not inside embeds.
+              message: '<@204282471506771971> {{ template "default.message" . }}'
+
+    # Notification policy tree.
+    #
+    # WARNING: provisioning REPLACES the whole policy tree on startup, and
+    # each top-level `policies` entry is a full tree (the last one applied
+    # wins). So this file carries the COMPLETE tree: the root below
+    # reproduces the pre-existing default (receiver grafana-default-email,
+    # group_by [grafana_folder, alertname] -- confirmed from the live
+    # grafana.db) and the nested routes are what this file actually adds.
+    # Do not add a second top-level `policies` entry here.
+    #
+    # `continue: true` on each pantry/Twitch route is the "IN ADDITION to
+    # the existing recipient" behaviour the card asks for: matched alerts
+    # go to the Discord DM contact point AND continue up to the root
+    # receiver.
+    policies:
+      - orgId: 1
+        receiver: grafana-default-email
+        group_by:
+          - grafana_folder
+          - alertname
+        routes:
+          # Rules placed in a folder whose name matches pantry-bot / twitch
+          # (Grafana labels every alert with the folder name as
+          # grafana_folder).
+          - receiver: discord-pantry-twitch-dm
+            group_by:
+              - grafana_folder
+              - alertname
+            object_matchers:
+              - [grafana_folder, =~, "pantry-bot|pantry|twitch"]
+            continue: true
+          # Rules carrying an explicit app label (e.g. app="pantry-bot",
+          # app="twitch") instead of a matching folder name.
+          - receiver: discord-pantry-twitch-dm
+            group_by:
+              - grafana_folder
+              - alertname
+            object_matchers:
+              - [app, =~, "pantry-bot|pantry|twitch"]
+            continue: true
 ---
 # Placeholder so `kubectl apply -k`/`kubectl apply -f .` of this
 # directory produces a working Grafana even before the dashboards agent
