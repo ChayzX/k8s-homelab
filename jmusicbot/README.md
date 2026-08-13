@@ -5,9 +5,11 @@ Migrates `/home/chase/docker/jmusicbot/docker-compose.yml` (2 services) to k3s.
 | Compose service    | k8s object                              | State |
 |--------------------|-----------------------------------------|-------|
 | `jmusicbot`        | Deployment `jmusicbot`                  | PVC `jmusicbot-config` (1Gi) at `/musicbot` |
+| `jmusicbot` (health) | Service `jmusicbot-health`            | ClusterIP :9091, in-cluster only — Uptime Kuma + probe target |
 | `release-notifier` | Deployment `jmusicbot-release-notifier` | PVC `jmusicbot-notifier-data` (256Mi) at `/data` |
 
-Neither workload publishes a port and neither talks to the Kubernetes API.
+Only the health endpoint (see "Design notes") is exposed, and only in-cluster
+via the ClusterIP Service; neither workload talks to the Kubernetes API.
 
 ---
 
@@ -28,6 +30,7 @@ kubectl apply -f 30-pvcs.yaml
 # 3. workloads — notifier FIRST (per the migration plan, Phase 2)
 kubectl apply -f 50-deployment-release-notifier.yaml
 kubectl apply -f 40-deployment-jmusicbot.yaml
+kubectl apply -f 45-service-health.yaml   # health endpoint for probes + Kuma
 ```
 
 Or, once the secrets exist: `kubectl apply -f .` (filenames are ordered, but
@@ -124,6 +127,43 @@ so the cutover does not silently keep deploying to a dead Compose stack.
 
 Deliberate. It has its own pipeline (see C). Keel is scoped to pantry-bot only.
 
+### E. Health endpoint — build + deploy the `-health1` image
+
+The Deployment's probes and the `jmusicbot-health` Service target port **9091**,
+which only the health-patched image listens on (bd k8s-homelab-aos). A stock
+image has no listener there and the pod would sit NotReady forever, so build the
+patched image **before** applying the manifest.
+
+```bash
+# Option 1 — production path: auto-update.sh re-clones upstream MusicBot,
+# applies scripts/patches/jmusicbot-health-endpoint.patch (plus the voice-chat
+# patch), builds, imports into containerd, and `kubectl set image`s the new tag.
+# The build tree's state file lacks the "health1" marker, so one run rebuilds now:
+cd /home/chase/k8s-homelab/scripts && ./auto-update.sh
+
+# Option 2 — one-time manual build from the already-patched build tree:
+cd /home/chase/docker/jmusicbot/custom-build
+docker build -t jmusicbot-custom:v0.7.0-yts1.18.2-voicechat1-health1 .
+
+# Then (or auto-update.sh does the first two of these for you):
+docker save jmusicbot-custom:v0.7.0-yts1.18.2-voicechat1-health1 | sudo k3s ctr images import -
+kubectl -n jmusicbot apply -f 40-deployment-jmusicbot.yaml
+kubectl -n jmusicbot apply -f 45-service-health.yaml
+kubectl -n jmusicbot rollout status deployment/jmusicbot --timeout=180s
+```
+
+Verify from inside the cluster:
+
+```bash
+kubectl -n jmusicbot run --rm -it --restart=Never curl-health --image curlimages/curl \
+  -- curl -s -o /dev/null -w '%{http_code}\n' \
+     http://jmusicbot-health.jmusicbot.svc.cluster.local:9091/health
+```
+
+Expect `200` once the bot is logged in (until then it's `503`). Then point the
+Uptime Kuma "Discord Music Bot" monitor (k8s-homelab-6ba) at that URL — `200` is
+UP, `503` is still starting, connection-refused is DOWN.
+
 ---
 
 ## Verification
@@ -185,11 +225,37 @@ with the secret mounted at `/src` instead of over `/musicbot/config.txt`. Note
 the trade-off: `cp -n` means the Secret then seeds the file only once and later
 Secret edits are ignored until you delete the PVC copy.
 
-**Why no liveness probe on either pod.** Neither exposes a health endpoint or a
-listening socket. A `tcpSocket`/`httpGet` probe would have nothing to target,
-and an `exec` probe checking "is the process alive" is redundant — if the
-process dies the container exits and the kubelet restarts it. Inventing a probe
-here would only create new ways to kill a healthy pod.
+**Why the health endpoint exists (bd k8s-homelab-aos).** jmusicbot exposes no
+port and no HTTP listener of its own, so after the k3s migration the Uptime Kuma
+"Discord Music Bot" monitor (which polled `/var/run/docker.sock`) had nothing to
+check. The patched image runs a JDK-built-in `com.sun.net.httpserver.HttpServer`
+— no new Maven dependency; the image's jlink runtime gains the `jdk.httpserver`
+module (see the Dockerfile) — on port **9091** inside the JVM:
+
+| Route | Response |
+|-------|----------|
+| `GET /health` (alias `/healthz`) | `200 {"status":"ok"}` once logged into Discord, else `503 {"status":"starting"}` |
+| `GET /live` | `200 {"status":"alive"}` whenever the JVM is alive |
+
+The ready signal is tied to the bot's real lifecycle: the server starts in
+`JMusicBot.startBot()` before login, and the flag flips in
+`StartupLifecycleListener.onReady()` when the Discord `ReadyEvent` fires.
+
+**Why readiness probes `/health` but liveness probes `/live`.** The readiness
+probe must fail while the bot is starting or cannot log in — that is the state
+Uptime Kuma should report as down, and it keeps endpoints (and traffic) off a
+half-alive pod. Liveness deliberately does *not* hit `/health`: a Discord auth
+or connectivity failure would then make the kubelet restart the pod in a loop,
+but JMusicBot already retries its own login. Liveness only needs to catch a
+wedged/dead process, which `/live` does. This replaces the earlier "no liveness
+probe" reasoning — the original reason was simply that there was no endpoint or
+socket to target, not a principled choice.
+
+The endpoint is wired into the rebuild pipeline exactly like the voice-chat fix:
+`scripts/patches/jmusicbot-health-endpoint.patch`, gate
+`HEALTH_ENDPOINT_RELEASED` in `scripts/auto-update.sh`, image suffix `-health1`
+(see section E). It is exposed in-cluster via the `jmusicbot-health` ClusterIP
+Service, which is what Uptime Kuma and the probes target.
 
 **Why `Recreate` on a stateless-looking notifier.** Its PVC is RWO and holds the
 "last announced release" marker. Two overlapping pods during a rolling update

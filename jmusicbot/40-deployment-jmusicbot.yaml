@@ -28,6 +28,13 @@
 #        docker save <tag> | sudo k3s ctr images import -
 #        kubectl -n jmusicbot set image deployment/jmusicbot jmusicbot=<tag>
 #    NOT `kubectl rollout restart` — the image reference itself must change.
+#
+# 4. The health probes below depend on the health-endpoint patch (bd
+#    k8s-homelab-aos, scripts/patches/jmusicbot-health-endpoint.patch). Only the
+#    patched image listens on port 9091; a stock ghcr.io image has no listener
+#    there and would sit NotReady forever. The image tag below is the expected
+#    post-rebuild tag — build it (README section "Health endpoint") BEFORE
+#    applying this manifest, or the pod will ErrImagePull.
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -79,10 +86,42 @@ spec:
         - name: jmusicbot
           # Locally built, side-loaded image. Update this tag via
           # `kubectl set image` from auto-update.sh — see header note 3.
-          image: jmusicbot-custom:v0.7.0-yts1.18.2-voicechat1
+          # The -health1 suffix marks the build that carries the health
+          # endpoint (bd k8s-homelab-aos); see header note 4.
+          image: jmusicbot-custom:v0.7.0-yts1.18.2-voicechat1-health1
           imagePullPolicy: IfNotPresent  # see header note 1 — do not change
-          # No ports. The bot is an outbound Discord gateway client; the Compose
-          # service published nothing and neither does this.
+          # Health endpoint (bd k8s-homelab-aos): a JDK-built-in HttpServer on
+          # 9091 in the patched image. /health returns 200 only after the bot
+          # has logged into Discord; /live returns 200 whenever the JVM is
+          # alive. Named port so the probes and the Service can reference it.
+          ports:
+            - name: health
+              containerPort: 9091
+              protocol: TCP
+          # Readiness: GET /health — 503 while the bot is still starting or
+          # can't log in, 200 once StartupLifecycleListener sees the Discord
+          # ReadyEvent. While 503 the pod stays NotReady (no Service endpoints,
+          # Kuma sees the monitor as down).
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Liveness: GET /live — 200 whenever the JVM is alive. Deliberately
+          # NOT /health: a Discord auth/connect failure or a slow login must
+          # not make the kubelet restart the pod (JMusicBot retries the login
+          # itself). The liveness probe only catches a wedged/dead process.
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: health
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
           resources:
             requests:
               cpu: 500m

@@ -163,6 +163,33 @@ WEBHOOK_URL="$(grep -oP '(?<=DISCORD_RELEASE_WEBHOOK_URL=).*' "$DIR/.env" || tru
 VOICE_CHAT_FIX_RELEASED="${VOICE_CHAT_FIX_RELEASED:-0}"
 VOICE_CHAT_PATCH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/patches/voice-channel-text-chat.patch"
 
+# --- Health HTTP endpoint (bd issue k8s-homelab-aos) ---
+#
+# jmusicbot has no HTTP listener of its own, so nothing (the kubelet, Uptime
+# Kuma) can check whether it's up -- that's what killed the 'Discord Music Bot'
+# Kuma monitor after the k3s migration. scripts/patches/jmusicbot-health-endpoint.patch
+# adds a JDK-built-in com.sun.net.httpserver.HttpServer on port 9091 serving
+# GET /health (200 once logged into Discord, else 503) and GET /live (200 while
+# the JVM is alive), wired into the build via the same patch mechanism as the
+# voice-chat fix.
+#
+# Unlike the voice-chat fix there is no realistic chance upstream ever ships a
+# homelab-specific health endpoint, so there is no "upstream fixed it" version
+# to poll for. Instead this patch is REQUIRED to apply: a build that silently
+# drops the endpoint would make the readiness probe fail forever and kill the
+# Kuma monitor this endpoint exists for. HEALTH_ENDPOINT_RELEASED is a manual,
+# human-flipped gate for the day the endpoint is genuinely no longer wanted --
+# flip it to 1 ONLY after the health probes and the jmusicbot-health Service
+# have been removed from the manifests.
+#
+# Step 1 (the "upstream fixed the youtube-source bug, switch back to stock +
+# hand off to Keel, self-uninstall" path) ALSO requires HEALTH_ENDPOINT_RELEASED=1:
+# the stock image has no health endpoint, and switching to it while the
+# readiness probe is still in the manifest would leave the pod permanently
+# NotReady.
+HEALTH_ENDPOINT_RELEASED="${HEALTH_ENDPOINT_RELEASED:-0}"
+HEALTH_PATCH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/patches/jmusicbot-health-endpoint.patch"
+
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
 notify() {
@@ -366,7 +393,7 @@ add_keel_annotations_to_manifest() {
     grep -q 'keel\.sh/policy' "$file"
 }
 
-if dpkg --compare-versions "$upstream_yts_version" ge "$FIX_VERSION" && [ "$VOICE_CHAT_FIX_RELEASED" = "1" ]; then
+if dpkg --compare-versions "$upstream_yts_version" ge "$FIX_VERSION" && [ "$VOICE_CHAT_FIX_RELEASED" = "1" ] && [ "$HEALTH_ENDPOINT_RELEASED" = "1" ]; then
     if grep -q "image: jmusicbot-custom:" "$MANIFEST"; then
         log "Upstream now bundles youtube-source ${upstream_yts_version} (>= ${FIX_VERSION}). Switching back to the stock image."
 
@@ -432,6 +459,7 @@ fi
 
 desired_state="${latest_musicbot_tag} ${latest_yts_tag}"
 [ "$VOICE_CHAT_FIX_RELEASED" != "1" ] && [ -f "$VOICE_CHAT_PATCH" ] && desired_state="${desired_state} voicechat1"
+[ "$HEALTH_ENDPOINT_RELEASED" != "1" ] && [ -f "$HEALTH_PATCH" ] && desired_state="${desired_state} health1"
 current_state="$(cat "$STATE_FILE" 2>/dev/null || echo "")"
 
 if [ "$desired_state" = "$current_state" ]; then
@@ -477,11 +505,29 @@ if [ "$VOICE_CHAT_FIX_RELEASED" != "1" ]; then
     fi
 fi
 
+# Apply the health-endpoint patch (bd k8s-homelab-aos). FAIL-HARD by design,
+# unlike the voice-chat patch above: upstream will never ship this, so a patch
+# that stops applying means the tree moved under us and a build without the
+# endpoint would break the readiness probe (and the Kuma monitor this endpoint
+# exists for). Refusing to build keeps the last known-good image deployed.
+health_patch_applied=0
+if [ "$HEALTH_ENDPOINT_RELEASED" != "1" ]; then
+    if [ ! -f "$HEALTH_PATCH" ]; then
+        die "HEALTH_ENDPOINT_RELEASED=0 but ${HEALTH_PATCH} is missing. Refusing to build an image without the health endpoint (bd k8s-homelab-aos) -- restore the patch file, or set HEALTH_ENDPOINT_RELEASED=1 once the health probes/Service are removed."
+    fi
+    if ! git -C "$TMP_BUILD" apply "$HEALTH_PATCH" >/tmp/jmusicbot-health-patch-check.log 2>&1; then
+        die "HEALTH_ENDPOINT_RELEASED=0 but ${HEALTH_PATCH} failed to apply to MusicBot ${latest_musicbot_tag}. Refusing to build an image without the health endpoint (bd k8s-homelab-aos). See /tmp/jmusicbot-health-patch-check.log -- refresh the patch, or set HEALTH_ENDPOINT_RELEASED=1 once the health probes/Service are removed."
+    fi
+    health_patch_applied=1
+    log "Applied health-endpoint patch (bd k8s-homelab-aos): GET /health + /live on port 9091."
+fi
+
 yts_version_num="${latest_yts_tag#v}"
 sed -i "s|<youtube-source.version>.*</youtube-source.version>|<youtube-source.version>${yts_version_num}</youtube-source.version>|" "$TMP_BUILD/pom.xml"
 
 image_tag="jmusicbot-custom:${latest_musicbot_tag}-yts${yts_version_num}"
 [ "$voice_chat_patch_applied" = "1" ] && image_tag="${image_tag}-voicechat1"
+[ "$health_patch_applied" = "1" ] && image_tag="${image_tag}-health1"
 
 if ! DOCKER_BUILDKIT=1 docker build -t "$image_tag" "$TMP_BUILD" >/tmp/jmusicbot-auto-update-build.log 2>&1; then
     notify "FAILED to build ${image_tag} (MusicBot ${latest_musicbot_tag} + youtube-source ${yts_version_num}). Left the running pod untouched. See /tmp/jmusicbot-auto-update-build.log on the host."
@@ -546,6 +592,7 @@ commit_manifest "jmusicbot: ${image_tag}
 
 MusicBot ${latest_musicbot_tag} + youtube-source ${yts_version_num} (upstream still pins ${upstream_yts_version}).
 Voice-channel text-chat fix (bd k8s-homelab-4lj) applied: ${voice_chat_patch_applied}.
+Health endpoint (bd k8s-homelab-aos) applied: ${health_patch_applied}.
 Committed automatically by scripts/auto-update.sh."
 
 # --- Step 5: prune old builds from BOTH image stores ---
@@ -566,7 +613,9 @@ echo "$desired_state" > "$STATE_FILE"
 
 voice_chat_note="voice-channel-chat fix: NOT applied this run (see the WARN above -- check https://github.com/arif-banai/MusicBot/issues/73)."
 [ "$voice_chat_patch_applied" = "1" ] && voice_chat_note="voice-channel-chat fix (bd k8s-homelab-4lj) applied."
-notify "Rebuilt and redeployed: MusicBot ${latest_musicbot_tag} + youtube-source ${yts_version_num} (image \`${image_tag}\`, rolled out to deployment/${DEPLOYMENT} in \`${NAMESPACE}\`). Still running the patched build -- upstream MusicBot pom.xml still pins youtube-source ${upstream_yts_version}, below the ${FIX_VERSION} fix. ${voice_chat_note}"
+health_note="health endpoint (bd k8s-homelab-aos): NOT applied this run (see the ERROR above)."
+[ "$health_patch_applied" = "1" ] && health_note="health endpoint (bd k8s-homelab-aos) applied: /health + /live on port 9091."
+notify "Rebuilt and redeployed: MusicBot ${latest_musicbot_tag} + youtube-source ${yts_version_num} (image \`${image_tag}\`, rolled out to deployment/${DEPLOYMENT} in \`${NAMESPACE}\`). Still running the patched build -- upstream MusicBot pom.xml still pins youtube-source ${upstream_yts_version}, below the ${FIX_VERSION} fix. ${voice_chat_note} ${health_note}"
 
 # ---------------------------------------------------------------------------
 # crontab line (user crontab, `crontab -e`) -- unchanged from the Compose era
