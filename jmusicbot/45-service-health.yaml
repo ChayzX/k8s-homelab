@@ -1,0 +1,35 @@
+# ClusterIP Service exposing jmusicbot's health endpoint (bd k8s-homelab-aos).
+#
+# jmusicbot has no HTTP listener of its own and publishes nothing to the host,
+# so nothing on the network could check whether it was alive -- that is why the
+# 'Discord Music Bot' Uptime Kuma monitor (k8s-homelab-6ba) went dead after the
+# k3s migration. The patched image (see scripts/patches/jmusicbot-health-endpoint.patch)
+# runs a JDK-built-in HttpServer on port 9091 inside the pod; this Service makes
+# it reachable in-cluster without exposing anything to the node or the outside:
+#
+#     http://jmusicbot-health.jmusicbot.svc.cluster.local:9091/health
+#     http://jmusicbot-health.jmusicbot.svc.cluster.local:9091/live
+#
+# Endpoints only exist while the pod is Ready (readiness probe -> /health), so
+# Uptime Kuma and any other in-cluster consumer see a real down signal when the
+# bot is NotReady or dead. Keep port, name, and selector in sync with
+# 40-deployment-jmusicbot.yaml (containerPort 9091, named "health").
+#
+# ClusterIP, not NodePort/LoadBalancer: health-checking is an internal concern.
+apiVersion: v1
+kind: Service
+metadata:
+  name: jmusicbot-health
+  namespace: jmusicbot
+  labels:
+    app.kubernetes.io/name: jmusicbot
+    app.kubernetes.io/part-of: homelab
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: jmusicbot
+  ports:
+    - name: health
+      port: 9091
+      targetPort: health
+      protocol: TCP
