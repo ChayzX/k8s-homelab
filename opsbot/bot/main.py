@@ -20,6 +20,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+import bd_ops
 import k8s_ops
 import util
 
@@ -54,10 +55,19 @@ class OpsBotTree(app_commands.CommandTree):
     This is the ONE place the allowlist check lives -- a guard here covers
     every command, present and future, instead of relying on each handler
     to remember to call it (bi6.5's actual requirement: no command may run
-    without this check)."""
+    without this check).
+
+    The single exception is `/report` (k8s-homelab-cq8): the whole point is
+    server members filing bugs, not just the owner, so when
+    REPORT_OPEN_ACCESS is set the command skips the allowlist check. It is
+    still audited here like everything else, and the reporter's Discord
+    identity is baked into the bead (bd_ops.py) -- open access is not
+    anonymity. The Kubernetes-touching commands stay allowlist-gated."""
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        authorized = util.is_authorized(interaction.user.id, ALLOWLIST)
+        command = interaction.command.qualified_name if interaction.command else ""
+        open_report = command == "report" and util.REPORT_OPEN_ACCESS
+        authorized = open_report or util.is_authorized(interaction.user.id, ALLOWLIST)
         _audit(interaction, authorized)
         if not authorized:
             await interaction.response.send_message(
@@ -263,12 +273,53 @@ async def mc(interaction: discord.Interaction, command: str) -> None:
     _audit(interaction, True, result="ok")
 
 
+_report_choices = [
+    app_commands.Choice(name=label, value=key) for key, label in sorted(util.BOT_LABELS.items())
+]
+
+
+@app_commands.command(name="report", description="File a bug report for a homelab bot")
+@app_commands.choices(bot=_report_choices)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=False)
+@app_commands.allowed_installs(guilds=True, users=False)
+async def report(interaction: discord.Interaction, bot: str, what: str) -> None:
+    """File a bug bead on the correct board via `bd create` in a mounted beads
+    checkout (bd_ops.py). Open to all Discord users when REPORT_OPEN_ACCESS is
+    set (see OpsBotTree.interaction_check); the reporter's identity is always
+    recorded in the bead and the audit log."""
+    await interaction.response.defer(thinking=True)
+    what = what.strip()
+    if not what:
+        await _reply(interaction, "Empty report -- describe what happened.")
+        _audit(interaction, True, result="rejected: empty report")
+        return
+    try:
+        issue_id = await asyncio.to_thread(
+            bd_ops.create_report,
+            util.BOARD_CHECKOUTS[bot],
+            bot=bot,
+            reporter=interaction.user.name,
+            reporter_id=interaction.user.id,
+            what=what,
+        )
+    except bd_ops.ReportError as e:
+        await _reply(interaction, f"Could not file the report: {e}")
+        _audit(interaction, True, result=f"error: {e}")
+        return
+    await _reply(
+        f"Bug filed on the {util.BOT_LABELS[bot]} board: `{issue_id}` "
+        f"(reported by {interaction.user})"
+    )
+    _audit(interaction, True, result=f"filed {issue_id}")
+
+
 @bot.event
 async def setup_hook() -> None:
     k8s_ops.init()
     bot.tree.add_command(pods_group)
     bot.tree.add_command(deploy_group)
     bot.tree.add_command(mc)
+    bot.tree.add_command(report)
     await bot.tree.sync()
     print("[opsbot] slash commands synced")
 
