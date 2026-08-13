@@ -11,6 +11,7 @@
 #     --from-file=pods-and-workloads.json=pods-and-workloads.json \
 #     --from-file=logs.json=logs.json \
 #     --from-file=apps.json=apps.json \
+#     --from-file=pantry-bot.json=pantry-bot.json \
 #     --dry-run=client -o yaml
 #
 # Re-run that command and replace the `data:` block below (or `kubectl
@@ -30,7 +31,7 @@
 # and `title` fields -- filenames are irrelevant to Grafana, they're
 # just ConfigMap keys.
 #
-# SIZE: total embedded JSON is ~136 KiB (4 dashboards). The etcd/API
+# SIZE: total embedded JSON is ~156 KiB (5 dashboards). The etcd/API
 # object-size ceiling for a single ConfigMap is 1 MiB, so this is not
 # close to needing a split. If dashboards are added later and this
 # approaches ~900 KiB, split by dashboard (one ConfigMap per file, or
@@ -2462,6 +2463,485 @@ data:
         }
       ]
     }
+  pantry-bot.json: |
+    {
+      "uid": "homelab-pantry-bot",
+      "title": "Pantry Bot — Health & Usage",
+      "description": "Health and usage of the pantry-bot Twitch bot (namespace pantry-bot) at a glance: is it down (desired vs ready replicas, pod uptime), restarting (restart count), or erroring (always-error-scoped Loki panels)? Resource panels plot actual usage against the configured limits; log panels use promtail's extracted `level` label. There is no application-level exporter for this app (no /health, no prom-client), so readiness/uptime/restarts are the only Kubernetes-visible health signals — Twitch auth, SQLite and tunnel health only show up indirectly in the logs.",
+      "tags": ["homelab", "k3s", "pantry-bot"],
+      "timezone": "browser",
+      "editable": true,
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "15s",
+      "graphTooltip": 1,
+      "time": { "from": "now-6h", "to": "now" },
+      "templating": {
+        "list": [
+          {
+            "name": "DS_PROMETHEUS",
+            "label": "Prometheus",
+            "type": "datasource",
+            "query": "prometheus",
+            "current": {},
+            "hide": 0,
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false
+          },
+          {
+            "name": "DS_LOKI",
+            "label": "Loki",
+            "type": "datasource",
+            "query": "loki",
+            "current": {},
+            "hide": 0,
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false
+          },
+          {
+            "name": "pod",
+            "label": "Pod",
+            "description": "Drills into one pod when a Deployment briefly has two during a Recreate rollout. Both containers (bot, cloudflared) share the pod's namespace label.",
+            "type": "query",
+            "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+            "definition": "label_values({namespace=\"pantry-bot\"}, pod)",
+            "query": {
+              "label": "pod",
+              "refId": "LokiVariableQueryEditor-VariableQuery",
+              "stream": "{namespace=\"pantry-bot\"}",
+              "type": 1
+            },
+            "refresh": 2,
+            "includeAll": true,
+            "allValue": ".+",
+            "multi": true,
+            "sort": 1,
+            "hide": 0,
+            "current": { "selected": true, "text": ["All"], "value": ["$__all"] },
+            "skipUrlSync": false
+          },
+          {
+            "name": "level",
+            "label": "Severity",
+            "description": "Wired straight into the LogQL stream selector as level=~\"$level\". 'All' uses the regex .* which also matches lines promtail could not classify (no level label at all). The ERROR panels ignore this variable on purpose so 'how many errors right now' never depends on resetting the filter.",
+            "type": "custom",
+            "query": "debug,info,warn,error",
+            "options": [
+              { "selected": false, "text": "debug", "value": "debug" },
+              { "selected": false, "text": "info", "value": "info" },
+              { "selected": false, "text": "warn", "value": "warn" },
+              { "selected": false, "text": "error", "value": "error" }
+            ],
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true,
+            "hide": 0,
+            "current": { "selected": true, "text": ["All"], "value": ["$__all"] },
+            "skipUrlSync": false
+          }
+        ]
+      },
+      "panels": [
+        {
+          "type": "row",
+          "title": "At a glance — up, restarting, or erroring?",
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "panels": []
+        },
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Bot Pod Uptime",
+          "description": "Age of the current pantry-bot pod, from kube_pod_start_time. Resets to 0 on every restart — a young age here IS the restart signal. With strategy: Recreate and a single RWO SQLite PVC, the old pod fully terminates before the new one mounts, so every reset means real downtime.",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "expr": "time() - max(kube_pod_start_time{namespace=\"pantry-bot\", pod=~\"pantry-bot-.*\"})",
+              "legendFormat": "uptime"
+            }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": { "unit": "s", "decimals": 1, "color": { "mode": "fixed", "fixedColor": "text" } },
+            "overrides": []
+          }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Restarts (24h)",
+          "description": "Cumulative restarts across both containers (bot + cloudflared) in the last 24h. The bot's livenessProbe failureThreshold is 5 (150s of continuous failure) specifically because a restart here means real downtime. Frequent restarts are worth chasing down, not shrugging off.",
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"pantry-bot\"}[24h])) or vector(0)",
+              "legendFormat": "restarts"
+            }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "#EAB839", "value": 1 },
+                  { "color": "red", "value": 2 }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Replicas — Desired vs Ready",
+          "description": "kube_deployment_spec_replicas vs kube_deployment_status_replicas_available for both Deployments in the namespace. With strategy: Recreate and a single replica each, ready < desired means the replacement pod has not come up after the old one released its RWO PVC — that is what 'bot is down' looks like from Kubernetes' point of view.",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "expr": "kube_deployment_spec_replicas{namespace=\"pantry-bot\"}",
+              "legendFormat": "{{deployment}} desired"
+            },
+            {
+              "refId": "B",
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "expr": "kube_deployment_status_replicas_available{namespace=\"pantry-bot\"}",
+              "legendFormat": "{{deployment}} ready"
+            }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "horizontal",
+            "textMode": "value_and_name",
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "fixed", "fixedColor": "text" } },
+            "overrides": []
+          }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "ERROR lines (this range)",
+          "description": "Deliberately ignores the Severity variable — this always counts level=\"error\" so it stays meaningful no matter how the filter is set. Honors the Pod variable. Caveat: pantry-bot logs are plain console output with no structured severity, so promtail classifies them by keyword heuristic — a line is only counted here if it positively matched error vocabulary (error/exception/fatal, unhandled rejection, or a libuv errno like ENOTFOUND).",
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+              "expr": "sum(count_over_time({namespace=\"pantry-bot\", pod=~\"$pod\", level=\"error\"} [$__range]))",
+              "queryType": "instant",
+              "instant": true,
+              "legendFormat": "errors"
+            }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "noValue": "0",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "#EAB839", "value": 1 },
+                  { "color": "red", "value": 25 }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "row",
+          "title": "CPU & memory — actual usage vs requests vs limits",
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+          "panels": []
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Memory Working Set vs Limit / Request — per container",
+          "description": "Solid = actual working set (the number the cgroup OOM killer compares against, from cAdvisor container_memory_working_set_bytes). Dashed = configured limit, dotted = request. bot: 256Mi limit / 128Mi request; cloudflared: 128Mi / 64Mi. The 256Mi limit is the hard ceiling — a container at its limit is OOM-killed outright (pods cannot swap on cgroup v2).",
+          "gridPos": { "h": 9, "w": 12, "x": 0, "y": 6 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "expr": "sum by (container) (container_memory_working_set_bytes{namespace=\"pantry-bot\", container!=\"\", container!=\"POD\"})",
+              "legendFormat": "{{container}} working set"
+            },
+            {
+              "refId": "B",
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "expr": "sum by (container) (kube_pod_container_resource_limits{namespace=\"pantry-bot\", resource=\"memory\"})",
+              "legendFormat": "{{container}} LIMIT"
+            },
+            {
+              "refId": "C",
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "expr": "sum by (container) (kube_pod_container_resource_requests{namespace=\"pantry-bot\", resource=\"memory\"})",
+              "legendFormat": "{{container}} request"
+            }
+          ],
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "max"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "min": 0,
+              "color": { "mode": "palette-classic" },
+              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byRegexp", "options": ".*LIMIT$" },
+                "properties": [
+                  { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [12, 6] } },
+                  { "id": "custom.fillOpacity", "value": 0 },
+                  { "id": "custom.lineWidth", "value": 2 }
+                ]
+              },
+              {
+                "matcher": { "id": "byRegexp", "options": ".*request$" },
+                "properties": [
+                  { "id": "custom.lineStyle", "value": { "fill": "dot", "dash": [2, 6] } },
+                  { "id": "custom.fillOpacity", "value": 0 }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "CPU Usage vs Limit — per container (cores)",
+          "description": "Solid = rate of container_cpu_usage_seconds_total from cAdvisor. Dashed = configured CPU limit. bot: 250m; cloudflared: 200m. Values are CPU cores (1.0 = one full core of the 16 available).",
+          "gridPos": { "h": 9, "w": 12, "x": 12, "y": 6 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "expr": "sum by (container) (rate(container_cpu_usage_seconds_total{namespace=\"pantry-bot\", container!=\"\", container!=\"POD\"}[5m]))",
+              "legendFormat": "{{container}} usage"
+            },
+            {
+              "refId": "B",
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "expr": "sum by (container) (kube_pod_container_resource_limits{namespace=\"pantry-bot\", resource=\"cpu\"})",
+              "legendFormat": "{{container}} LIMIT"
+            }
+          ],
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "max"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "min": 0,
+              "decimals": 3,
+              "color": { "mode": "palette-classic" },
+              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "cores" }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byRegexp", "options": ".*LIMIT$" },
+                "properties": [
+                  { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [12, 6] } },
+                  { "id": "custom.fillOpacity", "value": 0 },
+                  { "id": "custom.lineWidth", "value": 2 }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "type": "row",
+          "title": "Logs — severity, errors, live tail",
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+          "panels": []
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Log Volume by Level",
+          "description": "Stacked bars, one colour per level (error = red, warn = amber, info = blue, unclassified = dark grey). An error spike is a red block that stands out against everything else — that is the 'the bot is erroring' signal. Uses $__auto for the range interval so bar width follows the dashboard time range. Honors the Severity and Pod variables.",
+          "gridPos": { "h": 9, "w": 12, "x": 0, "y": 16 },
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+              "expr": "sum by (level) (count_over_time({namespace=\"pantry-bot\", pod=~\"$pod\", level=~\"$level\"} [$__auto]))",
+              "queryType": "range",
+              "legendFormat": "{{level}}"
+            }
+          ],
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["sum", "max"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "decimals": 0,
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "drawStyle": "bars",
+                "lineWidth": 0,
+                "fillOpacity": 85,
+                "showPoints": "never",
+                "spanNulls": false,
+                "barAlignment": 0,
+                "stacking": { "mode": "normal", "group": "A" }
+              }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "error" },
+                "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "warn" },
+                "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#EAB839" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "info" },
+                "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "semi-dark-blue" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "debug" },
+                "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#5A6172" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "{}" },
+                "properties": [
+                  { "id": "displayName", "value": "unclassified" },
+                  { "id": "color", "value": { "mode": "fixed", "fixedColor": "#3E4249" } }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 8,
+          "type": "bargauge",
+          "title": "Top Error Sources (this range)",
+          "description": "Always error-scoped (ignores the Severity variable, honors the Pod variable). topk(5) by pod/container of count_over_time(level=\"error\") — with only bot + cloudflared in the namespace, a bar here means a specific container is erroring. See the ERROR stat at the top for the total.",
+          "gridPos": { "h": 9, "w": 12, "x": 12, "y": 16 },
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+              "expr": "topk(5, sum by (pod, container) (count_over_time({namespace=\"pantry-bot\", pod=~\"$pod\", level=\"error\"} [$__range])))",
+              "queryType": "instant",
+              "instant": true,
+              "legendFormat": "{{pod}}/{{container}}"
+            }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "horizontal",
+            "displayMode": "gradient",
+            "showUnfilled": true,
+            "valueMode": "color",
+            "namePlacement": "top",
+            "sizing": "auto",
+            "minVizWidth": 8,
+            "minVizHeight": 16
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "min": 0,
+              "noValue": "No errors in range",
+              "color": { "mode": "continuous-YlRd" }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 9,
+          "type": "logs",
+          "title": "Live Logs (bot + cloudflared)",
+          "description": "All pantry-bot logs, filtered by the Pod and Severity variables: {namespace=\"pantry-bot\", pod=~\"$pod\", level=~\"$level\"}. Node.js console format for the bot container; cloudflared has its own plain-text format. Click a line to expand its labels.",
+          "gridPos": { "h": 13, "w": 24, "x": 0, "y": 25 },
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+              "expr": "{namespace=\"pantry-bot\", pod=~\"$pod\", level=~\"$level\"}",
+              "queryType": "range",
+              "maxLines": 2000
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": false,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "prettifyLogMessage": false,
+            "enableLogDetails": true,
+            "dedupStrategy": "none",
+            "sortOrder": "Descending"
+          },
+          "fieldConfig": { "defaults": {}, "overrides": [] }
+        }
+      ]
+    }
   pods-and-workloads.json: |
     {
       "uid": "homelab-pods-workloads",
@@ -3477,3 +3957,7 @@ data:
         }
       ]
     }
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: observability
