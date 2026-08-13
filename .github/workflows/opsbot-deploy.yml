@@ -1,7 +1,7 @@
-# Automates opsbot build, side-load, and restart. Replaces manual workflow:
-# docker build → docker save | sudo k3s ctr images import → kubectl rollout restart
-# Triggered on source changes to opsbot/bot/; runs on self-hosted runner with sudoers
-# configured for passwordless `k3s ctr images import` (see step 3 comment).
+# Builds opsbot/bot and pushes to GHCR (ghcr.io/chayzx/opsbot), same pattern
+# as pantry-bot's publish.yml. Runs entirely on GitHub-hosted runners -- no
+# Docker or self-hosted machine required, unlike the old localhost/ side-load
+# flow this replaces.
 
 name: Deploy opsbot
 
@@ -13,39 +13,55 @@ on:
       - opsbot/bot/**
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
-  deploy:
-    runs-on: [self-hosted, opsbot-deploy]
+  publish:
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build image
-        # localhost/ prefix is load-bearing, not cosmetic -- see 40-deployment.yaml's
-        # header comment. A bare tag normalizes to docker.io/library/*, and with
-        # imagePullPolicy IfNotPresent the kubelet falls back to an actual registry
-        # pull attempt (ImagePullBackOff, no such repo exists) instead of resolving
-        # the locally side-loaded image.
-        run: docker build -t localhost/opsbot:${{ github.sha }} opsbot/bot
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Side-load into k3s containerd
-        run: docker save localhost/opsbot:${{ github.sha }} | sudo k3s ctr images import -
-        # NOTE: Runner unix user requires sudoers entry for passwordless:
-        #   <runner-user> ALL=(ALL) NOPASSWD:/usr/local/bin/k3s ctr images import
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: opsbot/bot
+          push: true
+          tags: |
+            ghcr.io/chayzx/opsbot:latest
+            ghcr.io/chayzx/opsbot:${{ github.sha }}
+
+  # TODO(k8s-homelab-oiv.8): kubectl below has no path to the cluster yet.
+  # This is a GitHub-hosted runner with no route to the k3s API server --
+  # the old self-hosted runner had one because it lived on the cluster's own
+  # LAN. Wiring that up needs a Cloudflare Tunnel + Access route (tracked as
+  # k8s-homelab-oiv.8), not yet built. Until then this job is a stub: it
+  # documents the intended shape but the run step is disabled.
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
       - name: Update deployment image
-        env:
-          KUBECONFIG: /etc/ci-deploy/opsbot.kubeconfig
-        # container name is `opsbot`, not `bot` -- see 40-deployment.yaml
-        run: kubectl set image deployment/opsbot opsbot=localhost/opsbot:${{ github.sha }} -n opsbot
+        if: false # blocked on k8s-homelab-oiv.8
+        run: kubectl set image deployment/opsbot opsbot=ghcr.io/chayzx/opsbot:${{ github.sha }} -n opsbot
 
       - name: Wait for rollout
-        env:
-          KUBECONFIG: /etc/ci-deploy/opsbot.kubeconfig
+        if: false # blocked on k8s-homelab-oiv.8
         run: kubectl rollout status deployment/opsbot -n opsbot --timeout=60s
 
       - name: Rollback on failure
-        if: failure()
-        env:
-          KUBECONFIG: /etc/ci-deploy/opsbot.kubeconfig
+        if: false # blocked on k8s-homelab-oiv.8
         run: kubectl rollout undo deployment/opsbot -n opsbot

@@ -40,6 +40,46 @@ before its Secret is created).
 
 ---
 
+## `ghcr-pull-secret` — private GHCR access
+
+`ghcr.io/chayzx/opsbot` is a **private** package, same as pantry-bot's. This
+Secret is what lets the kubelet pull it; `40-deployment.yaml` already
+references it via `imagePullSecrets`. **Creating it is being handled
+separately, not part of this doc's task** — this section only documents how,
+mirroring `../pantry-bot/SECRETS.md`.
+
+```bash
+kubectl -n opsbot create secret docker-registry ghcr-pull-secret \
+  --docker-server=ghcr.io \
+  --docker-username=chayzx \
+  --docker-password='<GITHUB_PAT>' \
+  --docker-email=chase@example.invalid
+```
+
+The PAT needs the **`read:packages`** scope. A classic PAT with only `repo`
+scope authenticates fine against GitHub and still gets 403 from the
+registry — surfaces as `ImagePullBackOff`, not an auth error.
+
+### Alternative: reuse the existing docker login
+
+If this host already ran `docker login ghcr.io` (e.g. for the pantry-bot
+migration), the same config can be converted directly instead of minting a
+new PAT-based Secret:
+
+```bash
+kubectl -n opsbot create secret generic ghcr-pull-secret \
+  --from-file=.dockerconfigjson=$HOME/.docker/config.json \
+  --type=kubernetes.io/dockerconfigjson
+```
+
+Check first that the file has a real base64 `auth` entry for `ghcr.io`, not a
+`credsStore`/`credHelpers` reference — if Docker delegated to a credential
+helper, this file holds nothing usable and the resulting Secret is silently
+empty. Use the explicit `create secret docker-registry` form above in that
+case.
+
+---
+
 ## Not in scope for this Secret
 
 RCON access (`k8s-homelab-bi6.4`) is a separate, not-yet-implemented slash
@@ -56,7 +96,8 @@ zero `secrets` access on purpose.
 ## Checklist before applying `40-deployment.yaml`
 
 ```bash
-kubectl -n opsbot get secret opsbot-discord
+kubectl -n opsbot get secret opsbot-discord ghcr-pull-secret
 ```
 
-Must exist. Never commit it, never `kubectl get -o yaml` it into a paste.
+Both must exist. Never commit them, never `kubectl get -o yaml` them into a
+paste.

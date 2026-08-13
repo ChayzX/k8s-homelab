@@ -7,15 +7,13 @@
 # connection to Discord's gateway — zero new inbound network exposure, same
 # trust model jmusicbot/pantry-bot already use in this cluster.
 #
-# NOT BUILDABLE YET. The image below does not exist: `bd show k8s-homelab-bi6.3`
-# (bot source, going to opsbot/bot/*.py) is a separate, not-yet-done task.
-# Once that code exists, build and side-load it the same way
-# ../minecraft/minecraft.yaml does (no registry, no imagePullSecrets needed):
-#   docker build -t localhost/opsbot:dev opsbot/bot/
-#   docker save localhost/opsbot:dev | sudo k3s ctr images import -
-# imagePullPolicy MUST stay IfNotPresent (or Never) for a localhost/ image —
-# Always would send kubelet looking for a registry that doesn't have it and
-# the pod would sit in ImagePullBackOff.
+# Built and pushed to GHCR by .github/workflows/opsbot-deploy.yml, same
+# pattern as pantry-bot -- CI runs on a plain GitHub-hosted runner, no Docker
+# or local side-loading into this node's containerd required. This replaced
+# an earlier local-sideload flow (`docker build` + `k3s ctr images import`)
+# used only because no registry was set up for this bot yet; that reasoning
+# no longer applies. ghcr.io/chayzx/opsbot is private, so imagePullSecrets
+# (below) is required for the kubelet to pull it -- see SECRETS.md.
 #
 # Stateless: no PVC, default RollingUpdate strategy is fine (contrast with
 # pantry-bot/jmusicbot-release-notifier's Recreate, which exists only because
@@ -53,6 +51,8 @@ spec:
       # ServiceAccount token mounted — same reasoning as ../keel's SA, which
       # is this repo's only other `true`.
       automountServiceAccountToken: true
+      imagePullSecrets:
+        - name: ghcr-pull-secret
       terminationGracePeriodSeconds: 30
       securityContext:
         # ponytail: no verified UID yet — opsbot/bot/ doesn't exist, so unlike
@@ -68,8 +68,11 @@ spec:
           type: RuntimeDefault
       containers:
         - name: opsbot
-          image: localhost/opsbot:dev
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/chayzx/opsbot:latest
+          # Always: mutable `:latest` tag, so a real pull is needed each time
+          # rather than trusting a stale cached layer set -- same reasoning
+          # as pantry-bot's own imagePullPolicy.
+          imagePullPolicy: Always
           env:
             - name: DISCORD_BOT_TOKEN
               valueFrom:
