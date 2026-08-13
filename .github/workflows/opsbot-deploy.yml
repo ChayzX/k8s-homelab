@@ -44,24 +44,47 @@ jobs:
             ghcr.io/chayzx/opsbot:latest
             ghcr.io/chayzx/opsbot:${{ github.sha }}
 
-  # TODO(k8s-homelab-oiv.8): kubectl below has no path to the cluster yet.
-  # This is a GitHub-hosted runner with no route to the k3s API server --
-  # the old self-hosted runner had one because it lived on the cluster's own
-  # LAN. Wiring that up needs a Cloudflare Tunnel + Access route (tracked as
-  # k8s-homelab-oiv.8), not yet built. Until then this job is a stub: it
-  # documents the intended shape but the run step is disabled.
+  # k8s-homelab-oiv.8: reaches the cluster's private API through a dedicated
+  # Cloudflare Tunnel (ci-tunnel/) gated by Cloudflare Access (service
+  # token). `cloudflared access tcp` does the Access handshake once and
+  # proxies raw bytes after that -- kubectl talks to 127.0.0.1:16443 like
+  # it's local. See ci-tunnel/MANUAL-SETUP.md for the full path. Verified
+  # end-to-end manually before wiring this in.
   deploy:
     needs: publish
     runs-on: ubuntu-latest
     steps:
+      - name: Install cloudflared
+        run: |
+          curl -sSL -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x cloudflared
+          sudo mv cloudflared /usr/local/bin/
+
+      - name: Open Access-authenticated tunnel to k8s API
+        run: |
+          cloudflared access tcp \
+            --hostname k8s-api.greeniespantry.uk \
+            --url 127.0.0.1:16443 \
+            --service-token-id "${{ secrets.CF_ACCESS_CLIENT_ID }}" \
+            --service-token-secret "${{ secrets.CF_ACCESS_CLIENT_SECRET }}" &
+          sleep 3
+
+      - name: Write scoped kubeconfig
+        run: |
+          echo "${{ secrets.KUBE_CONFIG_OPSBOT }}" | base64 -d > $RUNNER_TEMP/opsbot.kubeconfig
+
       - name: Update deployment image
-        if: false # blocked on k8s-homelab-oiv.8
+        env:
+          KUBECONFIG: ${{ runner.temp }}/opsbot.kubeconfig
         run: kubectl set image deployment/opsbot opsbot=ghcr.io/chayzx/opsbot:${{ github.sha }} -n opsbot
 
       - name: Wait for rollout
-        if: false # blocked on k8s-homelab-oiv.8
+        env:
+          KUBECONFIG: ${{ runner.temp }}/opsbot.kubeconfig
         run: kubectl rollout status deployment/opsbot -n opsbot --timeout=60s
 
       - name: Rollback on failure
-        if: false # blocked on k8s-homelab-oiv.8
+        if: failure()
+        env:
+          KUBECONFIG: ${{ runner.temp }}/opsbot.kubeconfig
         run: kubectl rollout undo deployment/opsbot -n opsbot
