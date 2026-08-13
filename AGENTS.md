@@ -47,6 +47,42 @@ cp -rf source dest          # NOT: cp -r source dest
 - `apt-get` - use `-y` flag
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
+## Beads actor attribution (who owns a card)
+
+Every `bd` write is stamped with an **actor**. The actor chain (from `bd --help`) is:
+
+1. `--actor <name>` flag
+2. `$BEADS_ACTOR` env var
+3. `git config user.name`
+4. `$USER`
+
+`bd update <id> --claim` sets the card **assignee to the current actor**, so a card
+claimed without an explicit actor ends up assigned to whatever name the chain
+resolved to (historically `git config user.name` = `HomeyBeam` for every agent).
+
+Each agent claims cards with its own name:
+
+- **claude** → `BEADS_ACTOR=claude`, set in `.claude/settings.json` (`env`).
+- **opencode** → `BEADS_ACTOR=opencode`, set for every tool shell via the
+  `.opencode/plugins/beads-actor.ts` `shell.env` hook.
+
+Agents must NOT rely on `git config user.name` for attribution — run `bd` with
+your own actor (or check `bd context` / `echo $BEADS_ACTOR`) and verify a claim
+with `bd show <id>` shows your name as `Owner`/`Assignee`. When manually
+invoking `bd`, an explicit actor always wins: `bd update <id> --claim --actor <your-name>`.
+
+### Scotty (bead-me-up-scotty) UI side — USER ACTION
+
+Cards created/edited in the scotty web UI are stamped with
+`BEADS_ACTOR=<humanActor>` from the live config at
+`/home/chase/.config/bead-me-up-scotty-k8s/config.json` (currently
+`humanActor: "node"`, `humanAllowlist: ["node"]`). Assignee names render on
+cards regardless of these settings, but `humanAllowlist` controls how scotty
+classifies authorship for origin badges (👤 human vs 🤖 agent), so it should be
+kept in sync with the human/agent names in use. Editing that live config and
+restarting the scotty pod (config is read at startup, not hot-reloaded) is a
+user step outside this repo — see `k8s-homelab-95h`.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
 ## Beads Issue Tracker
 
