@@ -107,5 +107,12 @@ gatekeeper once the route needs protecting. Record the decision on
   assignees so origin badges (👤/🤖) stay correct. This is the only "user list"
   scotty has today.
 - Known actors: `node` (the scotty machine identity, what UI writes are stamped
-  as), `HomeyBeam` (git author / main human assignee on k8s-homelab). Decide the
-  canonical per-person name and use it consistently across boards.
+  as), `HomeyBeam` (git author / main human assignee on k8s-homelab).
+
+**Decided (k8s-homelab-95h, 2026-08-13): the canonical assignee roster is**
+`OpenCode`, `Claude`, `Axey`, `Chase`, `Greenie` — use these five names
+consistently across both boards. Note `Claude`/`OpenCode` here are the
+*assignee* convention (who's expected to work a card); the separate
+`BEADS_ACTOR` env values (`claude`/`opencode`, see
+`.claude/settings.json` / `.opencode/plugins/beads-actor.ts`) are the
+*actor* stamped on writes -- related but not required to match case-for-case.
