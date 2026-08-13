@@ -1,0 +1,22 @@
+# ClusterIP Service exposing the ci-tunnel connector's /ready metrics
+# endpoint (port 2000, see 20-deployment.yaml's --metrics flag) for Kuma
+# monitoring. cloudflared serves /ready 200 only while it has a registered
+# connection to Cloudflare's edge -- a real "is the CI deploy tunnel up"
+# signal, not just "process is running".
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudflared
+  namespace: ci-tunnel
+  labels:
+    app.kubernetes.io/name: ci-tunnel
+    app.kubernetes.io/part-of: homelab
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ci-tunnel
+  ports:
+    - name: metrics
+      port: 2000
+      targetPort: metrics
+      protocol: TCP

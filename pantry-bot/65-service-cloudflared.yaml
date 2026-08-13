@@ -1,0 +1,22 @@
+# ClusterIP Service exposing pantry-bot's cloudflared connector's /ready
+# metrics endpoint (port 2000, see 60-deployment-cloudflared.yaml's
+# --metrics flag) for Kuma monitoring. Separate from the `pantry-bot`
+# Service (50-service.yaml), which only covers the `bot` container's ports --
+# cloudflared is a distinct pod with its own selector.
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudflared
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: cloudflared
+    app.kubernetes.io/part-of: homelab
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: cloudflared
+  ports:
+    - name: metrics
+      port: 2000
+      targetPort: metrics
+      protocol: TCP
