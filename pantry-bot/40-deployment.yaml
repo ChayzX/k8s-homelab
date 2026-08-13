@@ -158,6 +158,17 @@ spec:
                 - node
                 - -e
                 - "require('http').get('http://127.0.0.1:3000/', r => process.exit(0)).on('error', () => process.exit(1))"
+            # k8s-homelab-5gt: this only proves "HTTP server responds," not
+            # "Twitch chat/EventSub actually connected" -- eventSub.connect()
+            # in bot/index.ts is fire-and-forget, not awaited, so the HTTP
+            # server can be up well before the bot is functionally ready.
+            # initialDelaySeconds forces a stabilization window post-startup
+            # before the Service marks this pod Ready and Recreate's old pod
+            # (already gone) gets replaced with traffic flowing here -- cheap,
+            # zero app-code risk. Does not eliminate Recreate's downtime gap
+            # (deliberate, SQLite WAL corruption risk with concurrent
+            # writers), just avoids stretching it with a falsely-ready pod.
+            initialDelaySeconds: 15
             periodSeconds: 30      # matches Compose `interval: 30s`
             timeoutSeconds: 5      # matches Compose `timeout: 5s`
             failureThreshold: 3    # matches Compose `retries: 3`
