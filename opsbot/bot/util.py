@@ -47,6 +47,42 @@ def rfc3339_now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
 
 
+def _utc(value: str) -> datetime.datetime:
+    """Parse an RFC3339/ISO8601 timestamp, treating a bare (naive) one as UTC."""
+    parsed = datetime.datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed
+
+
+def format_pod_age(created_iso: str | None, now_iso: str | None = None) -> str:
+    """Human-readable pod age in the compact `kubectl get pods` style
+    (e.g. "2d3h", "3h12m", "5m4s"). Given as RFC3339; `created_iso` None or
+    unparseable -> "?" so a rendering hiccup never crashes the status line.
+    Clock skew (created in the future) clamps to "0s"."""
+    if not created_iso:
+        return "?"
+    try:
+        created = _utc(created_iso)
+    except ValueError:
+        return "?"
+    now = _utc(now_iso) if now_iso else datetime.datetime.now(datetime.timezone.utc)
+    delta = now - created
+    if delta.total_seconds() < 0:
+        delta = datetime.timedelta(0)
+    seconds = int(delta.total_seconds())
+    days, rem = divmod(seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, seconds = divmod(rem, 60)
+    if days:
+        return f"{days}d{hours}h"
+    if hours:
+        return f"{hours}h{minutes}m"
+    if minutes:
+        return f"{minutes}m{seconds}s"
+    return f"{seconds}s"
+
+
 def chunk_for_discord(text: str) -> list[str]:
     """Split text into <=2000-char Discord messages, each wrapped in a code
     block for readability. Always returns at least one chunk (a fenced
@@ -80,6 +116,20 @@ def demo() -> None:
     # Must parse back as a valid RFC3339/ISO8601 timestamp with a UTC offset.
     parsed = datetime.datetime.fromisoformat(now)
     assert parsed.tzinfo is not None
+
+    # format_pod_age: kubectl-style compact ages, clamping and error handling.
+    assert format_pod_age("2026-08-11T00:00:00+00:00", "2026-08-13T00:00:00+00:00") == "2d0h"
+    assert format_pod_age("2026-08-11T00:00:00+00:00", "2026-08-11T03:12:00+00:00") == "3h12m"
+    assert format_pod_age("2026-08-11T00:00:00+00:00", "2026-08-11T00:05:04+00:00") == "5m4s"
+    assert format_pod_age("2026-08-11T00:00:00+00:00", "2026-08-11T00:00:45+00:00") == "45s"
+    # Naive (no offset) creation timestamps must be treated as UTC, like the
+    # kubernetes client returns when creation_timestamp lacks an offset.
+    assert format_pod_age("2026-08-11T00:00:00", "2026-08-11T02:00:00+00:00") == "2h0m"
+    # A pod "created" in the future (clock skew) clamps to 0s instead of a
+    # negative age, and garbage/None renders as "?" without raising.
+    assert format_pod_age("2026-08-15T00:00:00+00:00", "2026-08-13T00:00:00+00:00") == "0s"
+    assert format_pod_age(None) == "?"
+    assert format_pod_age("not-a-timestamp") == "?"
 
     empty = chunk_for_discord("")
     assert len(empty) == 1 and "(no output)" in empty[0]

@@ -51,12 +51,19 @@ def list_pods(namespace: str) -> list[dict]:
         statuses = pod.status.container_statuses or []
         ready = bool(statuses) and all(s.ready for s in statuses)
         restarts = sum(s.restart_count for s in statuses)
+        created = pod.metadata.creation_timestamp
         result.append(
             {
                 "name": pod.metadata.name,
                 "phase": pod.status.phase,
                 "ready": ready,
                 "restarts": restarts,
+                # RFC3339 creation time, surfaced so the cumulative restart
+                # count is self-explanatory: restart_count resets to 0 every
+                # time a pod is recreated, so "restarts=0" alone is ambiguous
+                # between 'never crashed' and 'recreated recently'. Age is the
+                # missing context (see k8s-homelab-8ue).
+                "created": created.isoformat() if created else None,
             }
         )
     return result
