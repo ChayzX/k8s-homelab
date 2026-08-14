@@ -1,6 +1,6 @@
 # Grafana dashboards for the k3s home-lab
 
-Four dashboards, built to replace the four that ran under Docker Desktop
+Eight dashboards, built to replace the four that ran under Docker Desktop
 (`host-overview`, `container-resources`, `minecraft`, `logs-overview` — see
 `/home/chase/docker/observability/monitoring/grafana/dashboards/` for the
 originals, kept read-only for reference) with equivalents that understand
@@ -40,7 +40,7 @@ Net result, one apply order:
 ```sh
 kubectl apply -f k8s-homelab/observability/namespace.yaml
 kubectl apply -f k8s-homelab/observability/grafana-provisioning.yaml   # datasources + dashboards providers + placeholder grafana-dashboards
-kubectl apply -f k8s-homelab/dashboards/dashboards-configmap.yaml      # REPLACES the placeholder with the real 4 dashboards
+kubectl apply -f k8s-homelab/dashboards/dashboards-configmap.yaml      # REPLACES the placeholder with the real 8 dashboards
 kubectl apply -f k8s-homelab/observability/grafana.yaml                # Deployment/Service/PVC/SA
 ```
 
@@ -55,7 +55,11 @@ kubectl create configmap grafana-dashboards -n observability \
   --from-file=cluster-overview.json=cluster-overview.json \
   --from-file=pods-and-workloads.json=pods-and-workloads.json \
   --from-file=logs.json=logs.json \
-  --from-file=apps.json=apps.json \
+  --from-file=overview.json=overview.json \
+  --from-file=minecraft.json=minecraft.json \
+  --from-file=jmusicbot.json=jmusicbot.json \
+  --from-file=pantry-bot.json=pantry-bot.json \
+  --from-file=cloudflared.json=cloudflared.json \
   --dry-run=client -o yaml
 ```
 then paste the `data:` block back into `dashboards-configmap.yaml` under
@@ -63,9 +67,9 @@ its existing `metadata:` (labels included), or just `kubectl apply -f -`
 the command's output directly against a live cluster — same object,
 same name, same namespace, it overwrites in place.
 
-**Size**: all four dashboards embedded together are ~136 KiB. The
+**Size**: all eight dashboards remain comfortably below the 1 MiB ConfigMap
 etcd/API object-size ceiling for a ConfigMap is 1 MiB, so one ConfigMap
-comfortably holds all four — no split needed. If more dashboards get
+comfortably hold them in one object — no split needed. If more dashboards get
 added later and this approaches ~900 KiB, split by file and add one
 extra volume + volumeMount pair to `grafana.yaml`'s Deployment rather
 than truncating silently.
@@ -80,6 +84,20 @@ what UID that instance happens to assign, as long as there's one
 Prometheus and one Loki source configured.
 
 ## The dashboards
+
+### `host-pc.json` — Main PC — Bare-Metal Health
+
+This is the focused physical-host dashboard requested in bead `k8s-homelab-8nc`.
+It intentionally excludes pod, deployment, kube-system, and Prometheus-target
+panels so it answers a different question from `cluster-overview.json`: is the
+PC itself being overworked by containers or other processes? It covers whole-host
+CPU, memory pressure, root-disk capacity, uptime, load versus CPU cores, memory
+breakdown, disk utilisation/throughput, physical NIC traffic, and temperatures.
+The host selector uses the native `node_exporter` `node_uname_info` series.
+
+Open it at `/d/homelab-host-pc/main-pc-bare-metal-health` (or use the link on
+the Overview dashboard). `cluster-overview.json` remains the mixed host + k3s
+control-plane dashboard for workload-aware triage.
 
 ### `cluster-overview.json` — Host Health / Cluster Overview — Node & k3s Control Plane
 
@@ -117,39 +135,33 @@ they run inside the single k3s process, so there's no `kube_pod_*`
 series for them; use the Node-Ready stat for that), scrape-target-down
 count, node-pressure-condition count, and hwmon temperatures.
 
-**Long-term host-health metrics — Uptime Kuma, open decision
-(k8s-homelab-8nc).** Prometheus is pinned to **7d / 15 GB retention**
+**Long-term uptime scope — Uptime Kuma + this dashboard (k8s-homelab-8nc).**
+Prometheus is pinned to **7d / 15 GB retention**
 (`observability/prometheus.yaml`), deliberately — this host's `/` is a
 5900rpm HDD and huge TSDB blocks are hostile to it (HDD-tuning note in
-`ARCHITECTURE.md`). Kuma is the intentional long-term store, but it keeps
-**up/down history per monitor, not metric series** — nothing Kuma accepts can
-give it CPU/mem/disk trends. So "long-term host health in Kuma" is really one
-of two narrower options:
+`ARCHITECTURE.md`). The chosen split is:
 
-- **(b) — recommended: accept the 7d Grafana window as the metric-trend
-  source.** The dashboard above *is* the 7d host trend view, and Kuma's
-  existing HTTP/TCP pings against node_exporter (`:9100`), Grafana (`:3002`)
-  and Kuma itself (`:3001`) already cover host reachability for the same
-  window. Rationale: option (a) adds a host cron + a Kuma push monitor and
-  still ends up with *up/down history only* — Kuma has no metric TSDB, so it
-  can never store the trends this request names. A >7d host trend would
-  require a real long-term TSDB (remote-write to VictoriaMetrics/Mimir), a
-  much bigger call than this card. Zero new moving parts.
-- **(a) — the only thing Kuma can genuinely add: long-term *host-alive*
-  history (up/down beyond 7d).** Proposed, NOT implemented — needs the
-  decision first. Exact mechanism: add a **push-type monitor** in Kuma
-  (Uptime Kuma → Add Monitor → **Push**), which generates a token and listens
-  at `https://status.greeniespantry.uk/api/push/<token>`; a host cron running
-  `scripts/kuma-host-heartbeat.sh` (proposed new file, user crontab every
-  minute) pushes a heartbeat — the script runs *on* the host, so a delivered
-  push proves host-up, not just app-up:
-  `curl -fsS -m 10 -X POST "https://status.greeniespantry.uk/api/push/<token>?status=up&msg=host-alive"`.
-  Monitor interval 2m (one push/minute ⇒ 2 missed pushes = down). Long-term
-  record = that monitor's history, for the life of the `uptime-kuma-data` PVC.
-  Needed from the user to proceed: confirm (b), or pick (a) and (1) confirm
-  `status.greeniespantry.uk` as the Kuma base URL and (2) create the push
-  monitor in the Kuma UI — the token is generated there and must never be
-  committed.
+- **Current host health / current host stats live here in Grafana.** This
+  dashboard is the main-PC view for CPU, memory, disk, temperatures, network,
+  load, and k3s control-plane health.
+- **Long-term uptime lives in Uptime Kuma.** The user clarified on
+  **August 13, 2026** that the goal is **uptime for hosts and pods**, not
+  long-term CPU/memory history. Kuma can do that because it stores
+  **up/down history per monitor**, but it still cannot store host
+  CPU/memory/disk trends — a real >7d trend store would need a separate TSDB
+  such as VictoriaMetrics or Mimir.
+
+For pods/services, keep using ordinary Kuma HTTP/TCP monitors. For the bare
+host itself, add a **push-type monitor** in Kuma (Uptime Kuma → Add Monitor →
+**Push**), which generates a token and listens at
+`https://status.greeniespantry.uk/api/push/<token>`. A host cron running
+`scripts/kuma-host-heartbeat.sh` pushes a heartbeat every minute, so a
+delivered push proves the host is up:
+`curl -fsS -m 10 "https://status.greeniespantry.uk/api/push/<token>?status=up&msg=host-alive"`.
+Set the monitor interval to **2 minutes** (one push/minute ⇒ 2 missed pushes =
+down). The long-term record is that monitor's history for the life of the
+`uptime-kuma-data` PVC. The token is generated in the Kuma UI and must never be
+committed.
 
 ### `pods-and-workloads.json` — Pods & Workloads — Usage vs Limits
 
@@ -227,7 +239,10 @@ one app, that app's logs don't disappear — they just stop carrying a
 `level` label and fall into the "unclassified" bucket above, which is
 exactly what panel 4 exists to catch.
 
-### `apps.json` — Apps — Minecraft / jmusicbot / pantry-bot
+### App dashboards — `minecraft.json`, `jmusicbot.json`, `pantry-bot.json`, and `cloudflared.json`
+
+The former shared `apps.json` dashboard is retired. Each workload now has its
+own stable dashboard UID, and the Overview dashboard links to all four.
 
 App-specific panels, and deliberately not padded with invented metrics.
 
@@ -267,8 +282,10 @@ App-specific panels, and deliberately not padded with invented metrics.
   The panel description says exactly this and gives the concrete
   follow-up (add a real `/healthz` route, switch to `httpGet`, then
   optionally instrument with `prom-client`) rather than inventing a
-  metric name that doesn't exist. A `cloudflared` sidecar up/down stat is
-  included since a pod can be Ready with its tunnel dead.
+  metric name that doesn't exist. Cloudflared is separately dashboarded from
+  Kubernetes readiness/running/restart/resource metrics and its Loki logs;
+  its native `:2000` endpoint is used by probes but is not scraped by
+  Prometheus.
 
 ## Metric-existence notes (why each metric was chosen)
 
