@@ -1,6 +1,6 @@
 """Beads calls opsbot makes -- file bug beads from Discord (k8s-homelab-cq8).
 
-The /report command runs `bd create` against a mounted beads checkout. Each
+The /bug command runs `bd create` against a mounted beads checkout. Each
 checkout is a directory whose only content is a project's `.beads/` dir
 (hostPath-mounted by ../40-deployment.yaml); `--directory` is what routes the
 new issue to the right board -- `bd create` discovers `.beads` by walking up
@@ -33,7 +33,7 @@ BD_BIN = os.environ.get("BD_BIN", "bd")
 # contention fails fast with "exclusive lock" in stderr (the retryable path
 # below) -- wrong in practice: a live collision with the host's `bd` (which
 # runs against this same .beads/ dir constantly) can make `bd create` BLOCK
-# on the lock instead of erroring, so the first live /report timed out and
+# on the lock instead of erroring, so the first live /bug timed out and
 # gave up with zero retries (TimeoutExpired used to raise immediately,
 # skipping the retry loop entirely -- fixed below). 20s per attempt, across
 # up to _MAX_ATTEMPTS, catches a genuine hang far faster while still giving

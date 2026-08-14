@@ -53,9 +53,9 @@ kubectl apply -f 20-rbac.yaml
 kubectl apply -f 40-deployment.yaml
 ```
 
-## `/report` — bug beads from Discord (k8s-homelab-cq8)
+## `/bug` — bug beads from Discord (k8s-homelab-cq8)
 
-`/report <bot> <what happened>` files a bug bead on the correct board by
+`/bug <bot> <what happened>` files a bug bead on the correct board by
 running `bd create` inside the pod against hostPath-mounted **live** beads
 databases (`/home/chase/k8s-homelab/.beads` → k8s-homelab board,
 `/home/chase/Downloads/pantry-bot/.beads` → pantry-bot board). The reporter's
@@ -85,9 +85,12 @@ Full reasoning in `20-rbac.yaml`'s header comment.
 |---|---|---|
 | `jmusicbot`, `pantry-bot`, `minecraft` | `pods` | `get`, `list`, `watch` |
 | `jmusicbot`, `pantry-bot`, `minecraft` | `deployments` (apps) | `get`, `list`, `watch`, `patch` |
+| `observability` | `pods`, `deployments` (apps) | `get`, `list`, `watch` (status only) |
 
-Excluded on purpose: `observability` namespace (not in the approved
-whitelist), any `secrets` verb, `delete`/`deletecollection`,
+The `observability` namespace is status-only: `/pods status observability` is
+available for triage, while `/deploy restart observability` is not offered and
+the service account has no deployment patch permission. Any `secrets` verb,
+`delete`/`deletecollection`,
 `exec`/`attach`/`portforward`, and anything cluster-scoped. (Contrast with
 `../ci-deploy/`'s Role, a separate narrower credential used only by the
 GitHub Actions deploy pipeline, not this bot.)
