@@ -33,6 +33,8 @@ ROLLOUT_SUPPRESSION_SECONDS = int(os.environ.get("ROLLOUT_SUPPRESSION_SECONDS", 
 ROLLOUT_POST_SUPPRESSION_SECONDS = int(
     os.environ.get("ROLLOUT_POST_SUPPRESSION_SECONDS", "180")
 )
+ERROR_CONFIRMATION_SECONDS = int(os.environ.get("ERROR_CONFIRMATION_SECONDS", "300"))
+ERROR_PENDING_GAP_SECONDS = int(os.environ.get("ERROR_PENDING_GAP_SECONDS", "90"))
 CLOUDFLARED_READY_URL = os.environ.get(
     "CLOUDFLARED_READY_URL", "http://cloudflared.pantry-bot.svc:2000/ready"
 )
@@ -77,6 +79,7 @@ _last_restart_count = {}
 _restart_events = {}
 _last_log_query_ns = time.time_ns()
 _rollout_suppression_started = {}
+_pending_errors = {}
 
 
 def acquire_singleton_lock():
@@ -130,6 +133,17 @@ def cooldown_ok(key):
         _last_alert_time[key] = now
         return True
     return False
+
+
+def persistent_error(key, now=None):
+    """Require a fingerprint to recur continuously before it can alert."""
+    now = time.time() if now is None else now
+    previous = _pending_errors.get(key)
+    if previous is None or now - previous["last_seen"] > ERROR_PENDING_GAP_SECONDS:
+        _pending_errors[key] = {"first_seen": now, "last_seen": now}
+        return False
+    previous["last_seen"] = now
+    return now - previous["first_seen"] >= ERROR_CONFIRMATION_SECONDS
 
 
 def cloudflared_ready(session=requests):
@@ -269,6 +283,8 @@ def check_log_errors():
             if rollout_state[namespace]:
                 continue
             key = alert_fingerprint(namespace, container, line, match)
+            if not persistent_error(key):
+                continue
             if cooldown_ok(key):
                 send_discord_alert(
                     f"⚠️ {container} log alert",

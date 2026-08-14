@@ -11,6 +11,19 @@ assert watcher.cooldown_ok("k") is False
 watcher._last_alert_time["k"] -= 901
 assert watcher.cooldown_ok("k") is True
 
+# A single transient line is not enough; recurrence for five minutes is
+# required, and a quiet gap resets the pending incident.
+watcher._pending_errors.clear()
+watcher.ERROR_CONFIRMATION_SECONDS = 300
+watcher.ERROR_PENDING_GAP_SECONDS = 90
+assert watcher.persistent_error("error", now=1000) is False
+assert watcher.persistent_error("error", now=1060) is False
+assert watcher.persistent_error("error", now=1120) is False
+assert watcher.persistent_error("error", now=1180) is False
+assert watcher.persistent_error("error", now=1240) is False
+assert watcher.persistent_error("error", now=1300) is True
+assert watcher.persistent_error("error", now=1391) is False
+
 for line in (
     "Connection error occurred",
     "EventSub disconnected, will reconnect",
