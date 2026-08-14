@@ -10,6 +10,12 @@
 name: Opsbot CI/CD
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - opsbot/bot/**
+      - opsbot/40-deployment.yaml
+      - .github/workflows/opsbot-deploy.yml
   workflow_dispatch:
     inputs:
       image_tag:
