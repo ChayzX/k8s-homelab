@@ -21,6 +21,104 @@ secrets, SQLite databases, world data, or kubeconfigs into Git.
 | k3s-watcher | Tracked source in `observability/k3s-watcher/`; host-installed copy consumed by `~/.config/systemd/user/k3s-watcher.service` | Host systemd user service; polls Loki and Kubernetes, sends Discord DMs | Copy/install from the tracked source, keep `.env` host-local, run `PYTHONPATH=. python3 test_watcher.py`, then restart the user unit. It health-gates only narrow Cloudflared QUIC teardown noise and deduplicates fingerprints. |
 | Scotty / bead-me-up-scotty | Upstream checkout `/home/chase/bead-me-up-scotty` ([upstream](https://github.com/brendan-appstart/bead-me-up-scotty)); manifests in `scotty/` | `scotty` namespace, hostPath-mounted config and Beads databases | Build and side-load `bead-me-up-scotty:local` as described in `scotty/README.md`. Config is `/home/chase/.config/bead-me-up-scotty-k8s/config.json`; restart after hand edits because config is cached. |
 
+## File-level map
+
+### PantryBot (`/home/chase/Downloads/pantry-bot`)
+
+- `src/bot/index.ts` — application entrypoint, Twitch chat wiring, EventSub
+  redemption handling, overlay broadcasts, and command registration.
+- `src/bot/commands/*.ts` — one module per chat command (`grab`, `donate`,
+  `pantry`, `boss`, `restock`, `pantryreward`, `overlayVolume`, and control
+  commands). Authorization and cooldown behavior is in
+  `src/bot/commandRegistry.ts` and `src/bot/cooldowns.ts`.
+- `src/game/catalog.ts` — snack IDs, display names, legacy names, rarity
+  pools, and lookup behavior. Update this file when a snack is renamed.
+- `src/game/boss.ts`, `src/game/inventory*`, `src/game/restock.ts` — boss
+  damage/donations, inventory persistence calls, and restock events.
+- `src/db/schema.ts`, `src/db/index.ts`, `src/db/stateRepo.ts`, and `src/db/*Repo.ts`
+  — SQLite schema, opening/migrations, app state, auth, inventory, and boss
+  persistence.
+- `src/twitch/channelPoints.ts`, `src/twitch/eventsub/*`, and
+  `src/twitch/tokenStore.ts` — reward lifecycle, EventSub subscriptions,
+  redemption awards, and OAuth token refresh.
+- `src/overlay/server.ts`, `src/overlay/volume.ts`, and
+  `src/overlay/public/` — WebSocket replay/broadcast server, persisted sound
+  volume, theme, ticker, and OBS browser-source pages.
+- `test/*.test.ts` — Vitest coverage; run `npm test` and `npm run typecheck`.
+- `.github/workflows/publish.yml` and `deploy.yml` in the PantryBot repo —
+  image publish and manual deployment. Never commit `.env`, OAuth tokens, or
+  the production database.
+
+### JMusicBot (`/home/chase/docker/jmusicbot` plus this repo)
+
+- `jmusicbot/40-deployment-jmusicbot.yaml` — Java bot Deployment, image,
+  probes, mounts, and resource limits.
+- `jmusicbot/50-deployment-release-notifier.yaml` — release notifier.
+- `jmusicbot/20-configmap.yaml` and `jmusicbot/30-pvcs.yaml` — non-secret
+  configuration and persistent state declarations.
+- `scripts/auto-update.sh` — host build/import/rollout/rollback updater.
+- `scripts/minecraft_exporter.py`, `scripts/README.md` — host metrics and
+  operational runbook. The Java application source remains in the host
+  checkout; this repository owns the k3s wrapper and deployment contract.
+
+### Minecraft
+
+- `minecraft/minecraft.yaml` — namespace, PVC, Services, Deployment,
+  readiness/liveness probes, RCON preStop, and resource policy.
+- `minecraft/Dockerfile` — Paper/Java image build and plugin installation.
+- `minecraft/entrypoint.sh` — empty-data guard, server startup, and JVM
+  arguments.
+- `minecraft/Rcon.java` — small RCON client used by probes and shutdown.
+- `minecraft/geyser-config.yml`, `minecraft/BEDROCK.md`, and `scripts/minecraft-download-plugins.sh`
+  — Bedrock/Geyser/Floodgate configuration and verified plugin downloads.
+- `scripts/minecraft-auto-update.sh` — Paper build discovery, checksum,
+  image build/import, rollout, RCON verification, rollback, and state file.
+- `scripts/minecraft_backup.py` — PVC/world archive job; backups are outside
+  Git and must be checked before upgrades.
+- `minecraft/MIGRATION.md`, `minecraft/UPGRADE-26.2.md`, and
+  `minecraft/secrets.md` — cutover, upgrade, and secret procedures.
+
+### Opsbot
+
+- `opsbot/bot/main.py` — Discord bot startup and command registration.
+- `opsbot/bot/commands.py`, `opsbot/bot/bd_ops.py`, and
+  `opsbot/bot/minecraft_ops.py` — allowlisted pod/deploy operations, Beads bug
+  filing, and Minecraft/RCON operations.
+- `opsbot/40-deployment.yaml` — image, hostPath Beads mounts, probes, and
+  environment wiring; `opsbot/20-rbac.yaml` is the authorization boundary.
+- `.github/workflows/opsbot-deploy.yml` — publish/apply/restart/verify stages;
+  `opsbot/SECRETS.md` documents required secrets.
+
+### Observability and Cloudflare
+
+- `observability/prometheus-config.yaml` — scrape jobs and targets.
+- `observability/loki-config.yaml` and `observability/promtail-config.yaml`
+  — log storage, parsing, labels, and retention.
+- `observability/grafana.yaml` and `observability/grafana-provisioning.yaml`
+  — Grafana Deployment, datasources, and alert provisioning.
+- `dashboards/*.json` and `dashboards/dashboards-configmap.yaml` — dashboard
+  panels and their ConfigMap packaging.
+- `observability/uptime-kuma.yaml` — Kuma Deployment/PVC/Service.
+- `pantry-bot/60-deployment-cloudflared.yaml` and
+  `ci-tunnel/20-deployment.yaml` — Cloudflare connector Deployments; hostname
+  ingress rules are managed in Cloudflare, not source control.
+- `observability/k3s-watcher/watcher.py` — Loki polling, restart-loop checks,
+  readiness-gated Cloudflared suppression, persistence confirmation, and
+  Discord alerting. Its host `.env` and systemd unit are intentionally local.
+- `.github/workflows/grafana-deploy.yml` — dashboard ConfigMap/apply/restart/
+  rollout/health pipeline.
+
+### Scotty and Beads
+
+- `scotty/10-deployment.yaml` — hostPath mounts for config and the two local
+  Beads databases; `scotty/20-service.yaml` exposes the UI internally.
+- `/home/chase/bead-me-up-scotty/app/` — upstream UI routes/pages.
+- `/home/chase/bead-me-up-scotty/lib/bd.ts` — Beads command execution and
+  actor stamping; `lib/config.ts` — persisted config; `lib/attribution.ts` —
+  human/agent origin classification.
+- `.beads/dolt/` — live local issue database; sync with `bd dolt pull/push`.
+  `.beads/issues.jsonl` is an export, not the sync source of truth.
+
 ## Common access patterns
 
 Read-only cluster triage:
