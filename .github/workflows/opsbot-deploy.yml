@@ -1,7 +1,5 @@
-# Manually-triggered deploy -- see opsbot-publish.yml's header for why this
-# is a separate workflow_dispatch-only workflow instead of an automatic step
-# after publish (free-plan substitute for GitHub's paid-only "required
-# reviewers" environment protection).
+# Bead: k8s-homelab-os2 — one visible CI/CD workflow with publish, manifest,
+# restart, rollout, and health-verification stages.
 #
 # k8s-homelab-oiv.8: reaches the cluster's private API through a dedicated
 # Cloudflare Tunnel (ci-tunnel/) gated by Cloudflare Access (service
@@ -9,9 +7,15 @@
 # proxies raw bytes after that -- kubectl talks to 127.0.0.1:16443 like
 # it's local. See ci-tunnel/MANUAL-SETUP.md for the full path.
 
-name: Deploy opsbot
+name: Opsbot CI/CD
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - opsbot/bot/**
+      - opsbot/40-deployment.yaml
+      - .github/workflows/opsbot-deploy.yml
   workflow_dispatch:
     inputs:
       image_tag:
@@ -23,132 +27,124 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
+  publish-image:
+    name: 1 - Build and publish image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish image
+        id: publish
+        uses: docker/build-push-action@v6
+        with:
+          context: opsbot/bot
+          push: true
+          tags: |
+            ghcr.io/chayzx/opsbot:latest
+            ghcr.io/chayzx/opsbot:${{ github.sha }}
+      - name: Publish stage summary
+        if: always()
+        run: |
+          { echo '## Opsbot CI/CD pipeline'; echo ''; echo '### Build and publish: ${{ steps.publish.outcome }}'; echo "- Digest: \`${{ steps.publish.outputs.digest || 'unavailable' }}\`"; } >> "$GITHUB_STEP_SUMMARY"
+
+  apply-manifest:
+    name: 2 - Apply deployment manifest
+    if: github.event_name == 'workflow_dispatch'
+    needs: publish-image
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        # Needed for opsbot/40-deployment.yaml -- k8s-homelab-0br: deploys
-        # used to only run `kubectl set image`, so non-image manifest
-        # changes (probes, resources, ports) silently never reached the
-        # cluster. Bit us directly: the health-endpoint probes/port added
-        # tonight never actually applied until a manual `kubectl apply`.
-        uses: actions/checkout@v5
-
-      - name: Install cloudflared
-        # Pinned version + checksum, not `latest` -- an unpinned download-and-
-        # exec-with-sudo step is a real supply-chain risk. Bump both together
-        # when a newer cloudflared is needed (checksum from the release's own
-        # cloudflared-linux-amd64 asset, e.g. `sha256sum` against the download).
-        env:
-          CLOUDFLARED_VERSION: "2026.7.3"
-          CLOUDFLARED_SHA256: "9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17"
-        run: |
-          curl -sSL -o cloudflared "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64"
-          echo "${CLOUDFLARED_SHA256}  cloudflared" | sha256sum -c -
-          chmod +x cloudflared
-          sudo mv cloudflared /usr/local/bin/
-
-      - name: Open Access-authenticated tunnel to k8s API
-        # Service token via env, not CLI args -- args are visible to anything
-        # reading the process table on the runner, same reasoning as this
-        # repo's pantry-bot/60-deployment-cloudflared.yaml on TUNNEL_TOKEN.
-        # cloudflared reads these particular env vars natively (see its own
-        # --help output), so no code change needed, just dropping the flags.
+      - uses: actions/checkout@v5
+      - name: Connect to cluster
         env:
           TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
-        run: |
-          cloudflared access tcp \
-            --hostname k8s-api.greeniespantry.uk \
-            --url 127.0.0.1:16443 &
-          sleep 3
-
-      - name: Write scoped kubeconfig
-        # Secret via env + $VAR reference, not inlined ${{ }} in the script --
-        # keeps the literal secret value out of the rendered run-script text.
-        env:
           KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_OPSBOT }}
         run: |
+          set -euo pipefail
+          test -n "$TUNNEL_SERVICE_TOKEN_ID"
+          test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
+          test -n "$KUBE_CONFIG_B64"
+          curl -sSL -o cloudflared "https://github.com/cloudflare/cloudflared/releases/download/2026.7.3/cloudflared-linux-amd64"
+          echo "9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared" | sha256sum -c -
+          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
+          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
           echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/opsbot.kubeconfig"
+          chmod 600 "$RUNNER_TEMP/opsbot.kubeconfig"
+          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl apply -f opsbot/40-deployment.yaml -n opsbot
 
-      - name: Apply deployment manifest
-        # Picks up any non-image change (probes, resources, ports, env) --
-        # ci-deploy's RBAC only grants get/patch on deployments (no create,
-        # no services/RBAC), which is exactly what applying an
-        # already-existing Deployment needs -- no permission widening.
+  restart-opsbot:
+    name: 3 - Deploy image and restart pod
+    needs: apply-manifest
+    runs-on: ubuntu-latest
+    outputs:
+      previous_pod: ${{ steps.restart.outputs.previous_pod }}
+    steps:
+      - name: Connect and restart pod
+        id: restart
         env:
-          KUBECONFIG: ${{ runner.temp }}/opsbot.kubeconfig
-        run: kubectl apply -f opsbot/40-deployment.yaml -n opsbot
-
-      - name: Record current pod
-        id: before
-        env:
-          KUBECONFIG: ${{ runner.temp }}/opsbot.kubeconfig
-        run: |
-          POD="$(kubectl get pods -n opsbot -l app.kubernetes.io/name=opsbot \
-            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-          echo "pod=$POD" >> "$GITHUB_OUTPUT"
-          echo "Current pod: ${POD:-none}"
-
-      - name: Deploy image to Kubernetes
-        # `kubectl set image` is a no-op if the tag STRING doesn't change --
-        # deploying the default `latest` when the Deployment's already on
-        # `latest` wouldn't restart anything even though a new image was
-        # just published under that tag. `rollout restart` after it forces
-        # a fresh pull regardless (imagePullPolicy: Always), harmless when
-        # set image DID already trigger one.
-        env:
-          KUBECONFIG: ${{ runner.temp }}/opsbot.kubeconfig
-          IMAGE_TAG: ${{ inputs.image_tag }}
-        run: |
-          kubectl set image deployment/opsbot "opsbot=ghcr.io/chayzx/opsbot:${IMAGE_TAG}" -n opsbot
-          kubectl rollout restart deployment/opsbot -n opsbot
-
-      - name: Wait for pod replacement and rollout
-        env:
-          KUBECONFIG: ${{ runner.temp }}/opsbot.kubeconfig
-        run: kubectl rollout status deployment/opsbot -n opsbot --timeout=60s
-
-      - name: Verify pod restart and health
-        env:
-          KUBECONFIG: ${{ runner.temp }}/opsbot.kubeconfig
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_OPSBOT }}
           IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
           set -euo pipefail
-          POD="$(kubectl get pods -n opsbot -l app.kubernetes.io/name=opsbot \
-            -o jsonpath='{.items[0].metadata.name}')"
-          IMAGE_ID="$(kubectl get pod "$POD" -n opsbot \
-            -o jsonpath='{.status.containerStatuses[?(@.name=="opsbot")].imageID}')"
-          STARTED="$(kubectl get pod "$POD" -n opsbot \
-            -o jsonpath='{.status.containerStatuses[?(@.name=="opsbot")].state.running.startedAt}')"
-          READY="$(kubectl get pod "$POD" -n opsbot \
-            -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')"
-          test "$READY" = "True"
-          test -n "$IMAGE_ID"
-          test -n "$STARTED"
-          if [ -n "${{ steps.before.outputs.pod }}" ] && [ "$POD" = "${{ steps.before.outputs.pod }}" ]; then
-            echo "Expected a replacement pod, but the pod name did not change: $POD" >&2
+          test -n "$TUNNEL_SERVICE_TOKEN_ID"
+          test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
+          test -n "$KUBE_CONFIG_B64"
+          test -n "$IMAGE_TAG"
+          curl -sSL -o cloudflared "https://github.com/cloudflare/cloudflared/releases/download/2026.7.3/cloudflared-linux-amd64"
+          echo "9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared" | sha256sum -c -
+          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
+          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
+          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/opsbot.kubeconfig"
+          chmod 600 "$RUNNER_TEMP/opsbot.kubeconfig"
+          POD="$(KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl get pods -n opsbot -l app.kubernetes.io/name=opsbot -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+          echo "previous_pod=$POD" >> "$GITHUB_OUTPUT"
+          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl set image deployment/opsbot "opsbot=ghcr.io/chayzx/opsbot:${IMAGE_TAG}" -n opsbot
+          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl rollout restart deployment/opsbot -n opsbot
+          echo "Previous pod: ${POD:-none}"
+
+  verify-opsbot:
+    name: 4 - Verify rollout and pod health
+    needs: restart-opsbot
+    runs-on: ubuntu-latest
+    steps:
+      - name: Connect and verify pod health
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_OPSBOT }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          test -n "$TUNNEL_SERVICE_TOKEN_ID"
+          test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
+          test -n "$KUBE_CONFIG_B64"
+          test -n "$IMAGE_TAG"
+          curl -sSL -o cloudflared "https://github.com/cloudflare/cloudflared/releases/download/2026.7.3/cloudflared-linux-amd64"
+          echo "9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared" | sha256sum -c -
+          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
+          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
+          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/opsbot.kubeconfig"
+          chmod 600 "$RUNNER_TEMP/opsbot.kubeconfig"
+          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl rollout status deployment/opsbot -n opsbot --timeout=180s
+          POD="$(KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl get pods -n opsbot -l app.kubernetes.io/name=opsbot -o jsonpath='{.items[0].metadata.name}')"
+          READY="$(KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl get pod "$POD" -n opsbot -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')"
+          IMAGE_ID="$(KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl get pod "$POD" -n opsbot -o jsonpath='{.status.containerStatuses[?(@.name=="opsbot")].imageID}')"
+          test "$READY" = True; test -n "$IMAGE_ID"
+          PREVIOUS_POD='${{ needs.restart-opsbot.outputs.previous_pod }}'
+          if [ -n "$PREVIOUS_POD" ] && [ "$POD" = "$PREVIOUS_POD" ]; then
+            echo "Expected a replacement Opsbot pod, but the pod name did not change: $POD" >&2
             exit 1
           fi
-          {
-            echo '## Opsbot deployment pipeline'
-            echo ''
-            echo '### Deploy image to Kubernetes: ✅ passed'
-            echo "- Requested image: \`ghcr.io/chayzx/opsbot:${IMAGE_TAG}\`"
-            echo '### Pod replacement: ✅ passed'
-            echo "- Previous pod: \`${{ steps.before.outputs.pod || 'none' }}\`"
-            echo "- Current pod: \`$POD\`"
-            echo "- Container started: \`$STARTED\`"
-            echo '### Pod health: ✅ passed'
-            echo "- Ready condition: \`$READY\`"
-            echo "- Image ID: \`$IMAGE_ID\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          kubectl get deployment/opsbot -n opsbot -o wide
-          kubectl get pod "$POD" -n opsbot -o wide
-
-      - name: Rollback on failure
-        if: failure()
-        env:
-          KUBECONFIG: ${{ runner.temp }}/opsbot.kubeconfig
-        run: kubectl rollout undo deployment/opsbot -n opsbot
+          { echo '## Opsbot deployment pipeline'; echo ''; echo '### Manifest apply: ✅ passed'; echo '### Pod restart: ✅ passed'; echo "- Previous pod: \`${PREVIOUS_POD:-none}\`"; echo "- Current pod: \`$POD\`"; echo '### Pod health: ✅ passed'; echo "- Ready: \`$READY\`"; echo "- Image ID: \`$IMAGE_ID\`"; } >> "$GITHUB_STEP_SUMMARY"

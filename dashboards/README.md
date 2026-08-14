@@ -1,6 +1,6 @@
 # Grafana dashboards for the k3s home-lab
 
-Eight dashboards, built to replace the four that ran under Docker Desktop
+Nine dashboards, built to replace the four that ran under Docker Desktop
 (`host-overview`, `container-resources`, `minecraft`, `logs-overview` — see
 `/home/chase/docker/observability/monitoring/grafana/dashboards/` for the
 originals, kept read-only for reference) with equivalents that understand
@@ -40,7 +40,7 @@ Net result, one apply order:
 ```sh
 kubectl apply -f k8s-homelab/observability/namespace.yaml
 kubectl apply -f k8s-homelab/observability/grafana-provisioning.yaml   # datasources + dashboards providers + placeholder grafana-dashboards
-kubectl apply -f k8s-homelab/dashboards/dashboards-configmap.yaml      # REPLACES the placeholder with the real 8 dashboards
+kubectl apply -f k8s-homelab/dashboards/dashboards-configmap.yaml      # REPLACES the placeholder with the real 9 dashboards
 kubectl apply -f k8s-homelab/observability/grafana.yaml                # Deployment/Service/PVC/SA
 ```
 
@@ -60,6 +60,7 @@ kubectl create configmap grafana-dashboards -n observability \
   --from-file=jmusicbot.json=jmusicbot.json \
   --from-file=pantry-bot.json=pantry-bot.json \
   --from-file=cloudflared.json=cloudflared.json \
+  --from-file=host-pc.json=host-pc.json \
   --dry-run=client -o yaml
 ```
 then paste the `data:` block back into `dashboards-configmap.yaml` under
@@ -67,7 +68,7 @@ its existing `metadata:` (labels included), or just `kubectl apply -f -`
 the command's output directly against a live cluster — same object,
 same name, same namespace, it overwrites in place.
 
-**Size**: all eight dashboards remain comfortably below the 1 MiB ConfigMap
+**Size**: all nine dashboards remain comfortably below the 1 MiB ConfigMap
 etcd/API object-size ceiling for a ConfigMap is 1 MiB, so one ConfigMap
 comfortably hold them in one object — no split needed. If more dashboards get
 added later and this approaches ~900 KiB, split by file and add one
@@ -165,9 +166,11 @@ committed.
 
 ### `pods-and-workloads.json` — Pods & Workloads — Usage vs Limits
 
-Per-namespace / per-pod view across `observability`, `jmusicbot`,
-`pantry-bot`, `minecraft`, `keel` (the `namespace` variable defaults to
-exactly those five). The panel the spec called out specifically —
+Per-namespace / per-pod view across every namespace exposed by
+`kube-state-metrics`, including `observability`, `jmusicbot`,
+`pantry-bot`, and `minecraft`; the namespace selector is populated from
+live `kube-state-metrics` labels and includes an explicit all-namespaces
+option. The panel the spec called out specifically —
 **usage plotted against the pod's configured limit**, not usage alone —
 is panel 9 (memory, solid = working set from cAdvisor, dashed = limit
 from kube-state-metrics) and panel 10 (memory used as % of limit,

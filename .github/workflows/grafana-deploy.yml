@@ -1,3 +1,5 @@
+# Bead: k8s-homelab-os2 — one visible workflow with ConfigMap, restart,
+# rollout, and health-verification stages.
 # Dashboard/configuration deployment for Grafana. Dashboard JSON is kept in
 # dashboards/ and embedded in dashboards/dashboards-configmap.yaml; this
 # workflow makes the apply and restart visible in GitHub Actions instead of
@@ -11,8 +13,6 @@ on:
       - main
     paths:
       - dashboards/**
-      - observability/grafana.yaml
-      - observability/grafana-provisioning.yaml
       - .github/workflows/grafana-deploy.yml
   workflow_dispatch: {}
 
@@ -20,7 +20,8 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
+  apply-configmap:
+    name: 1 - Apply dashboard ConfigMap
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -43,6 +44,8 @@ jobs:
           TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
           set -euo pipefail
+          test -n "$TUNNEL_SERVICE_TOKEN_ID"
+          test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
           cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 &
           sleep 3
 
@@ -53,6 +56,7 @@ jobs:
           set -euo pipefail
           test -n "$KUBE_CONFIG_B64"
           echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/grafana.kubeconfig"
+          chmod 600 "$RUNNER_TEMP/grafana.kubeconfig"
 
       - name: Apply Grafana dashboard ConfigMap
         id: configmap
@@ -64,21 +68,93 @@ jobs:
           echo '### Dashboard ConfigMap: ✅ applied' >> "$GITHUB_STEP_SUMMARY"
           echo '- Source: `dashboards/dashboards-configmap.yaml`' >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Record current Grafana pod
-        id: before
-        env:
-          KUBECONFIG: ${{ runner.temp }}/grafana.kubeconfig
-        run: |
-          POD="$(kubectl get pods -n observability -l app.kubernetes.io/name=grafana -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-          echo "pod=$POD" >> "$GITHUB_OUTPUT"
-          echo "Current pod: ${POD:-none}"
+  restart-grafana:
+    name: 2 - Restart Grafana pod
+    needs: apply-configmap
+    runs-on: ubuntu-latest
+    outputs:
+      previous_pod: ${{ steps.restart.outputs.previous_pod }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
 
-      - name: Restart Grafana deployment
+      - name: Install cloudflared
+        env:
+          CLOUDFLARED_VERSION: "2026.7.3"
+          CLOUDFLARED_SHA256: "9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17"
+        run: |
+          set -euo pipefail
+          curl -sSL -o cloudflared "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64"
+          echo "${CLOUDFLARED_SHA256}  cloudflared" | sha256sum -c -
+          chmod +x cloudflared
+          sudo mv cloudflared /usr/local/bin/
+
+      - name: Open Access-authenticated tunnel to k3s API
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$TUNNEL_SERVICE_TOKEN_ID"
+          test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
+          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 &
+          sleep 3
+
+      - name: Write scoped kubeconfig
+        env:
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_GRAFANA }}
+        run: |
+          set -euo pipefail
+          test -n "$KUBE_CONFIG_B64"
+          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/grafana.kubeconfig"
+          chmod 600 "$RUNNER_TEMP/grafana.kubeconfig"
+
+      - name: Record pod and restart Grafana
+        id: restart
         env:
           KUBECONFIG: ${{ runner.temp }}/grafana.kubeconfig
         run: |
+          set -euo pipefail
+          POD="$(kubectl get pods -n observability -l app.kubernetes.io/name=grafana -o jsonpath='{.items[0].metadata.name}')"
+          echo "previous_pod=$POD" >> "$GITHUB_OUTPUT"
           kubectl rollout restart deployment/grafana -n observability
-          echo '### Grafana pod restart: ✅ requested' >> "$GITHUB_STEP_SUMMARY"
+          echo "Previous pod: $POD"
+
+  verify-grafana:
+    name: 3 - Verify rollout and pod health
+    needs: restart-grafana
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install cloudflared
+        env:
+          CLOUDFLARED_VERSION: "2026.7.3"
+          CLOUDFLARED_SHA256: "9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17"
+        run: |
+          set -euo pipefail
+          curl -sSL -o cloudflared "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64"
+          echo "${CLOUDFLARED_SHA256}  cloudflared" | sha256sum -c -
+          chmod +x cloudflared
+          sudo mv cloudflared /usr/local/bin/
+
+      - name: Open Access-authenticated tunnel to k3s API
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$TUNNEL_SERVICE_TOKEN_ID"
+          test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
+          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 &
+          sleep 3
+
+      - name: Write scoped kubeconfig
+        env:
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_GRAFANA }}
+        run: |
+          set -euo pipefail
+          test -n "$KUBE_CONFIG_B64"
+          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/grafana.kubeconfig"
+          chmod 600 "$RUNNER_TEMP/grafana.kubeconfig"
 
       - name: Wait for Grafana rollout
         env:
@@ -97,16 +173,17 @@ jobs:
           test "$READY" = "True"
           test -n "$STARTED"
           test -n "$IMAGE_ID"
-          if [ -n "${{ steps.before.outputs.pod }}" ] && [ "$POD" = "${{ steps.before.outputs.pod }}" ]; then
+          PREVIOUS_POD='${{ needs.restart-grafana.outputs.previous_pod }}'
+          if [ -n "$PREVIOUS_POD" ] && [ "$POD" = "$PREVIOUS_POD" ]; then
             echo "Expected a replacement Grafana pod, but the pod name did not change: $POD" >&2
             exit 1
           fi
           {
             echo '## Grafana deployment pipeline'
             echo ''
-            echo '### Dashboard ConfigMap: ✅ passed'
-            echo '### Grafana pod restart: ✅ passed'
-            echo "- Previous pod: \`${{ steps.before.outputs.pod || 'none' }}\`"
+            echo '### Dashboard ConfigMap: ✅ passed (apply-configmap job)'
+            echo '### Grafana pod restart: ✅ passed (restart-grafana job)'
+            echo "- Previous pod: \`${PREVIOUS_POD:-none}\`"
             echo "- Current pod: \`$POD\`"
             echo "- Container started: \`$STARTED\`"
             echo '### Grafana pod health: ✅ passed'
