@@ -138,11 +138,22 @@ jobs:
           echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/opsbot.kubeconfig"
           chmod 600 "$RUNNER_TEMP/opsbot.kubeconfig"
           KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl rollout status deployment/opsbot -n opsbot --timeout=180s
-          POD="$(KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl get pods -n opsbot -l app.kubernetes.io/name=opsbot -o jsonpath='{.items[0].metadata.name}')"
+          # rollout status can return while the old pod is still terminating;
+          # selecting .items[0] then races the replacement assertion. Wait for
+          # a Running+Ready pod and explicitly reject the recorded old pod.
+          POD=""
+          for attempt in $(seq 1 30); do
+            POD="$(KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl get pods -n opsbot -l app.kubernetes.io/name=opsbot -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.phase}{" "}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}' | awk '$2 == "Running" && $3 == "True" { print $1; exit }')"
+            PREVIOUS_POD='${{ needs.restart-opsbot.outputs.previous_pod }}'
+            if [ -n "$POD" ] && [ "$POD" != "$PREVIOUS_POD" ]; then
+              break
+            fi
+            sleep 2
+          done
+          test -n "$POD"
           READY="$(KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl get pod "$POD" -n opsbot -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')"
           IMAGE_ID="$(KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl get pod "$POD" -n opsbot -o jsonpath='{.status.containerStatuses[?(@.name=="opsbot")].imageID}')"
           test "$READY" = True; test -n "$IMAGE_ID"
-          PREVIOUS_POD='${{ needs.restart-opsbot.outputs.previous_pod }}'
           if [ -n "$PREVIOUS_POD" ] && [ "$POD" = "$PREVIOUS_POD" ]; then
             echo "Expected a replacement Opsbot pod, but the pod name did not change: $POD" >&2
             exit 1
