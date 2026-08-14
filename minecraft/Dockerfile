@@ -27,8 +27,13 @@
 #
 # BUILD
 # ============================================================================
-#   The build context must contain the server jar. Copy the *running* one so the
-#   container runs byte-identical bits to what is live today:
+#   The build context must contain the server jar and verified cross-play
+#   plugin jars. Prepare them with:
+#
+#     bash ../scripts/minecraft-download-plugins.sh
+#
+#   Copy the *running* Paper jar so the container runs byte-identical bits to
+#   what is live today:
 #
 #     cp /home/chase/minecraft/paper.jar /home/chase/k8s-homelab/minecraft/paper.jar
 #     cd /home/chase/k8s-homelab/minecraft
@@ -87,6 +92,8 @@ RUN set -eux; \
 
 # The server jar. Read-only at runtime; root-owned by design.
 COPY paper.jar /opt/minecraft/paper.jar
+COPY plugins/*.jar /opt/minecraft/plugins/
+COPY geyser-config.yml /opt/minecraft/geyser-config.yml
 COPY --from=rcon-build /build/rcon.jar /opt/minecraft/rcon.jar
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # Stdout-only Log4j2 config — see log4j2.xml's own header for the full
@@ -95,7 +102,7 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # containerd->promtail->Loki is the durable, retention-bounded copy.
 COPY log4j2.xml /opt/minecraft/log4j2.xml
 RUN chmod 0755 /usr/local/bin/entrypoint.sh \
- && chmod 0444 /opt/minecraft/paper.jar /opt/minecraft/rcon.jar /opt/minecraft/log4j2.xml
+ && chmod 0444 /opt/minecraft/paper.jar /opt/minecraft/plugins/*.jar /opt/minecraft/rcon.jar /opt/minecraft/log4j2.xml
 
 ENV MC_DATA_DIR=/data \
     MC_JAR=/opt/minecraft/paper.jar \

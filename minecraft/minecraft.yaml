@@ -158,11 +158,11 @@ spec:
       containers:
         - name: minecraft
           # Side-loaded into k3s containerd, never pulled from a registry:
-          #   docker save localhost/paper-minecraft:26.2-b112 | sudo k3s ctr images import -
+          #   docker save localhost/paper-minecraft:26.2-b112-bedrock2 | sudo k3s ctr images import -
           # imagePullPolicy MUST be IfNotPresent (or Never) — with Always, or
           # with a `:latest` tag, kubelet would try to reach a registry that
           # does not have this image and the pod would sit in ImagePullBackOff.
-          image: localhost/paper-minecraft:26.2-b112
+          image: localhost/paper-minecraft:26.2-b112-bedrock2
           imagePullPolicy: IfNotPresent
 
           # Keep stdin open but unattached. Paper's console reader reads stdin;
@@ -177,6 +177,9 @@ spec:
             - name: minecraft
               containerPort: 25566
               protocol: TCP
+            - name: bedrock
+              containerPort: 19132
+              protocol: UDP
             - name: query
               containerPort: 25566
               protocol: UDP
@@ -398,6 +401,10 @@ spec:
       port: 25565
       targetPort: 25566
       protocol: TCP
+    - name: bedrock
+      port: 19132
+      targetPort: 19132
+      protocol: UDP
     # Optional: the UDP query protocol (enable-query=true, query.port=25566).
     # Left commented because nothing consumes it — the exporter uses RCON — and
     # a mixed TCP/UDP LoadBalancer means the ServiceLB pod must also claim

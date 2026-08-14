@@ -63,6 +63,21 @@ fi
 # to the EULA on the operator's behalf. It is copied in with the world data.
 [ -f "$DATA_DIR/eula.txt" ] || die "$DATA_DIR/eula.txt not found; copy it in with the world data"
 
+# Plugin jars are image-owned inputs, while plugin configuration and Floodgate's
+# authentication key remain mutable state on the PVC. Seeding on every start
+# keeps a redeploy from silently retaining an older plugin binary.
+mkdir -p "$DATA_DIR/plugins"
+for plugin in /opt/minecraft/plugins/*.jar; do
+    [ -f "$plugin" ] || continue
+    cp -f "$plugin" "$DATA_DIR/plugins/"
+    echo "[entrypoint] seeded plugin: $(basename "$plugin")"
+done
+if [ ! -f "$DATA_DIR/plugins/Geyser-Spigot/config.yml" ]; then
+    mkdir -p "$DATA_DIR/plugins/Geyser-Spigot"
+    cp -f /opt/minecraft/geyser-config.yml "$DATA_DIR/plugins/Geyser-Spigot/config.yml"
+    echo "[entrypoint] seeded Geyser config with Floodgate authentication"
+fi
+
 # Ownership guard. fsGroup + the manual chown in MIGRATION.md should make this a
 # no-op, but a read-only or root-owned data dir produces confusing half-failures
 # deep inside chunk saving rather than an obvious error at startup.

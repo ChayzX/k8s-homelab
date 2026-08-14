@@ -1,0 +1,8 @@
+# Minimal, redeployable Geyser-Spigot configuration. Geyser fills omitted
+# settings with its version defaults and persists the expanded config on /data.
+bedrock:
+  address: 0.0.0.0
+  port: 19132
+  clone-remote-port: false
+java:
+  auth-type: floodgate

@@ -435,6 +435,15 @@ log "Downloaded and verified ${jar_name} (sha256 ${actual_sha256})"
 mv "$TMP_JAR" "$BUILD_DIR/paper.jar"
 trap - EXIT
 
+# Keep the cross-play plugins in the image alongside Paper. The helper pins
+# exact Geyser/Floodgate builds and verifies their upstream SHA-256 checksums.
+if ! ROOT_DIR="${ROOT_DIR:-/home/chase/k8s-homelab}" \
+    MINECRAFT_BUILD_DIR="$BUILD_DIR" \
+    bash "${ROOT_DIR:-/home/chase/k8s-homelab}/scripts/minecraft-download-plugins.sh"; then
+    notify "FAILED to download or verify Geyser/Floodgate plugins. Left the running pod untouched."
+    exit 1
+fi
+
 image_tag="localhost/paper-minecraft:${MC_VERSION}-b${build_id}"
 
 if ! DOCKER_BUILDKIT=1 docker build \

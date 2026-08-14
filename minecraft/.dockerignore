@@ -1,7 +1,10 @@
-# Keep the build context to: Dockerfile, Rcon.java, entrypoint.sh, paper.jar, log4j2.xml.
+# Keep the build context to the image inputs only.
 *
 !Dockerfile
 !Rcon.java
 !entrypoint.sh
 !paper.jar
 !log4j2.xml
+!geyser-config.yml
+!plugins/
+!plugins/*.jar

@@ -20,6 +20,10 @@ The Paper version metadata identifies Java 25 as the minimum runtime for the
 `JAVA_VERSION` and `MC_VERSION` build args, with Java 25 / Minecraft 26.2 as
 the current defaults; the prior 1.21.11 image remains available for rollback.
 
+The image also carries checksum-pinned Geyser-Spigot and Floodgate-Spigot
+artifacts. See [BEDROCK.md](BEDROCK.md) for the UDP listener and router
+requirements.
+
 ## Required review before any production change
 
 1. Read the official Minecraft 26.2 release notes and Paper 26.2 notes.
