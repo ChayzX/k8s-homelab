@@ -28,7 +28,7 @@ permissions:
 
 jobs:
   publish-image:
-    name: 1 - Build and publish image
+    name: 1 - Build/publish (no live deploy)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -55,10 +55,10 @@ jobs:
       - name: Publish stage summary
         if: always()
         run: |
-          { echo '## Opsbot CI/CD pipeline'; echo ''; echo '### Build and publish: ${{ steps.publish.outcome }}'; echo "- Digest: \`${{ steps.publish.outputs.digest || 'unavailable' }}\`"; } >> "$GITHUB_STEP_SUMMARY"
+          { echo '## Opsbot CI/CD pipeline'; echo ''; echo '### Build and publish: ${{ steps.publish.outcome }}'; echo "- Digest: \`${{ steps.publish.outputs.digest || 'unavailable' }}\`"; if [ '${{ github.event_name }}' = 'push' ]; then echo '### Live deployment: ⏸ not run (push publishes only)'; else echo '### Live deployment: ▶ continuing through apply/restart/verify'; fi; } >> "$GITHUB_STEP_SUMMARY"
 
   apply-manifest:
-    name: 2 - Apply deployment manifest
+    name: 2 - Apply deployment manifest (manual deploy)
     if: github.event_name == 'workflow_dispatch'
     needs: publish-image
     runs-on: ubuntu-latest
@@ -83,7 +83,7 @@ jobs:
           KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl apply -f opsbot/40-deployment.yaml -n opsbot
 
   restart-opsbot:
-    name: 3 - Deploy image and restart pod
+    name: 3 - Deploy image and restart pod (manual deploy)
     needs: apply-manifest
     runs-on: ubuntu-latest
     outputs:
@@ -115,7 +115,7 @@ jobs:
           echo "Previous pod: ${POD:-none}"
 
   verify-opsbot:
-    name: 4 - Verify rollout and pod health
+    name: 4 - Verify rollout and pod health (manual deploy)
     needs: restart-opsbot
     runs-on: ubuntu-latest
     steps:

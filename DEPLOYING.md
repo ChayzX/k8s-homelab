@@ -1,6 +1,22 @@
 # Deploying Code Changes
 
-Code builds automatically when pushed to `main` — deployment is manual. This two-step model ensures builds work before anything touches the live bots.
+Use this rule: a green **publish/CI** run does not necessarily mean the live
+pod changed. Only a workflow whose summary contains **Apply**, **Restart**, and
+**Verify** stages has deployed a workload.
+
+## At-a-glance trigger matrix
+
+| Change | Push to `main` does | Manual action needed? |
+|---|---|---|
+| Opsbot application (`opsbot/bot/**`) | Builds/publishes GHCR image only | Yes: run **Opsbot CI/CD** |
+| PantryBot application | Builds/publishes image only | Yes: run PantryBot **Deploy** |
+| Grafana dashboards/config | Applies ConfigMap, restarts, and verifies Grafana automatically | No; push is the deployment (a manual dispatch also works) |
+| Minecraft updater/manifests | No GitHub deployment | Yes: follow the Minecraft runbook/approved updater path |
+| JMusicBot host build | No GitHub deployment | Yes: run the host updater manually/cron |
+| k3s-watcher source | Git changes only | Yes: update the host checkout and restart its systemd user unit |
+
+If the Actions run shows only **Build and publish**, nothing was deployed yet.
+If it shows **Apply**, **Restart**, and **Verify**, the live deployment path ran.
 
 ## Making a Code Change
 
@@ -16,7 +32,9 @@ git push origin main
 git push origin main
 ```
 
-That's it. GitHub Actions will build and push a Docker image. You'll see the workflow run in the Actions tab. Wait for it to pass (green checkmark) before deploying. (If your k8s-homelab push didn't touch `opsbot/bot/**`, no build runs — that's expected, e.g. a docs or manifest change elsewhere in the repo.)
+GitHub Actions will build and push a Docker image. Wait for that run to pass
+before manually deploying. (If your k8s-homelab push didn't touch
+`opsbot/bot/**`, no Opsbot publish run occurs — that is expected.)
 
 ## Deploying
 
@@ -30,22 +48,36 @@ Deployment is manual — you click the button in GitHub's UI. This ensures you'r
 4. Leave "Use workflow from" as `main`
 5. Optionally type an image tag in the text field (e.g., `abc1234` for a specific commit, or `latest` for the most recent build). Leave blank to default to `latest`.
 6. Click the green **Run workflow** button
-7. Watch the run logs. Deployment waits for the new pod to become healthy; if it doesn't within 60 seconds, the old version automatically rolls back.
+7. In the run, confirm all four jobs complete: **Build/publish**, **Apply
+   manifest**, **Deploy/restart**, and **Verify rollout and pod health**. The
+   final job summary names the old and new pod and reports readiness/image ID.
 
 ### For pantry-bot
 
-Same steps, but for the **pantry-bot** repo:
+Same steps, but for the **pantry-bot** repo. A push to `main` publishes the
+image; it does not change the running pod:
 
 1. GitHub → pantry-bot repo → **Actions** tab
 2. Click **Deploy** workflow
 3. Click **Run workflow**, leave settings as-is (or optionally specify an image tag)
-4. Click the green **Run workflow** button
+4. Click the green **Run workflow** button and wait for the staged publish,
+   apply, restart, and verify results.
+
+### For Grafana
+
+Push dashboard/config changes to `main`. The `Deploy Grafana` workflow runs
+the ConfigMap apply, pod restart, rollout wait, and health checks automatically.
+You do not need a second Run workflow click. Use manual dispatch only when you
+want to redeploy the current dashboard state without a new commit.
 
 ## If Something Goes Wrong
 
 - **Pod doesn't become healthy**: the deploy workflow automatically rolls back to the previous version after 60 seconds. Check the Actions log for error details.
 - **Deployment stays unhealthy**: the Discord monitoring alert system (`k3s-watcher`) will DM you on Discord within a few minutes if pods are crashing or erroring. Check the bot's logs: `kubectl logs -n opsbot deployment/opsbot` (or `kubectl logs -n pantry-bot deployment/pantry-bot`).
-- **Workflow itself fails** (build error): fix the code, commit, push to `main` again to rebuild. No rollback needed — nothing was deployed.
+- **Workflow itself fails during publish**: fix the code, commit, push to `main` again to rebuild. Nothing was deployed.
+- **Workflow fails during Apply/Restart/Verify**: inspect the failing stage and
+  the final summary. The old pod may still be serving; do not click Run again
+  repeatedly until the failure cause is understood.
 
 ## Previous Auto-Deploy System
 
