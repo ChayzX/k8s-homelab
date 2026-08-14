@@ -1,9 +1,8 @@
 # Paper 26.2 migration preparation
 
-This is a preparation and review record only. It does **not** change the
-running Minecraft deployment. The current manifest remains on the known-good
-`localhost/paper-minecraft:1.21.11-b132` image until the operator approves a
-backup, compatibility review, and controlled cutover.
+This records the completed, controlled migration from Paper 1.21.11 to Paper
+26.2. The live deployment now runs the verified
+`localhost/paper-minecraft:26.2-b112` image.
 
 ## Evidence checked
 
@@ -17,10 +16,9 @@ sha256: bd3a58cf96874e5ea6643f5f6fe9b4f5bf9e34b795fa078c2f0ee8b98b2f907e
 ```
 
 The Paper version metadata identifies Java 25 as the minimum runtime for the
-26.2 line. The current image uses Eclipse Temurin 21 and must not be reused
-for 26.2. `Dockerfile` now accepts `JAVA_VERSION` and `MC_VERSION` build args;
-the defaults intentionally remain 21/1.21.11 until this migration is
-approved.
+26.2 line. The current image uses Eclipse Temurin 25. `Dockerfile` accepts
+`JAVA_VERSION` and `MC_VERSION` build args, with Java 25 / Minecraft 26.2 as
+the current defaults; the prior 1.21.11 image remains available for rollback.
 
 ## Required review before any production change
 
@@ -53,7 +51,7 @@ approved.
 
 ## Auto-update safety
 
-`scripts/minecraft-auto-update.sh` intentionally remains pinned to 1.21.11.
-It must not cross the major version boundary unattended. After a successful
-human-reviewed cutover, update that pin and the comments describing the
-current build as a separate change, then re-enable scheduling if appropriate.
+`scripts/minecraft-auto-update.sh` is now pinned to the reviewed 26.2 line and
+passes Java 25 / Minecraft 26.2 build args explicitly. It still never changes
+the major version automatically; a future major upgrade requires the same
+human changelog, backup, compatibility, and rollback review.

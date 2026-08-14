@@ -1,5 +1,5 @@
 # ============================================================================
-#  Minecraft (Paper 1.21.11) on single-node k3s
+#  Minecraft (Paper 26.2) on single-node k3s
 # ============================================================================
 #
 #  READ MIGRATION.md BEFORE APPLYING THIS FILE.
@@ -158,11 +158,11 @@ spec:
       containers:
         - name: minecraft
           # Side-loaded into k3s containerd, never pulled from a registry:
-          #   docker save localhost/paper-minecraft:1.21.11-b127 | sudo k3s ctr images import -
+          #   docker save localhost/paper-minecraft:26.2-b112 | sudo k3s ctr images import -
           # imagePullPolicy MUST be IfNotPresent (or Never) — with Always, or
           # with a `:latest` tag, kubelet would try to reach a registry that
           # does not have this image and the pod would sit in ImagePullBackOff.
-          image: localhost/paper-minecraft:1.21.11-b132
+          image: localhost/paper-minecraft:26.2-b112
           imagePullPolicy: IfNotPresent
 
           # Keep stdin open but unattached. Paper's console reader reads stdin;
