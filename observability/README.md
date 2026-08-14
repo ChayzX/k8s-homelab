@@ -131,6 +131,25 @@ files" below for the actual cutover sequence for those two ports.
 
 ## Pantry-bot / Twitch alerting to a Discord DM
 
+### k3s-watcher cloudflared noise boundary
+
+The host-side `k3s-watcher` source is outside this repository at
+`/home/chase/docker/observability/monitoring/k3s-watcher/watcher.py`; it is not
+part of the k3s manifests and cannot be changed by a repo-only deployment.
+The current source already scopes benign QUIC teardown suppression to streams
+whose Loki `container` label is exactly `cloudflared`. It skips `context
+canceled` and `accept stream listener encountered a failure while serving`,
+while broad error patterns still alert for other containers and for real
+cloudflared origin failures such as connection refused, dial errors, and
+timeouts. The adjacent `test_watcher.py` verifies this container boundary.
+
+The watcher also takes a non-blocking singleton lock, so duplicate watcher
+processes exit instead of sending duplicate Discord alerts. If duplicate
+notifications recur, inspect the systemd user unit/process list and the lock
+path before changing alert patterns. Keep this source mapping in mind when
+reviewing a future repo PR: changing `promtail` labels or container names can
+silently defeat the scoped suppression.
+
 `grafana-provisioning.yaml` carries a `grafana-provisioning-alerting`
 ConfigMap (mounted by `grafana.yaml` at
 `/etc/grafana/provisioning/alerting`) that provisions:
