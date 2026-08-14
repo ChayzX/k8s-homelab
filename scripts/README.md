@@ -9,9 +9,68 @@ serial cutover.
 | `auto-update.sh` | `~/docker/jmusicbot/auto-update.sh` | user crontab, daily 04:17 |
 | `minecraft_backup.py` | `~/docker/observability/monitoring/minecraft-exporter/minecraft_backup.py` | `minecraft-backup.timer` (user), daily 04:00 |
 | `minecraft_exporter.py` | `~/docker/observability/monitoring/minecraft-exporter/minecraft_exporter.py` | `minecraft-exporter.service` (user), always on |
+| `kuma-host-heartbeat.sh` | new | user crontab, every minute |
 
-Nothing here was applied, installed, or started. No systemd, crontab, or docker
-state was modified.
+### Scotty Beads freshness pull
+
+`beads-dolt-pull.sh` pulls the configured Dolt `origin` remote for the
+`k8s-homelab`, `pantry-bot`, and `aios` checkouts. Scotty reads those host-local
+databases directly, so this makes changes from another computer visible
+without a manual pull. The host cron runs it every five minutes:
+
+```cron
+*/5 * * * * /home/chase/k8s-homelab/scripts/beads-dolt-pull.sh
+```
+
+The script uses `/tmp/k8s-homelab-beads-dolt-pull.lock` to prevent overlap and
+logs to `scripts/beads-dolt-pull.log`. Override checkout or log paths with
+`BEADS_K8S_CHECKOUT`, `BEADS_PANTRY_CHECKOUT`, `BEADS_AIOS_CHECKOUT`, or `BEADS_PULL_LOG_FILE` when
+running it manually. Remove the cron line to disable it; the script deletes
+nothing.
+
+If a pull reports `local changes would be stomped by merge: events` after a
+Beads upgrade, do not delete `.beads` or import `issues.jsonl`. Back up the
+`.beads` directory, designate one clone as the migrator, run
+`bd migrate schema --force`, then `bd dolt push` once. Other clones can then
+pull normally. This recovery was performed on 2026-08-13 for all three boards;
+the next pull completed successfully for each.
+
+The workload scripts below are runbooks and are installed manually as part of
+the migration. The Scotty Beads freshness pull is installed on this host as a
+five-minute cron; its setup and rollback are documented below.
+
+---
+
+## Host uptime heartbeat for Uptime Kuma
+
+`kuma-host-heartbeat.sh` is the host-side half of bead `k8s-homelab-8nc`'s
+long-term uptime scope. It does **not** collect CPU or memory trends; it only
+pushes a minute-by-minute "host is alive" signal into Uptime Kuma so Kuma can
+keep host uptime history beyond Grafana's 7-day Prometheus retention window.
+
+Pods and services should continue to use ordinary Kuma HTTP/TCP monitors. This
+script is specifically for the bare host, because a push delivered from the
+host proves the machine itself is up.
+
+### One-time setup
+
+1. In the Uptime Kuma UI at `https://status.greeniespantry.uk`, add a new
+   **Push** monitor for the host. Set its heartbeat interval to `60` seconds.
+2. Copy only the generated token into a local env file:
+
+   ```sh
+   echo 'KUMA_PUSH_TOKEN=<token>' > ~/.config/kuma-heartbeat.env
+   chmod 600 ~/.config/kuma-heartbeat.env
+   ```
+
+3. Add the host cron entry:
+
+   ```cron
+   * * * * * /home/chase/k8s-homelab/scripts/kuma-host-heartbeat.sh >> /home/chase/k8s-homelab/scripts/kuma-heartbeat.log 2>&1
+   ```
+
+4. In Kuma, set the monitor interval to **2 minutes** so two missed pushes mark
+   the host down.
 
 ---
 
@@ -178,10 +237,11 @@ exists. All paths are env-overridable (`JMUSICBOT_DIR`, `JMUSICBOT_MANIFEST`,
   log line and **the on-disk data is still archived**. A pod that is down is not
   writing to the world, so a slightly stale archive is both safe and much better
   than a failed backup.
-- **Refuses to produce an empty archive.** If none of `world`, `world_nether`,
-  `world_the_end` are found under the resolved path, it errors instead of
-  writing a valid-looking 20 KB tarball — the exact "silently failing backup"
-  the original's alert text warns about.
+- **Refuses to produce an empty archive.** It always includes `world`; on
+  pre-26.2 layouts it also includes `world_nether` and `world_the_end`. Paper
+  26.2 migrated those dimensions under `world/dimensions`, so archiving the
+  `world` directory captures all three dimensions instead of producing a
+  misleadingly small tarball.
 - **`save-on` failure gets its own alert.** Leaving autosave off is worse than a
   failed backup, and it used to be able to fail inside `finally` and be masked.
 - **Low-disk warning** on the backup filesystem (same 5900rpm `/dev/sda2` as the

@@ -12,11 +12,9 @@
 #   downloading, no plugin manager, no config templating, no entrypoint that
 #   rewrites server.properties.
 #
-# * JAVA VERSION: Java 21. Verified, not assumed — Minecraft Java Edition
-#   1.21.11 lists "Java SE 21" as its required runtime, PaperMC requires Java 21
-#   for the 1.21.x line, and the host currently runs OpenJDK 21.0.11. Do NOT
-#   "upgrade" this to a newer JRE as part of the migration; change one variable
-#   at a time.
+# * JAVA VERSION: Java 25. Verified, not assumed — Paper 26.2 requires Java 25.
+#   Keep the version in the build args and image label so a future major
+#   upgrade remains an explicit, reviewable change.
 #
 # * GLIBC, NOT MUSL: server.properties has use-native-transport=true. Paper
 #   ships netty's epoll natives built against glibc. On an Alpine/musl base the
@@ -29,15 +27,20 @@
 #
 # BUILD
 # ============================================================================
-#   The build context must contain the server jar. Copy the *running* one so the
-#   container runs byte-identical bits to what is live today:
+#   The build context must contain the server jar and verified cross-play
+#   plugin jars. Prepare them with:
+#
+#     bash ../scripts/minecraft-download-plugins.sh
+#
+#   Copy the *running* Paper jar so the container runs byte-identical bits to
+#   what is live today:
 #
 #     cp /home/chase/minecraft/paper.jar /home/chase/k8s-homelab/minecraft/paper.jar
 #     cd /home/chase/k8s-homelab/minecraft
-#     docker build -t localhost/paper-minecraft:1.21.11-b127 .
+#     docker build -t localhost/paper-minecraft:26.2-b112 .
 #
 #   (paper.jar is .gitignore'd — 55 MB does not belong in the repo.)
-#   Currently installed build, per version_history.json: 1.21.11-127-bd74bf6.
+#   Current installed build: Paper 26.2-112.
 #   Keep the image tag in sync with the build number so `kubectl describe pod`
 #   tells you exactly which Paper build is running.
 
@@ -46,8 +49,8 @@
 # Stage 1 — compile the tiny RCON client. Needs javac, which the JRE lacks.
 # Nothing from this stage but a ~4 KB jar reaches the runtime image.
 # ---------------------------------------------------------------------------
-ARG JAVA_VERSION=21
-ARG MC_VERSION=1.21.11
+ARG JAVA_VERSION=25
+ARG MC_VERSION=26.2
 
 FROM eclipse-temurin:${JAVA_VERSION}-jdk-noble AS rcon-build
 
@@ -63,8 +66,8 @@ RUN set -eux; \
 # ---------------------------------------------------------------------------
 FROM eclipse-temurin:${JAVA_VERSION}-jre-noble
 
-ARG JAVA_VERSION=21
-ARG MC_VERSION=1.21.11
+ARG JAVA_VERSION=25
+ARG MC_VERSION=26.2
 
 LABEL org.opencontainers.image.title="paper-minecraft" \
       org.opencontainers.image.description="Paper ${MC_VERSION} Minecraft server, data dir mounted at /data" \
@@ -89,6 +92,8 @@ RUN set -eux; \
 
 # The server jar. Read-only at runtime; root-owned by design.
 COPY paper.jar /opt/minecraft/paper.jar
+COPY plugins/*.jar /opt/minecraft/plugins/
+COPY geyser-config.yml /opt/minecraft/geyser-config.yml
 COPY --from=rcon-build /build/rcon.jar /opt/minecraft/rcon.jar
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # Stdout-only Log4j2 config — see log4j2.xml's own header for the full
@@ -97,7 +102,7 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # containerd->promtail->Loki is the durable, retention-bounded copy.
 COPY log4j2.xml /opt/minecraft/log4j2.xml
 RUN chmod 0755 /usr/local/bin/entrypoint.sh \
- && chmod 0444 /opt/minecraft/paper.jar /opt/minecraft/rcon.jar /opt/minecraft/log4j2.xml
+ && chmod 0444 /opt/minecraft/paper.jar /opt/minecraft/plugins/*.jar /opt/minecraft/rcon.jar /opt/minecraft/log4j2.xml
 
 ENV MC_DATA_DIR=/data \
     MC_JAR=/opt/minecraft/paper.jar \

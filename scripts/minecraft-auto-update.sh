@@ -55,9 +55,9 @@
 # VERSION POLICY -- read this before ever touching MC_VERSION
 # ---------------------------------------------------------------------------
 # This script tracks PATCH/BUILD updates ONLY for the Minecraft version
-# already pinned below (currently 1.21.11, per the Dockerfile's LABEL and
-# minecraft.yaml's image tag as of 2026-08-11: 1.21.11-b127, i.e. build 127).
-# It walks 1.21.11 bNNN -> bNNN+1 -> bNNN+2 ... automatically, on Paper's own
+# already pinned below (currently 26.2, per the Dockerfile's LABEL and
+# minecraft.yaml's image tag: 26.2-b112, i.e. build 112).
+# It walks 26.2 bNNN -> bNNN+1 -> bNNN+2 ... automatically, on Paper's own
 # "STABLE" channel judgement, unreviewed -- same posture as jmusicbot's
 # auto-update.sh has toward upstream releases.
 #
@@ -146,7 +146,8 @@ export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
 
 # Pinned Minecraft version. See VERSION POLICY above -- do not let this
 # script change this on its own.
-MC_VERSION="${MC_VERSION:-1.21.11}"
+MC_VERSION="${MC_VERSION:-26.2}"
+JAVA_VERSION="${JAVA_VERSION:-25}"
 
 # The host data dir (bare-metal leftover, kept around post-migration as home
 # for logs and this script's own state -- NOT the live world any more, that
@@ -184,17 +185,17 @@ ROLLOUT_TIMEOUT="${MINECRAFT_ROLLOUT_TIMEOUT:-600s}"
 AUTO_COMMIT_MANIFEST="${AUTO_COMMIT_MANIFEST:-1}"
 
 # PaperMC v3 "fill" API. Confirmed live 2026-08-11 by hand:
-#   GET https://fill.papermc.io/v3/projects/paper/versions/1.21.11/builds
+#   GET https://fill.papermc.io/v3/projects/paper/versions/26.2/builds
 # returns a bare JSON array (newest-first, but this script does not rely on
 # ordering -- see the max_by(.id) below), each element shaped like:
 #   {
 #     "id": 132, "time": "...", "channel": "STABLE", "commits": [...],
 #     "downloads": {
 #       "server:default": {
-#         "name": "paper-1.21.11-132.jar",
+#         "name": "paper-26.2-112.jar",
 #         "checksums": { "sha256": "<hex>" },
 #         "size": 54846016,
-#         "url": "https://fill-data.papermc.io/v1/objects/<sha256>/paper-1.21.11-132.jar"
+#         "url": "https://fill-data.papermc.io/v1/objects/<sha256>/paper-26.2-112.jar"
 #       }
 #     }
 #   }
@@ -434,9 +435,21 @@ log "Downloaded and verified ${jar_name} (sha256 ${actual_sha256})"
 mv "$TMP_JAR" "$BUILD_DIR/paper.jar"
 trap - EXIT
 
+# Keep the cross-play plugins in the image alongside Paper. The helper pins
+# exact Geyser/Floodgate builds and verifies their upstream SHA-256 checksums.
+if ! ROOT_DIR="${ROOT_DIR:-/home/chase/k8s-homelab}" \
+    MINECRAFT_BUILD_DIR="$BUILD_DIR" \
+    bash "${ROOT_DIR:-/home/chase/k8s-homelab}/scripts/minecraft-download-plugins.sh"; then
+    notify "FAILED to download or verify Geyser/Floodgate plugins. Left the running pod untouched."
+    exit 1
+fi
+
 image_tag="localhost/paper-minecraft:${MC_VERSION}-b${build_id}"
 
-if ! DOCKER_BUILDKIT=1 docker build -t "$image_tag" "$BUILD_DIR" >/tmp/minecraft-auto-update-build.log 2>&1; then
+if ! DOCKER_BUILDKIT=1 docker build \
+    --build-arg "JAVA_VERSION=${JAVA_VERSION}" \
+    --build-arg "MC_VERSION=${MC_VERSION}" \
+    -t "$image_tag" "$BUILD_DIR" >/tmp/minecraft-auto-update-build.log 2>&1; then
     notify "FAILED to build ${image_tag}. Left the running pod untouched. See /tmp/minecraft-auto-update-build.log on the host."
     exit 1
 fi

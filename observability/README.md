@@ -131,6 +131,45 @@ files" below for the actual cutover sequence for those two ports.
 
 ## Pantry-bot / Twitch alerting to a Discord DM
 
+### k3s-watcher cloudflared noise boundary
+
+The host-side `k3s-watcher` source is outside this repository at
+`/home/chase/docker/observability/monitoring/k3s-watcher/watcher.py`; it is not
+part of the k3s manifests and cannot be changed by a repo-only deployment.
+The current source already scopes benign QUIC teardown suppression to streams
+whose Loki `container` label is exactly `cloudflared`. It skips `context
+canceled` and `accept stream listener encountered a failure while serving`,
+while broad error patterns still alert for other containers and for real
+cloudflared origin failures such as connection refused, dial errors, and
+timeouts. The adjacent `test_watcher.py` verifies this container boundary.
+
+The watcher also takes a non-blocking singleton lock, so duplicate watcher
+processes exit instead of sending duplicate Discord alerts. If duplicate
+notifications recur, inspect the systemd user unit/process list and the lock
+path before changing alert patterns. Keep this source mapping in mind when
+reviewing a future repo PR: changing `promtail` labels or container names can
+silently defeat the scoped suppression.
+
+#### Safe follow-up design for QUIC teardown noise
+
+The suppression should remain a two-stage decision, implemented in the
+host-side watcher (not in Promtail):
+
+1. Match the exact `cloudflared` container label and a narrow teardown pattern.
+2. Before suppressing, query the connector's `/ready` endpoint through its
+   ClusterIP Service (`cloudflared.pantry-bot.svc:2000/ready`). Suppress only
+   when the response is successful; otherwise emit the original line so a
+   simultaneous connector/origin outage remains visible.
+
+The health query must be bounded (for example, a 2-second timeout), cached for
+the current polling cycle, and fail open (an unavailable health check means
+alert, not suppression). Do not suppress generic `timeout`, `dial`, DNS, or
+origin-connection errors. Because the watcher source and service-account
+credentials are host-local/out-of-repo, this repository documents the design
+but cannot safely implement or deploy it; the next watcher-source change
+should add unit tests for healthy and unhealthy `/ready` responses plus a
+fail-open timeout case.
+
 `grafana-provisioning.yaml` carries a `grafana-provisioning-alerting`
 ConfigMap (mounted by `grafana.yaml` at
 `/etc/grafana/provisioning/alerting`) that provisions:

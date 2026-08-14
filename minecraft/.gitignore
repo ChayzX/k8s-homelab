@@ -3,6 +3,9 @@
 # at /home/chase/minecraft/paper.jar (and, post-migration, in the image).
 paper.jar
 
+# Downloaded, checksum-verified Geyser/Floodgate image inputs.
+plugins/*.jar
+
 # Never commit the RCON password / management-server-secret. See secrets.md.
 *.secret
 secret*.yaml
