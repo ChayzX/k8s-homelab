@@ -31,7 +31,7 @@ jobs:
       digest: ${{ steps.push.outputs.digest }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - uses: docker/setup-buildx-action@v3
 
@@ -41,7 +41,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push image
         id: push
         uses: docker/build-push-action@v6
         with:
@@ -50,3 +50,18 @@ jobs:
           tags: |
             ghcr.io/chayzx/opsbot:latest
             ghcr.io/chayzx/opsbot:${{ github.sha }}
+
+      - name: Write publish summary
+        if: always()
+        run: |
+          {
+            echo '## Opsbot image publish verification'
+            echo ''
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Build/push result: **${{ steps.push.outcome }}**"
+            if [ -n "${{ steps.push.outputs.digest }}" ]; then
+              echo "- Published digest: \`${{ steps.push.outputs.digest }}\`"
+            else
+              echo '- Published digest: unavailable (publish did not complete)'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

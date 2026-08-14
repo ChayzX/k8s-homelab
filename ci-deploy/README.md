@@ -16,7 +16,7 @@ cluster; a CI runner only needs to run `kubectl set image`,
 | File | Purpose |
 |---|---|
 | `10-serviceaccount.yaml` | Two `ci-deploy` ServiceAccounts — one in `pantry-bot`, one in `opsbot`. |
-| `20-rbac.yaml` | A `Role` + `RoleBinding` per namespace, granting only `get`/`list`/`watch`/`patch` on `deployments` and `deployments/scale` — no pods, no secrets, no exec. |
+| `20-rbac.yaml` | A `Role` + `RoleBinding` per namespace, granting deployment mutation plus read-only pod and pod-log access for post-rollout verification — no secrets, no exec. |
 | `30-token-secret.yaml` | A durable token `Secret` per ServiceAccount (SAs stopped auto-creating these in Kubernetes 1.24+). |
 
 ## Apply order
@@ -60,7 +60,7 @@ ServiceAccount in its own namespace.
 
 ## What this deliberately does NOT grant
 
-No pods, no secrets (any verb), no exec, no delete, nothing cluster-scoped.
+No pod mutation, no secrets (any verb), no exec, no delete, nothing cluster-scoped. Pod reads and pod logs are limited to post-rollout verification.
 See `20-rbac.yaml`'s header comment for the full verb-by-verb rationale —
 this is intentionally narrower than `../opsbot`'s own bot RBAC, which needs
 `pods`/`pods/exec` for its Minecraft RCON console. A deploy pipeline doing

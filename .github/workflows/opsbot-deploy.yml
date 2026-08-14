@@ -32,7 +32,7 @@ jobs:
         # changes (probes, resources, ports) silently never reached the
         # cluster. Bit us directly: the health-endpoint probes/port added
         # tonight never actually applied until a manual `kubectl apply`.
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install cloudflared
         # Pinned version + checksum, not `latest` -- an unpinned download-and-
@@ -80,7 +80,17 @@ jobs:
           KUBECONFIG: ${{ runner.temp }}/opsbot.kubeconfig
         run: kubectl apply -f opsbot/40-deployment.yaml -n opsbot
 
-      - name: Update deployment image
+      - name: Record current pod
+        id: before
+        env:
+          KUBECONFIG: ${{ runner.temp }}/opsbot.kubeconfig
+        run: |
+          POD="$(kubectl get pods -n opsbot -l app.kubernetes.io/name=opsbot \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+          echo "pod=$POD" >> "$GITHUB_OUTPUT"
+          echo "Current pod: ${POD:-none}"
+
+      - name: Deploy image to Kubernetes
         # `kubectl set image` is a no-op if the tag STRING doesn't change --
         # deploying the default `latest` when the Deployment's already on
         # `latest` wouldn't restart anything even though a new image was
@@ -94,10 +104,48 @@ jobs:
           kubectl set image deployment/opsbot "opsbot=ghcr.io/chayzx/opsbot:${IMAGE_TAG}" -n opsbot
           kubectl rollout restart deployment/opsbot -n opsbot
 
-      - name: Wait for rollout
+      - name: Wait for pod replacement and rollout
         env:
           KUBECONFIG: ${{ runner.temp }}/opsbot.kubeconfig
         run: kubectl rollout status deployment/opsbot -n opsbot --timeout=60s
+
+      - name: Verify pod restart and health
+        env:
+          KUBECONFIG: ${{ runner.temp }}/opsbot.kubeconfig
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          POD="$(kubectl get pods -n opsbot -l app.kubernetes.io/name=opsbot \
+            -o jsonpath='{.items[0].metadata.name}')"
+          IMAGE_ID="$(kubectl get pod "$POD" -n opsbot \
+            -o jsonpath='{.status.containerStatuses[?(@.name=="opsbot")].imageID}')"
+          STARTED="$(kubectl get pod "$POD" -n opsbot \
+            -o jsonpath='{.status.containerStatuses[?(@.name=="opsbot")].state.running.startedAt}')"
+          READY="$(kubectl get pod "$POD" -n opsbot \
+            -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')"
+          test "$READY" = "True"
+          test -n "$IMAGE_ID"
+          test -n "$STARTED"
+          if [ -n "${{ steps.before.outputs.pod }}" ] && [ "$POD" = "${{ steps.before.outputs.pod }}" ]; then
+            echo "Expected a replacement pod, but the pod name did not change: $POD" >&2
+            exit 1
+          fi
+          {
+            echo '## Opsbot deployment pipeline'
+            echo ''
+            echo '### Deploy image to Kubernetes: ✅ passed'
+            echo "- Requested image: \`ghcr.io/chayzx/opsbot:${IMAGE_TAG}\`"
+            echo '### Pod replacement: ✅ passed'
+            echo "- Previous pod: \`${{ steps.before.outputs.pod || 'none' }}\`"
+            echo "- Current pod: \`$POD\`"
+            echo "- Container started: \`$STARTED\`"
+            echo '### Pod health: ✅ passed'
+            echo "- Ready condition: \`$READY\`"
+            echo "- Image ID: \`$IMAGE_ID\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          kubectl get deployment/opsbot -n opsbot -o wide
+          kubectl get pod "$POD" -n opsbot -o wide
 
       - name: Rollback on failure
         if: failure()

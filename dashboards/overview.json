@@ -1,7 +1,7 @@
 {
   "uid": "homelab-overview",
   "title": "Homelab Overview",
-  "description": "First-stop outage triage for MinecraftMachine (single-node k3s, 8c/16t, 15 GiB, / on a 5900rpm HDD). Read top-down: service health (deployments + pod phases), node health (CPU/memory/disk/temperature/load), busiest pods and limit headroom, crash-loop/restart detector, then the error stream. Every metric here is re-used from the detail dashboards (Cluster Overview, Pods & Workloads, Logs, Apps, Pantry Bot) -- the links at the top of the dashboard jump straight to them when a panel needs digging.",
+  "description": "First-stop outage triage for MinecraftMachine (single-node k3s, 8c/16t, 15 GiB, / on a 5900rpm HDD). Read top-down: service health (deployments + pod phases), node health (CPU/memory/disk/temperature/load), busiest pods and limit headroom, crash-loop/restart detector, then the error stream. The dedicated Main PC dashboard is for bare-metal capacity and pressure; this overview retains Kubernetes context. Every metric here is re-used from the detail dashboards -- the links at the top jump straight to them when a panel needs digging.",
   "tags": ["homelab", "k3s", "overview"],
   "timezone": "browser",
   "editable": true,
@@ -11,11 +11,14 @@
   "graphTooltip": 1,
   "time": { "from": "now-6h", "to": "now" },
   "links": [
-    { "type": "link", "title": "Cluster Overview (node)", "dashboard": "homelab-cluster-overview", "targetBlank": true },
+    { "type": "link", "title": "Main PC — Bare-Metal Health", "dashboard": "homelab-host-pc", "targetBlank": true },
+    { "type": "link", "title": "Host Health / k3s Control Plane", "dashboard": "homelab-cluster-overview", "targetBlank": true },
     { "type": "link", "title": "Pods & Workloads", "dashboard": "homelab-pods-workloads", "targetBlank": true },
     { "type": "link", "title": "Logs", "dashboard": "homelab-logs", "targetBlank": true },
-    { "type": "link", "title": "Apps", "dashboard": "homelab-apps", "targetBlank": true },
-    { "type": "link", "title": "Pantry Bot", "dashboard": "homelab-pantry-bot", "targetBlank": true }
+    { "type": "link", "title": "Minecraft", "dashboard": "homelab-minecraft", "targetBlank": true },
+    { "type": "link", "title": "jmusicbot", "dashboard": "homelab-jmusicbot", "targetBlank": true },
+    { "type": "link", "title": "Pantry Bot", "dashboard": "homelab-pantry-bot", "targetBlank": true },
+    { "type": "link", "title": "Cloudflare Tunnel", "dashboard": "homelab-cloudflared", "targetBlank": true }
   ],
   "templating": {
     "list": [
