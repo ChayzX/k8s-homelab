@@ -8,6 +8,9 @@ cloudflared stream is matched and the connector's `/ready` endpoint responds
 successfully. Readiness failures, DNS errors, dial errors, origin failures,
 and generic timeouts remain alertable. Alert keys normalize volatile
 `connIndex`, `event`, and `ip` fields and use a 15-minute default cooldown.
+During a detected Deployment rollout, expected startup/origin-refused errors
+are suppressed for 180 seconds after the rollout completes as well as while
+it is active; set `ROLLOUT_POST_SUPPRESSION_SECONDS` to tune that grace period.
 
 The Discord token, user ID, Loki URL, kubeconfig, and systemd unit remain
 host-local secrets/configuration. Install this directory on the host and

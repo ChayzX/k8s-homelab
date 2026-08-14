@@ -30,6 +30,9 @@ RESTART_WINDOW_SECONDS = int(os.environ.get("RESTART_WINDOW_SECONDS", "600"))
 COOLDOWN_SECONDS = int(os.environ.get("ALERT_COOLDOWN_SECONDS", "900"))
 WATCHER_LOCK_PATH = os.environ.get("WATCHER_LOCK_PATH", "/run/user/1000/k3s-watcher.lock")
 ROLLOUT_SUPPRESSION_SECONDS = int(os.environ.get("ROLLOUT_SUPPRESSION_SECONDS", "180"))
+ROLLOUT_POST_SUPPRESSION_SECONDS = int(
+    os.environ.get("ROLLOUT_POST_SUPPRESSION_SECONDS", "180")
+)
 CLOUDFLARED_READY_URL = os.environ.get(
     "CLOUDFLARED_READY_URL", "http://cloudflared.pantry-bot.svc:2000/ready"
 )
@@ -185,8 +188,8 @@ def rollout_suppressed(namespace):
     active = deployment_rollout_active(json.loads(result.stdout).get("items", []))
     now = time.time()
     if not active:
-        _rollout_suppression_started.pop(namespace, None)
-        return False
+        started = _rollout_suppression_started.pop(namespace, None)
+        return bool(started and now - started <= ROLLOUT_POST_SUPPRESSION_SECONDS)
     started = _rollout_suppression_started.setdefault(namespace, now)
     return now - started <= ROLLOUT_SUPPRESSION_SECONDS
 
