@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# Paper 1.21.11 server image — a container around the *existing* bare-metal setup.
+# Paper server image — a container around the *existing* bare-metal setup.
 #
 # DESIGN NOTES (read before changing anything)
 # ============================================================================
@@ -46,7 +46,10 @@
 # Stage 1 — compile the tiny RCON client. Needs javac, which the JRE lacks.
 # Nothing from this stage but a ~4 KB jar reaches the runtime image.
 # ---------------------------------------------------------------------------
-FROM eclipse-temurin:21-jdk-noble AS rcon-build
+ARG JAVA_VERSION=21
+ARG MC_VERSION=1.21.11
+
+FROM eclipse-temurin:${JAVA_VERSION}-jdk-noble AS rcon-build
 
 WORKDIR /build
 COPY Rcon.java ./
@@ -58,12 +61,16 @@ RUN set -eux; \
 # ---------------------------------------------------------------------------
 # Stage 2 — runtime
 # ---------------------------------------------------------------------------
-FROM eclipse-temurin:21-jre-noble
+FROM eclipse-temurin:${JAVA_VERSION}-jre-noble
+
+ARG JAVA_VERSION=21
+ARG MC_VERSION=1.21.11
 
 LABEL org.opencontainers.image.title="paper-minecraft" \
-      org.opencontainers.image.description="Paper 1.21.11 Minecraft server, data dir mounted at /data" \
+      org.opencontainers.image.description="Paper ${MC_VERSION} Minecraft server, data dir mounted at /data" \
       org.opencontainers.image.source="https://github.com/PaperMC/Paper" \
-      homelab.chase/minecraft-version="1.21.11"
+      homelab.chase/minecraft-version="${MC_VERSION}" \
+      homelab.chase/java-version="${JAVA_VERSION}"
 
 # Every file under /home/chase/minecraft is owned 1000:1000 and the PVC keeps
 # that ownership, so the container must run as exactly 1000:1000.
