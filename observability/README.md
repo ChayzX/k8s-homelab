@@ -150,6 +150,26 @@ path before changing alert patterns. Keep this source mapping in mind when
 reviewing a future repo PR: changing `promtail` labels or container names can
 silently defeat the scoped suppression.
 
+#### Safe follow-up design for QUIC teardown noise
+
+The suppression should remain a two-stage decision, implemented in the
+host-side watcher (not in Promtail):
+
+1. Match the exact `cloudflared` container label and a narrow teardown pattern.
+2. Before suppressing, query the connector's `/ready` endpoint through its
+   ClusterIP Service (`cloudflared.pantry-bot.svc:2000/ready`). Suppress only
+   when the response is successful; otherwise emit the original line so a
+   simultaneous connector/origin outage remains visible.
+
+The health query must be bounded (for example, a 2-second timeout), cached for
+the current polling cycle, and fail open (an unavailable health check means
+alert, not suppression). Do not suppress generic `timeout`, `dial`, DNS, or
+origin-connection errors. Because the watcher source and service-account
+credentials are host-local/out-of-repo, this repository documents the design
+but cannot safely implement or deploy it; the next watcher-source change
+should add unit tests for healthy and unhealthy `/ready` responses plus a
+fail-open timeout case.
+
 `grafana-provisioning.yaml` carries a `grafana-provisioning-alerting`
 ConfigMap (mounted by `grafana.yaml` at
 `/etc/grafana/provisioning/alerting`) that provisions:
