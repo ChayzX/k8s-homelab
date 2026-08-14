@@ -19,7 +19,7 @@
 # pantry-bot/jmusicbot-release-notifier's Recreate, which exists only because
 # those have a live SQLite/marker file on an RWO PVC — opsbot has neither).
 #
-# /report beads mounts (k8s-homelab-cq8): the bug-report command files beads
+# /bug beads mounts (k8s-homelab-cq8): the bug-report command files beads
 # by running `bd create` inside this pod against the project's beads databases
 # (bd_ops.py). Each volume is a hostPath to the LIVE `.beads/` dir of a board
 # -- this single-node cluster runs ON the workstation where those repos live
@@ -95,7 +95,7 @@ spec:
                 secretKeyRef:
                   name: opsbot-discord
                   key: DISCORD_USER_ID
-            # Beads checkouts /report writes into (bd_ops.py / util.py). The
+            # Beads checkouts /bug writes into (bd_ops.py / util.py). The
             # defaults in code already match these mount paths; the env vars
             # exist so a future path change is a manifest edit, not a code
             # edit.
@@ -103,7 +103,7 @@ spec:
               value: /boards/k8s-homelab
             - name: BEADS_CHECKOUT_PANTRY_BOT
               value: /boards/pantry-bot
-            # Open /report to any Discord user (the point of cq8); set "false"
+            # Open /bug to any Discord user (the point of cq8); set "false"
             # to restrict to DISCORD_USER_ID.
             - name: REPORT_OPEN_ACCESS
               value: "true"
@@ -136,14 +136,14 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 5
-          # Limits sized for a lightweight Discord bot originally; /report
+          # Limits sized for a lightweight Discord bot originally; /bug
           # (k8s-homelab-cq8) added `bd` shellouts, which is a Go binary
           # with an embedded Dolt engine, not lightweight. Confirmed via
           # cgroup cpu.stat: throttled 4888/6066 periods (~80%), ~465s
           # accumulated throttle time -- bd never became slow, it was
           # starved to the point `bd --help` (pure local, no I/O) couldn't
           # complete in 45s. Bumped limits; requests stay low since the pod
-          # idles except during a /report call.
+          # idles except during a /bug call.
           resources:
             requests:
               cpu: 50m
@@ -156,7 +156,7 @@ spec:
             capabilities:
               drop: ["ALL"]
           volumeMounts:
-            # Live beads databases for /report (see header comment) --
+            # Live beads databases for /bug (see header comment) --
             # hostPath because the cluster node IS the workstation hosting
             # these repos; pod uid 1000 == the dir owner.
             - name: beads-k8s-homelab

@@ -58,7 +58,7 @@ class OpsBotTree(app_commands.CommandTree):
     to remember to call it (bi6.5's actual requirement: no command may run
     without this check).
 
-    The single exception is `/report` (k8s-homelab-cq8): the whole point is
+    The single exception is `/bug` (k8s-homelab-cq8): the whole point is
     server members filing bugs, not just the owner, so when
     REPORT_OPEN_ACCESS is set the command skips the allowlist check. It is
     still audited here like everything else, and the reporter's Discord
@@ -67,8 +67,8 @@ class OpsBotTree(app_commands.CommandTree):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         command = interaction.command.qualified_name if interaction.command else ""
-        open_report = command == "report" and util.REPORT_OPEN_ACCESS
-        authorized = open_report or util.is_authorized(interaction.user.id, ALLOWLIST)
+        open_bug = command == "bug" and util.REPORT_OPEN_ACCESS
+        authorized = open_bug or util.is_authorized(interaction.user.id, ALLOWLIST)
         _audit(interaction, authorized)
         if not authorized:
             await interaction.response.send_message(
@@ -120,6 +120,9 @@ deploy_group = app_commands.Group(
 _namespace_choices = [
     app_commands.Choice(name=ns, value=ns) for ns in sorted(util.ALLOWED_NAMESPACES)
 ]
+_status_namespace_choices = [
+    app_commands.Choice(name=ns, value=ns) for ns in sorted(util.STATUS_NAMESPACES)
+]
 
 
 async def _reply(interaction: discord.Interaction, text: str) -> None:
@@ -130,12 +133,12 @@ async def _reply(interaction: discord.Interaction, text: str) -> None:
 
 
 @pods_group.command(name="status", description="List pods in a namespace")
-@app_commands.choices(namespace=_namespace_choices)
+@app_commands.choices(namespace=_status_namespace_choices)
 async def pods_status(interaction: discord.Interaction, namespace: str) -> None:
     await interaction.response.defer(thinking=True)
     # Defense in depth: RBAC already scopes opsbot-sa to exactly these three
     # namespaces, but a clean rejection here beats an opaque 403 from the API.
-    if namespace not in util.ALLOWED_NAMESPACES:
+    if namespace not in util.STATUS_NAMESPACES:
         await _reply(interaction, f"Namespace {namespace!r} is not allowed.")
         _audit(interaction, True, result="rejected: namespace not allowed")
         return
@@ -274,16 +277,16 @@ async def mc(interaction: discord.Interaction, command: str) -> None:
     _audit(interaction, True, result="ok")
 
 
-_report_choices = [
+_bug_choices = [
     app_commands.Choice(name=label, value=key) for key, label in sorted(util.BOT_LABELS.items())
 ]
 
 
-@app_commands.command(name="report", description="File a bug report for a homelab bot")
-@app_commands.choices(bot=_report_choices)
+@app_commands.command(name="bug", description="File a bug report for a homelab bot")
+@app_commands.choices(bot=_bug_choices)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=False)
 @app_commands.allowed_installs(guilds=True, users=False)
-async def report(interaction: discord.Interaction, bot: str, what: str) -> None:
+async def bug(interaction: discord.Interaction, bot: str, what: str) -> None:
     """File a bug bead on the correct board via `bd create` in a mounted beads
     checkout (bd_ops.py). Open to all Discord users when REPORT_OPEN_ACCESS is
     set (see OpsBotTree.interaction_check); the reporter's identity is always
@@ -291,8 +294,8 @@ async def report(interaction: discord.Interaction, bot: str, what: str) -> None:
     await interaction.response.defer(thinking=True)
     what = what.strip()
     if not what:
-        await _reply(interaction, "Empty report -- describe what happened.")
-        _audit(interaction, True, result="rejected: empty report")
+        await _reply(interaction, "Empty bug report -- describe what happened.")
+        _audit(interaction, True, result="rejected: empty bug report")
         return
     try:
         issue_id = await asyncio.to_thread(
@@ -304,7 +307,7 @@ async def report(interaction: discord.Interaction, bot: str, what: str) -> None:
             what=what,
         )
     except bd_ops.ReportError as e:
-        await _reply(interaction, f"Could not file the report: {e}")
+        await _reply(interaction, f"Could not file the bug report: {e}")
         _audit(interaction, True, result=f"error: {e}")
         return
     await _reply(
@@ -321,7 +324,7 @@ async def setup_hook() -> None:
     bot.tree.add_command(pods_group)
     bot.tree.add_command(deploy_group)
     bot.tree.add_command(mc)
-    bot.tree.add_command(report)
+    bot.tree.add_command(bug)
     await bot.tree.sync()
     print("[opsbot] slash commands synced")
     await health.start()

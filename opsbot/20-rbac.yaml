@@ -89,6 +89,43 @@ subjects:
     name: opsbot-sa
     namespace: opsbot
 ---
+# Observability status is intentionally read-only. It is useful for triage,
+# but the Discord bot must never be able to restart Grafana, Prometheus, Loki,
+# Kuma, or the other monitoring workloads. Deployment mutation remains absent
+# from this Role; the three workload Roles above are the only restart path.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: opsbot-observability-status
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: opsbot
+    app.kubernetes.io/part-of: homelab
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: opsbot-observability-status
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: opsbot
+    app.kubernetes.io/part-of: homelab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: opsbot-observability-status
+subjects:
+  - kind: ServiceAccount
+    name: opsbot-sa
+    namespace: opsbot
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:

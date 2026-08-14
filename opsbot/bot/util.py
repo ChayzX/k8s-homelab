@@ -10,13 +10,16 @@ from __future__ import annotations
 import datetime
 import os
 
-# Namespace allowlist -- mirrors ../20-rbac.yaml's Role/RoleBinding set
-# exactly (jmusicbot, pantry-bot, minecraft). Checked here too as defense in
-# depth even though RBAC already enforces it server-side: a clean "not
-# allowed" message beats an opaque 403 from the Kubernetes API.
+# Writable namespace allowlist. This mirrors the mutation-capable
+# Role/RoleBinding set in ../20-rbac.yaml. Observability is intentionally not
+# here: the bot may report its health, but must not restart monitoring.
 ALLOWED_NAMESPACES = frozenset({"jmusicbot", "pantry-bot", "minecraft"})
+# Read-only status coverage includes the monitoring stack itself. Keep this a
+# separate set so adding a dashboard/status target can never accidentally add
+# restart permission.
+STATUS_NAMESPACES = ALLOWED_NAMESPACES | {"observability"}
 
-# /report (see bd_ops.py) -- which Discord-facing bot label maps to which
+# /bug (see bd_ops.py) -- which Discord-facing bot label maps to which
 # beads board. Each value is the --directory to run `bd create` against: a
 # checkout whose only content is the project's `.beads/` dir (mounted into
 # the pod by ../40-deployment.yaml's hostPath volumes). Defaults are the
@@ -33,7 +36,7 @@ BOARD_CHECKOUTS = {
     "music": os.environ.get("BEADS_CHECKOUT_K8S_HOMELAB", "/boards/k8s-homelab"),
     "pantry": os.environ.get("BEADS_CHECKOUT_PANTRY_BOT", "/boards/pantry-bot"),
 }
-# If truthy (default), /report is usable by ANY Discord user who can see the
+# If truthy (default), /bug is usable by ANY Discord user who can see the
 # bot -- the point of the card is server members filing bugs. The reporter's
 # Discord identity is still recorded in the bead and the audit log. Set to
 # "false" to fall back to the DISCORD_USER_ID allowlist for everything.
@@ -133,7 +136,7 @@ def report_title(bot_label: str, what: str) -> str:
 
 
 def bug_template(bot_label: str, reporter: str, reporter_id: int, what: str) -> str:
-    """Fixed bug-bead template for /report (k8s-homelab-cq8). Every field is
+    """Fixed bug-bead template for /bug (k8s-homelab-cq8). Every field is
     present even if the reporter's text is short; the section headers match
     what `bd create --validate` expects for the bug type, so the pod's create
     can validate and the resulting bead reads the same as a hand-filed one.
@@ -142,7 +145,7 @@ def bug_template(bot_label: str, reporter: str, reporter_id: int, what: str) -> 
     log."""
     return (
         "## Reported By\n"
-        f"{reporter} (discord id {reporter_id}) via opsbot /report\n"
+        f"{reporter} (discord id {reporter_id}) via opsbot /bug\n"
         "\n"
         "## Bot\n"
         f"{bot_label}\n"
@@ -172,6 +175,7 @@ def demo() -> None:
     assert "jmusicbot" in ALLOWED_NAMESPACES
     assert "keel" not in ALLOWED_NAMESPACES
     assert "observability" not in ALLOWED_NAMESPACES
+    assert "observability" in STATUS_NAMESPACES
 
     now = rfc3339_now()
     # Must parse back as a valid RFC3339/ISO8601 timestamp with a UTC offset.
@@ -208,7 +212,7 @@ def demo() -> None:
     reassembled = "".join(c[len(_CODE_FENCE) + 1 : -(len(_CODE_FENCE) + 1)] for c in long_chunks)
     assert reassembled == long_text
 
-    # /report board routing: both boards must resolve to a directory.
+    # /bug board routing: both boards must resolve to a directory.
     assert set(BOT_LABELS) == set(BOARD_CHECKOUTS) == {"music", "pantry"}
     for label in BOT_LABELS.values():
         assert label
@@ -224,7 +228,7 @@ def demo() -> None:
 
     # bug_template: reporter identity and every bug section present.
     t = bug_template("pantry-bot", "alice", 12345, "snacks not showing")
-    assert "alice (discord id 12345) via opsbot /report" in t
+    assert "alice (discord id 12345) via opsbot /bug" in t
     assert "## Bot\npantry-bot\n" in t
     assert "## What Happened\nsnacks not showing\n" in t
     for section in ("## Reported By", "## Steps to Reproduce", "## Acceptance Criteria"):

@@ -12,9 +12,9 @@ FROM python:3.12-slim-bookworm
 
 # `bd` (beads CLI) -- pinned to the exact version running on the host so the
 # on-disk Dolt DB schema matches (a pod-side bd of a different minor could
-# trip schema-skew guards when /report writes into the mounted boards). The
+# trip schema-skew guards when /bug writes into the mounted boards). The
 # runtime stage only needs the binary; this stage holds the download tooling.
-# /report (bd_ops.py) invokes this from the container; no git is required.
+# /bug (bd_ops.py) invokes this from the container; no git is required.
 FROM debian:bookworm-slim AS beads
 ARG BEADS_VERSION=1.1.2
 RUN apt-get update \
