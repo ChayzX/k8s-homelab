@@ -38,9 +38,11 @@
 #     revision to roll back to. No write verb needed — undo's actual mutation
 #     is still a patch against the Deployment object itself.
 #
-# Explicitly NOT granted, anywhere in this file: pods (no verb at all — this
-# pipeline never needs to look at a Pod, unlike opsbot's read-only pods grant
-# for `/pods status`), pods/exec, secrets (any verb), any write verb on
+# Read-only pod access is used by deploy post-rollout verification to identify
+# the new pod, verify image/start/readiness, and inspect recent startup logs.
+# No pod mutation or exec is granted.
+#
+# Explicitly NOT granted, anywhere in this file: pods/exec, secrets (any verb), any write verb on
 # replicasets, delete/deletecollection on anything, and no rule ever omits an
 # apiGroups/resources/namespace scope to widen it. This is deliberately
 # narrower than opsbot's own bot RBAC (../opsbot/20-rbac.yaml), which needs
@@ -61,6 +63,12 @@ rules:
   - apiGroups: ["apps"]
     resources: ["replicasets"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -94,6 +102,12 @@ rules:
   - apiGroups: ["apps"]
     resources: ["replicasets"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
