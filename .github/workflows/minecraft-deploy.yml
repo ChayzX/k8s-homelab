@@ -56,6 +56,9 @@ jobs:
           paper_url="$(jq -r '.downloads["server:default"].url' <<<"$paper_meta")"
           paper_sha="$(jq -r '.downloads["server:default"].checksums.sha256' <<<"$paper_meta")"
           test -n "$paper_url"; test -n "$paper_sha"; test "$paper_url" != null; test "$paper_sha" != null
+          # The plugin JARs are intentionally ignored in git; create the
+          # build-context directory on a clean GitHub runner.
+          mkdir -p minecraft/plugins
           curl -fsSL "$paper_url" -o minecraft/paper.jar
           echo "$paper_sha  minecraft/paper.jar" | sha256sum -c -
           curl -fsSL "https://download.geysermc.org/v2/projects/geyser/versions/2.11.1/builds/1219/downloads/spigot" -o minecraft/plugins/Geyser-Spigot.jar
