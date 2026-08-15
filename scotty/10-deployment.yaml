@@ -83,6 +83,13 @@ spec:
             # /data/k8s-homelab was originally registered.
             - name: pantry-bot-repo
               mountPath: /data/pantry-bot
+            # Third project: AIOS is a separate Beads workspace on this host.
+            - name: aios-repo
+              mountPath: /data/aios
+            # Fourth project: operations-ios-app is kept separate from the
+            # existing aios board, even though both are operations-focused.
+            - name: operations-ios-app-repo
+              mountPath: /data/operations-ios-app
             # scotty keeps its project registry in a config.json under the
             # container home (~/.config/bead-me-up-scotty/config.json). Without
             # this mount the registry lives in the ephemeral container layer and
@@ -107,6 +114,14 @@ spec:
         - name: pantry-bot-repo
           hostPath:
             path: /home/chase/Downloads/pantry-bot
+            type: Directory
+        - name: aios-repo
+          hostPath:
+            path: /home/chase/boards/aios
+            type: Directory
+        - name: operations-ios-app-repo
+          hostPath:
+            path: /home/chase/boards/operations-ios-app
             type: Directory
         - name: scotty-config
           hostPath:
