@@ -51,8 +51,10 @@ jobs:
           fi
           test "$build" != null
           paper_meta="$(curl -fsSL "https://fill.papermc.io/v3/projects/paper/versions/${MC_VERSION}/builds/${build}")"
-          paper_url="$(jq -r '.downloads.application.url' <<<"$paper_meta")"
-          paper_sha="$(jq -r '.downloads.application.sha256' <<<"$paper_meta")"
+          # Paper's Fill v3 schema names the default server artifact
+          # `server:default`; it is not an `application` download.
+          paper_url="$(jq -r '.downloads["server:default"].url' <<<"$paper_meta")"
+          paper_sha="$(jq -r '.downloads["server:default"].checksums.sha256' <<<"$paper_meta")"
           test -n "$paper_url"; test -n "$paper_sha"; test "$paper_url" != null; test "$paper_sha" != null
           curl -fsSL "$paper_url" -o minecraft/paper.jar
           echo "$paper_sha  minecraft/paper.jar" | sha256sum -c -
