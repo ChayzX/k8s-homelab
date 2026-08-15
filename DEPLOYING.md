@@ -11,8 +11,8 @@ pod changed. Only a workflow whose summary contains **Apply**, **Restart**, and
 | Opsbot application (`opsbot/bot/**`) | Builds/publishes GHCR image only | Yes: run **Opsbot CI/CD** |
 | PantryBot application | Builds/publishes image only | Yes: run PantryBot **Deploy** |
 | Grafana dashboards/config | Applies ConfigMap, restarts, and verifies Grafana automatically | No; push is the deployment (a manual dispatch also works) |
-| Minecraft updater/manifests | No GitHub deployment | Yes: follow the Minecraft runbook/approved updater path |
-| JMusicBot host build | No GitHub deployment | Yes: run the host updater manually/cron |
+| Minecraft source/image inputs | Builds/publishes GHCR image only | Yes: run **Minecraft CI/CD** with deploy checked |
+| JMusicBot upstream release | No automatic run; upstream is resolved only when clicked | Yes: run **JMusicBot CI/CD**, choose ref (or latest), then choose whether to deploy |
 | k3s-watcher source | Git changes only | Yes: update the host checkout and restart its systemd user unit |
 
 If the Actions run shows only **Build and publish**, nothing was deployed yet.
@@ -69,6 +69,25 @@ Push dashboard/config changes to `main`. The `Deploy Grafana` workflow runs
 the ConfigMap apply, pod restart, rollout wait, and health checks automatically.
 You do not need a second Run workflow click. Use manual dispatch only when you
 want to redeploy the current dashboard state without a new commit.
+
+### For Minecraft
+
+Pushes publish a verified Paper + Geyser/Floodgate image but never touch the
+world. To publish or deploy an update, open **Actions → Minecraft CI/CD → Run
+workflow**. Leave `paper_build` blank for the latest stable build. Check
+`Deploy the published image` only when you also want the staged apply, restart,
+and readiness verification jobs to run. The deployment uses the scoped
+`KUBE_CONFIG_MINECRAFT` secret and preserves the Recreate strategy/world PVC.
+
+### For JMusicBot
+
+This workflow is deliberately click-only so an upstream `arif-banai/MusicBot`
+release cannot silently change the bot. Open **Actions → JMusicBot CI/CD → Run
+workflow**, leave `upstream_ref` blank to resolve the maintainer's latest
+release (or enter a tag), then run it with deploy unchecked to publish only.
+Check deploy when you want the apply, restart, and `/health` readiness stages as
+well. It applies the tracked voice-channel and health-endpoint patches before
+publishing. Configure `KUBE_CONFIG_JMUSICBOT` before using the deploy option.
 
 ## If Something Goes Wrong
 
