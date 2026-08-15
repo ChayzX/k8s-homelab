@@ -136,7 +136,7 @@ jobs:
   verify:
     name: 4 - Verify Minecraft rollout and health (manual deploy)
     if: github.event_name == 'workflow_dispatch' && inputs.deploy == true
-    needs: restart
+    needs: [publish-image, restart]
     runs-on: ubuntu-latest
     steps:
       - name: Verify ready pod and image
