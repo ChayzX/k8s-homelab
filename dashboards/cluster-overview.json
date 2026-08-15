@@ -83,7 +83,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{instance=\"$node\", mode=\"idle\"}[5m])) * 100)",
+          "expr": "sum(rate(node_cpu_seconds_total{instance=\"$node\", mode!=\"idle\"}[5m])) / count(count by (cpu) (node_cpu_seconds_total{instance=\"$node\"})) * 100",
           "legendFormat": "CPU"
         }
       ],
