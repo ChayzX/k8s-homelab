@@ -119,7 +119,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "100 - (avg(rate(node_cpu_seconds_total{instance=\"$node\", mode=\"idle\"}[5m])) * 100)",
+              "expr": "sum(rate(node_cpu_seconds_total{instance=\"$node\", mode!=\"idle\"}[5m])) / count(count by (cpu) (node_cpu_seconds_total{instance=\"$node\"})) * 100",
               "legendFormat": "CPU"
             }
           ],
@@ -1361,7 +1361,7 @@ data:
       "timezone": "browser",
       "editable": true,
       "schemaVersion": 39,
-      "version": 2,
+      "version": 3,
       "refresh": "30s",
       "time": { "from": "now-6h", "to": "now" },
       "templating": {
@@ -1372,7 +1372,7 @@ data:
       },
       "panels": [
         { "type": "row", "title": "Host capacity and pressure", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "panels": [] },
-        { "id": 1, "type": "gauge", "title": "CPU Used", "description": "Whole-host CPU used percentage (100% means every host thread is busy). Idle time is subtracted and is not displayed.", "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "expr": "clamp_min(100 - (avg(rate(node_cpu_seconds_total{instance=\"$node\",mode=\"idle\"}[5m])) * 100), 0)", "legendFormat": "CPU used" }], "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 70 }, { "color": "red", "value": 90 }] } }, "overrides": [] }, "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true } },
+        { "id": 1, "type": "gauge", "title": "CPU Used", "description": "Whole-host CPU used percentage (100% means every host thread is busy). Calculated directly from non-idle CPU time.", "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "expr": "sum(rate(node_cpu_seconds_total{instance=\"$node\",mode!=\"idle\"}[5m])) / count(count by (cpu) (node_cpu_seconds_total{instance=\"$node\"})) * 100", "legendFormat": "CPU used" }], "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 70 }, { "color": "red", "value": 90 }] } }, "overrides": [] }, "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true } },
         { "id": 2, "type": "gauge", "title": "Memory Used", "description": "MemAvailable accounts for reclaimable cache and is the useful host pressure signal.", "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "expr": "(1 - node_memory_MemAvailable_bytes{instance=\"$node\"} / node_memory_MemTotal_bytes{instance=\"$node\"}) * 100", "legendFormat": "Memory" }], "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 80 }, { "color": "red", "value": 95 }] } }, "overrides": [] }, "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true } },
         { "id": 3, "type": "gauge", "title": "Root Disk Used", "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "expr": "(1 - node_filesystem_avail_bytes{instance=\"$node\",mountpoint=\"/\",fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{instance=\"$node\",mountpoint=\"/\",fstype!~\"tmpfs|overlay|squashfs\"}) * 100", "legendFormat": "/" }], "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 80 }, { "color": "red", "value": 90 }] } }, "overrides": [] }, "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true } },
         { "id": 4, "type": "stat", "title": "Host Uptime", "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "expr": "time() - node_boot_time_seconds{instance=\"$node\"}", "legendFormat": "uptime" }], "fieldConfig": { "defaults": { "unit": "dtdurations", "decimals": 1 }, "overrides": [] }, "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name", "colorMode": "value" } },
@@ -2258,7 +2258,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "100 - (avg(rate(node_cpu_seconds_total{instance=\"$node\", mode=\"idle\"}[5m])) * 100)",
+              "expr": "sum(rate(node_cpu_seconds_total{instance=\"$node\", mode!=\"idle\"}[5m])) / count(count by (cpu) (node_cpu_seconds_total{instance=\"$node\"})) * 100",
               "legendFormat": "CPU"
             }
           ],
