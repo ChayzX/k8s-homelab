@@ -43,10 +43,10 @@ jobs:
           if [ -z "$ref" ]; then ref="$(curl -fsSL https://api.github.com/repos/arif-banai/MusicBot/releases/latest | jq -r .tag_name)"; fi
           test -n "$ref"; test "$ref" != null
           git clone --depth 1 --branch "$ref" https://github.com/arif-banai/MusicBot.git "$RUNNER_TEMP/musicbot"
-          git -C "$RUNNER_TEMP/musicbot" apply --check scripts/patches/voice-channel-text-chat.patch
-          git -C "$RUNNER_TEMP/musicbot" apply scripts/patches/voice-channel-text-chat.patch
-          git -C "$RUNNER_TEMP/musicbot" apply --check scripts/patches/jmusicbot-health-endpoint.patch
-          git -C "$RUNNER_TEMP/musicbot" apply scripts/patches/jmusicbot-health-endpoint.patch
+          git -C "$RUNNER_TEMP/musicbot" apply --check "$GITHUB_WORKSPACE/scripts/patches/voice-channel-text-chat.patch"
+          git -C "$RUNNER_TEMP/musicbot" apply "$GITHUB_WORKSPACE/scripts/patches/voice-channel-text-chat.patch"
+          git -C "$RUNNER_TEMP/musicbot" apply --check "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-health-endpoint.patch"
+          git -C "$RUNNER_TEMP/musicbot" apply "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-health-endpoint.patch"
           yts="$(curl -fsSL https://api.github.com/repos/lavalink-devs/youtube-source/releases/latest | jq -r .tag_name | sed 's/^v//')"
           sed -i "s|<youtube-source.version>[^<]*</youtube-source.version>|<youtube-source.version>${yts}</youtube-source.version>|" "$RUNNER_TEMP/musicbot/pom.xml"
           echo "tag=upstream-${ref#v}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
