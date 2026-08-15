@@ -95,7 +95,7 @@ jobs:
           echo '9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared' | sha256sum -c -
           chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
           cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
-          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/jmusicbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/jmusicbot.kubeconfig"
+          printf '%s' "$KUBE_CONFIG_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/jmusicbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/jmusicbot.kubeconfig"
           KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl get deployment/jmusicbot -n jmusicbot
           KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl set image deployment/jmusicbot jmusicbot="${IMAGE}:${IMAGE_TAG}" -n jmusicbot
           echo '### Image release applied: ✅' >> "$GITHUB_STEP_SUMMARY"
@@ -117,7 +117,7 @@ jobs:
           echo '9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared' | sha256sum -c -
           chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
           cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
-          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/jmusicbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/jmusicbot.kubeconfig"
+          printf '%s' "$KUBE_CONFIG_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/jmusicbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/jmusicbot.kubeconfig"
           KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl rollout restart deployment/jmusicbot -n jmusicbot
           echo '### Pod restart requested: ✅' >> "$GITHUB_STEP_SUMMARY"
 
@@ -139,7 +139,7 @@ jobs:
           echo '9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared' | sha256sum -c -
           chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
           cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
-          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/jmusicbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/jmusicbot.kubeconfig"
+          printf '%s' "$KUBE_CONFIG_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/jmusicbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/jmusicbot.kubeconfig"
           KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl rollout status deployment/jmusicbot -n jmusicbot --timeout=180s
           pod="$(KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl get pod -n jmusicbot -l app.kubernetes.io/name=jmusicbot -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}' | awk '{print $1}')"
           test -n "$pod"
