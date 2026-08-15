@@ -16,19 +16,14 @@ on:
       - opsbot/bot/**
       - opsbot/40-deployment.yaml
       - .github/workflows/opsbot-deploy.yml
-  workflow_dispatch:
-    inputs:
-      image_tag:
-        description: "Image tag to deploy (defaults to the most recent published build)"
-        required: false
-        default: latest
+  workflow_dispatch: {}
 
 permissions:
   contents: read
 
 jobs:
   publish-image:
-    name: 1 - Build/publish (no live deploy)
+    name: 1 - Build and publish (merge deploy)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -55,11 +50,10 @@ jobs:
       - name: Publish stage summary
         if: always()
         run: |
-          { echo '## Opsbot CI/CD pipeline'; echo ''; echo '### Build and publish: ${{ steps.publish.outcome }}'; echo "- Digest: \`${{ steps.publish.outputs.digest || 'unavailable' }}\`"; if [ '${{ github.event_name }}' = 'push' ]; then echo '### Live deployment: ⏸ not run (push publishes only)'; else echo '### Live deployment: ▶ continuing through apply/restart/verify'; fi; } >> "$GITHUB_STEP_SUMMARY"
+          { echo '## Opsbot CI/CD pipeline'; echo ''; echo '### Build and publish: ${{ steps.publish.outcome }}'; echo "- Digest: \`${{ steps.publish.outputs.digest || 'unavailable' }}\`"; echo '### Live deployment: ▶ continuing (merge to main approved deployment)'; } >> "$GITHUB_STEP_SUMMARY"
 
   apply-manifest:
-    name: 2 - Apply deployment manifest (manual deploy)
-    if: github.event_name == 'workflow_dispatch'
+    name: 2 - Apply deployment manifest (merge deploy)
     needs: publish-image
     runs-on: ubuntu-latest
     steps:
@@ -83,7 +77,7 @@ jobs:
           KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl apply -f opsbot/40-deployment.yaml -n opsbot
 
   restart-opsbot:
-    name: 3 - Deploy image and restart pod (manual deploy)
+    name: 3 - Deploy image and restart pod (merge deploy)
     needs: apply-manifest
     runs-on: ubuntu-latest
     outputs:
@@ -95,7 +89,7 @@ jobs:
           TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
           KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_OPSBOT }}
-          IMAGE_TAG: ${{ inputs.image_tag }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
           set -euo pipefail
           test -n "$TUNNEL_SERVICE_TOKEN_ID"
@@ -115,7 +109,7 @@ jobs:
           echo "Previous pod: ${POD:-none}"
 
   verify-opsbot:
-    name: 4 - Verify rollout and pod health (manual deploy)
+    name: 4 - Verify rollout and pod health (merge deploy)
     needs: restart-opsbot
     runs-on: ubuntu-latest
     steps:
@@ -124,7 +118,7 @@ jobs:
           TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
           KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_OPSBOT }}
-          IMAGE_TAG: ${{ inputs.image_tag }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
           set -euo pipefail
           test -n "$TUNNEL_SERVICE_TOKEN_ID"

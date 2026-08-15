@@ -8,11 +8,11 @@ pod changed. Only a workflow whose summary contains **Apply**, **Restart**, and
 
 | Change | Push to `main` does | Manual action needed? |
 |---|---|---|
-| Opsbot application (`opsbot/bot/**`) | Builds/publishes GHCR image only | Yes: run **Opsbot CI/CD** |
-| PantryBot application | Builds/publishes image only | Yes: run PantryBot **Deploy** |
+| Opsbot application (`opsbot/bot/**`) | Builds, applies, restarts, and verifies on merge | No second click; merge is approval |
+| PantryBot application | Builds, applies, restarts, and verifies on merge | No second click; merge is approval |
 | Grafana dashboards/config | Applies ConfigMap, restarts, and verifies Grafana automatically | No; push is the deployment (a manual dispatch also works) |
-| Minecraft source/image inputs | Builds/publishes GHCR image only | Yes: run **Minecraft CI/CD** with deploy checked |
-| JMusicBot upstream release | No automatic run; upstream is resolved only when clicked | Yes: run **JMusicBot CI/CD**, choose ref (or latest), then choose whether to deploy |
+| Minecraft source/image inputs | Resolves newest Paper version, builds, applies, restarts, and verifies on merge | No second click; merge is approval |
+| JMusicBot source/patch changes | Resolves latest upstream release, builds, applies, restarts, and verifies on merge | No second click; merge is approval |
 | k3s-watcher source | Git changes only | Yes: update the host checkout and restart its systemd user unit |
 
 If the Actions run shows only **Build and publish**, nothing was deployed yet.
@@ -38,59 +38,52 @@ before manually deploying. (If your k8s-homelab push didn't touch
 
 ## Deploying
 
-Deployment is manual — you click the button in GitHub's UI. This ensures you're aware of what's going live.
+Deployment is merge-gated — merging a PR to `main` is the approval action. The
+resulting Actions run contains the numbered publish, apply, restart, and verify
+jobs. Manual dispatch remains available only to retry the pipeline; it is not a
+separate production approval path.
 
 ### For opsbot
 
-1. Go to GitHub → k8s-homelab repo → **Actions** tab
-2. Click **Deploy opsbot** workflow
-3. Click **Run workflow** (top right)
-4. Leave "Use workflow from" as `main`
-5. Optionally type an image tag in the text field (e.g., `abc1234` for a specific commit, or `latest` for the most recent build). Leave blank to default to `latest`.
-6. Click the green **Run workflow** button
-7. In the run, confirm all four jobs complete: **Build/publish**, **Apply
+1. Open the PR and merge it to `main`.
+2. Go to GitHub → k8s-homelab repo → **Actions** tab.
+3. Open **Opsbot CI/CD** and confirm all four jobs complete: **Build/publish**, **Apply
    manifest**, **Deploy/restart**, and **Verify rollout and pod health**. The
    final job summary names the old and new pod and reports readiness/image ID.
 
 ### For pantry-bot
 
-Same steps, but for the **pantry-bot** repo. A push to `main` publishes the
-image; it does not change the running pod:
+Merge the PR in the **pantry-bot** repo. The merge run deploys the exact merge
+commit:
 
 1. GitHub → pantry-bot repo → **Actions** tab
-2. Click **Deploy** workflow
-3. Click **Run workflow**, leave settings as-is (or optionally specify an image tag)
-4. Click the green **Run workflow** button and wait for the staged publish,
+2. Open **PantryBot CI/CD** and wait for the staged publish,
    apply, restart, and verify results.
 
 ### For Grafana
 
-Push dashboard/config changes to `main`. The `Deploy Grafana` workflow runs
+Push dashboard/config changes through a merged PR to `main`. The `Deploy Grafana` workflow runs
 the ConfigMap apply, pod restart, rollout wait, and health checks automatically.
-You do not need a second Run workflow click. Use manual dispatch only when you
-want to redeploy the current dashboard state without a new commit.
+You do not need a second Run workflow click.
 
 ### For Minecraft
 
-Pushes publish a verified Paper + Geyser/Floodgate image but never touch the
-world. To publish or deploy an update, open **Actions → Minecraft CI/CD → Run
-workflow**. Leave `paper_build` blank for the latest stable build. Check
-`Deploy the published image` only when you also want the staged apply, restart,
-and readiness verification jobs to run. The deployment uses the scoped
-`KUBE_CONFIG_MINECRAFT` secret and preserves the Recreate strategy/world PVC.
+Merging a Minecraft PR runs **Minecraft CI/CD**. It resolves the newest stable
+Paper version automatically, verifies Paper/Geyser/Floodgate artifacts, then
+publishes, applies, restarts, and verifies the server. The deployment uses the
+scoped `KUBE_CONFIG_MINECRAFT` secret and preserves the Recreate strategy/world
+PVC. A manual dispatch is only a retry/diagnostic tool.
 Before the first deployment, make the `paper-minecraft` GHCR package readable
 by the cluster (public package, or an image-pull Secret wired into the
 Deployment).
 
 ### For JMusicBot
 
-This workflow is deliberately click-only so an upstream `arif-banai/MusicBot`
-release cannot silently change the bot. Open **Actions → JMusicBot CI/CD → Run
-workflow**, leave `upstream_ref` blank to resolve the maintainer's latest
-release (or enter a tag), then run it with deploy unchecked to publish only.
-Check deploy when you want the apply, restart, and `/health` readiness stages as
-well. It applies the tracked voice-channel and health-endpoint patches before
-publishing. Configure `KUBE_CONFIG_JMUSICBOT` before using the deploy option.
+Merging a JMusicBot workflow/patch change runs **JMusicBot CI/CD**. It resolves
+the maintainer's latest `arif-banai/MusicBot` release, applies the tracked
+voice-channel and health patches, then publishes, applies, restarts, and checks
+`/health`. Configure `KUBE_CONFIG_JMUSICBOT` before merging the first deployable
+change.
 Make the `jmusicbot` GHCR package readable by the cluster before its first
 deployment (public package, or an image-pull Secret in the namespace).
 
