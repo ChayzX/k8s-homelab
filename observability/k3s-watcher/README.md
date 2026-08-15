@@ -1,7 +1,8 @@
 # k3s-watcher
 
 This is the tracked source for the host `k3s-watcher` systemd service. It
-queries Loki for restart and log-error events and sends Discord DMs.
+queries Loki for restart and log-error events, sends Discord DMs, and can
+independently mirror actionable alerts into the private Operations inbox.
 
 Cloudflared QUIC teardown messages are suppressed only when the exact
 cloudflared stream is matched and the connector's `/ready` endpoint responds
@@ -20,6 +21,37 @@ it is active; set `ROLLOUT_POST_SUPPRESSION_SECONDS` to tune that grace period.
 The Discord token, user ID, Loki URL, kubeconfig, and systemd unit remain
 host-local secrets/configuration. Install this directory on the host and
 point `k3s-watcher.service` at `watcher.py`; do not commit `.env` files.
+
+## Operations dual delivery
+
+Discord is always attempted first. Operations delivery has a separate bounded
+in-memory spool, so a Discord cooldown does not discard a pending inbox event.
+Connection errors, timeouts, HTTP 429, and HTTP 5xx responses retry with a
+bounded exponential delay and the original event key and occurrence timestamp.
+Other HTTP 4xx responses are logged without their response bodies and dropped.
+Restart and log fingerprints are normalized and SHA-256 hashed before leaving
+the host. The informational watcher-online DM is never ingested.
+
+Configure every `OPERATIONS_*` value shown in `.env.example`, or configure none
+of them to retain Discord-only behavior. The ingest key is independent from the
+Cloudflare Access service token. Keep the host systemd EnvironmentFile mode
+`0600`; never put either credential in the repository, logs, or alert text.
+
+Reconciliation runs only after both the Kubernetes pod collection and Loki
+query complete successfully. A partial pass cannot resolve alerts. On process
+startup it also waits for the longer of the restart window and log-error
+confirmation window before its first reconciliation, allowing active state to
+be rebuilt without falsely resolving inbox entries from the prior process.
+Reconciliation is skipped rather than truncated if more than the API's 200-key
+limit is active. Because the
+pending spool is intentionally process-local, restart the service only after
+its log shows no pending delivery failures when practical.
+
+Rollout order: deploy and validate the Operations API first, install the
+watcher-specific Access service token and ingest key in the host environment,
+then restart this service and generate one controlled alert. Confirm both the
+Discord DM and one inbox occurrence. To roll back, remove all `OPERATIONS_*`
+values and restart the watcher; Discord delivery remains unchanged.
 
 Run the unit tests with:
 

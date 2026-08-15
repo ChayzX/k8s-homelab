@@ -6,14 +6,28 @@ configuration; this module is the tracked source deployed by that unit.
 """
 
 import fcntl
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
 import time
+from collections import OrderedDict
+from datetime import datetime, timezone
 
 import requests
+
+
+def _positive_number(name, default, cast):
+    try:
+        value = cast(os.environ.get(name, str(default)))
+        if value <= 0:
+            raise ValueError("must be positive")
+        return value
+    except (TypeError, ValueError) as exc:
+        print(f"[k3s-watcher] Invalid optional {name}: {exc}; Operations disabled")
+        return None
 
 BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 USER_ID = os.environ.get("DISCORD_USER_ID")
@@ -40,6 +54,25 @@ CLOUDFLARED_READY_URL = os.environ.get(
 )
 CLOUDFLARED_READY_TIMEOUT_SECONDS = float(
     os.environ.get("CLOUDFLARED_READY_TIMEOUT_SECONDS", "2")
+)
+OPERATIONS_ALERT_URL = os.environ.get("OPERATIONS_ALERT_URL", "").strip()
+OPERATIONS_RECONCILE_URL = os.environ.get(
+    "OPERATIONS_RECONCILE_URL",
+    (
+        OPERATIONS_ALERT_URL.rsplit("/", 1)[0] + "/reconcile"
+        if OPERATIONS_ALERT_URL
+        else ""
+    ),
+).strip()
+OPERATIONS_ALERT_INGEST_KEY = os.environ.get("OPERATIONS_ALERT_INGEST_KEY", "")
+OPERATIONS_CF_ACCESS_CLIENT_ID = os.environ.get("OPERATIONS_CF_ACCESS_CLIENT_ID", "")
+OPERATIONS_CF_ACCESS_CLIENT_SECRET = os.environ.get(
+    "OPERATIONS_CF_ACCESS_CLIENT_SECRET", ""
+)
+OPERATIONS_TIMEOUT_SECONDS = _positive_number("OPERATIONS_TIMEOUT_SECONDS", 3, float)
+OPERATIONS_PENDING_LIMIT = _positive_number("OPERATIONS_PENDING_LIMIT", 200, int)
+OPERATIONS_RETRY_BASE_SECONDS = _positive_number(
+    "OPERATIONS_RETRY_BASE_SECONDS", 5, float
 )
 
 ERROR_PATTERNS = os.environ.get(
@@ -80,6 +113,13 @@ _restart_events = {}
 _last_log_query_ns = time.time_ns()
 _rollout_suppression_started = {}
 _pending_errors = {}
+_active_log_events = {}
+_operations_pending = OrderedDict()
+_operations_active_events = set()
+_reconciliation_started_at = time.time()
+_reconciliation_warmup_seconds = max(
+    RESTART_WINDOW_SECONDS, ERROR_CONFIRMATION_SECONDS + ERROR_PENDING_GAP_SECONDS
+)
 
 
 def acquire_singleton_lock():
@@ -127,6 +167,144 @@ def send_discord_alert(title, description, color=0xE74C3C, extra_user_ids=()):
             _dm_channel_ids.pop(user_id, None)
 
 
+def _operations_enabled():
+    values = (
+        OPERATIONS_ALERT_URL,
+        OPERATIONS_RECONCILE_URL,
+        OPERATIONS_ALERT_INGEST_KEY,
+        OPERATIONS_CF_ACCESS_CLIENT_ID,
+        OPERATIONS_CF_ACCESS_CLIENT_SECRET,
+        OPERATIONS_TIMEOUT_SECONDS,
+        OPERATIONS_PENDING_LIMIT,
+        OPERATIONS_RETRY_BASE_SECONDS,
+    )
+    if any(values) and not all(values):
+        print("[k3s-watcher] Operations delivery is incomplete; check service environment")
+    return all(values)
+
+
+def _operations_headers():
+    return {
+        "X-Operations-Ingest-Key": OPERATIONS_ALERT_INGEST_KEY,
+        "CF-Access-Client-Id": OPERATIONS_CF_ACCESS_CLIENT_ID,
+        "CF-Access-Client-Secret": OPERATIONS_CF_ACCESS_CLIENT_SECRET,
+    }
+
+
+def queue_operations_alert(event):
+    """Retain a bounded, de-duplicated event spool independent of DM cooldown."""
+    if not _operations_enabled():
+        return
+    key = event["eventKey"]
+    if key in _operations_active_events:
+        # Keep the original occurrence timestamp stable until delivery succeeds.
+        return
+    _operations_active_events.add(key)
+    while len(_operations_pending) >= OPERATIONS_PENDING_LIMIT:
+        dropped_key, _ = _operations_pending.popitem(last=False)
+        print(f"[k3s-watcher] Operations spool full; dropped oldest event {dropped_key}")
+    _operations_pending[key] = {"event": event, "attempts": 0, "next_attempt": 0.0}
+
+
+def finish_operations_lifecycle(active_event_keys):
+    """Allow a future occurrence only after the current condition clears."""
+    _operations_active_events.intersection_update(active_event_keys)
+
+
+def flush_operations_alerts(session=requests, now=None):
+    """Attempt due deliveries, retrying only transient network/server failures."""
+    if not _operations_enabled():
+        return
+    now = time.time() if now is None else now
+    for key, pending in list(_operations_pending.items()):
+        if pending["next_attempt"] > now:
+            continue
+        retry = False
+        try:
+            response = session.post(
+                OPERATIONS_ALERT_URL,
+                headers=_operations_headers(),
+                json=pending["event"],
+                timeout=OPERATIONS_TIMEOUT_SECONDS,
+            )
+            if response.status_code in (429,) or response.status_code >= 500:
+                retry = True
+            elif 200 <= response.status_code < 300:
+                _operations_pending.pop(key, None)
+                continue
+            else:
+                print(
+                    f"[k3s-watcher] Operations rejected event {key} "
+                    f"with HTTP {response.status_code}; not retrying"
+                )
+                _operations_pending.pop(key, None)
+                continue
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            print(f"[k3s-watcher] Operations delivery failed for {key}: {exc}")
+            retry = True
+        except requests.RequestException as exc:
+            print(f"[k3s-watcher] Operations request failed for {key}: {exc}; not retrying")
+            _operations_pending.pop(key, None)
+            continue
+        if retry:
+            pending["attempts"] += 1
+            exponent = min(pending["attempts"] - 1, 8)
+            delay = min(OPERATIONS_RETRY_BASE_SECONDS * 2 ** exponent, 300)
+            pending["next_attempt"] = now + delay
+
+
+def reconcile_operations(active_event_keys, session=requests):
+    """Resolve stale events only after callers complete every collection source."""
+    if not _operations_enabled():
+        return True
+    if len(active_event_keys) > 200:
+        print("[k3s-watcher] More than 200 active alerts; reconciliation skipped safely")
+        return False
+    try:
+        response = session.post(
+            OPERATIONS_RECONCILE_URL,
+            headers=_operations_headers(),
+            json={"source": "k3s-watcher", "activeEventKeys": sorted(active_event_keys)},
+            timeout=OPERATIONS_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return True
+    except requests.RequestException as exc:
+        print(f"[k3s-watcher] Operations reconciliation failed: {exc}")
+        return False
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _safe_workload(value):
+    value = re.sub(r"[^a-z0-9-]", "-", (value or "unknown").lower()).strip("-")
+    return (value or "unknown")[:63]
+
+
+def workload_for_pod(pod):
+    metadata = pod.get("metadata", {})
+    labels = metadata.get("labels", {})
+    for label in ("app.kubernetes.io/name", "app"):
+        if labels.get(label):
+            return _safe_workload(labels[label])
+    owners = metadata.get("ownerReferences", [])
+    if owners:
+        name = owners[0].get("name", "")
+        if owners[0].get("kind") == "ReplicaSet":
+            name = re.sub(r"-[a-f0-9]{8,10}$", "", name)
+        return _safe_workload(name)
+    pod_name = re.sub(
+        r"-[a-z0-9]{5,10}(?:-[a-z0-9]{5})?$", "", metadata.get("name", "")
+    )
+    return _safe_workload(pod_name)
+
+
+def _event_key(kind, identity):
+    return f"{kind}:{hashlib.sha256(identity.encode('utf-8')).hexdigest()}"
+
+
 def cooldown_ok(key):
     now = time.time()
     if now - _last_alert_time.get(key, 0) >= COOLDOWN_SECONDS:
@@ -162,7 +340,7 @@ def cloudflared_teardown_suppressed(line, ready):
 
 
 def alert_fingerprint(namespace, container, line, match):
-    """Normalize volatile connector fields so duplicate streams share a key."""
+    """Normalize and hash volatile log content into an API-safe stable key."""
     if container == "cloudflared":
         lowered = line.lower()
         for phrase in (
@@ -172,10 +350,13 @@ def alert_fingerprint(namespace, container, line, match):
             "failed to refresh feature selector",
         ):
             if phrase in lowered:
-                return f"log_error_{namespace}_{container}_{phrase}"
+                return _event_key("log", f"{namespace}/{container}/{phrase}")
     normalized = re.sub(r"\b(connIndex|event|ip)=\S+", "", line, flags=re.IGNORECASE)
-    normalized = re.sub(r"\s+", " ", normalized).strip().lower()[:180]
-    return f"log_error_{namespace}_{container}_{match.group(0).lower()}_{normalized}"
+    normalized = re.sub(r"\b[0-9a-f]{8,}\b", "<id>", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\b\d+\b", "<n>", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip().lower()[:500]
+    identity = f"{namespace}/{container}/{match.group(0).lower()}/{normalized}"
+    return _event_key("log", identity)
 
 
 def deployment_rollout_active(deployments):
@@ -209,6 +390,8 @@ def rollout_suppressed(namespace):
 
 
 def check_restart_loops():
+    active_event_keys = set()
+    collection_complete = True
     for namespace in WATCH_NAMESPACES:
         result = subprocess.run(
             ["kubectl", "get", "pods", "-n", namespace, "-o", "json"],
@@ -216,6 +399,7 @@ def check_restart_loops():
         )
         if result.returncode != 0:
             print(f"[k3s-watcher] kubectl get pods -n {namespace} failed: {result.stderr.strip()}")
+            collection_complete = False
             continue
         for pod in json.loads(result.stdout)["items"]:
             pod_name = pod["metadata"]["name"]
@@ -227,14 +411,37 @@ def check_restart_loops():
                     _restart_events.setdefault(key, []).extend([time.time()] * (count - previous))
                 _last_restart_count[key] = count
                 now = time.time()
-                events = [t for t in _restart_events.get(key, []) if now - t <= RESTART_WINDOW_SECONDS]
+                events = [
+                    t
+                    for t in _restart_events.get(key, [])
+                    if now - t <= RESTART_WINDOW_SECONDS
+                ]
                 _restart_events[key] = events
+                if len(events) >= RESTART_THRESHOLD:
+                    event_key = _event_key("restart", key)
+                    active_event_keys.add(event_key)
+                    message = (
+                        f"{key} restarted {len(events)} times in "
+                        f"{RESTART_WINDOW_SECONDS / 60:.0f} minutes."
+                    )
+                    queue_operations_alert({
+                        "source": "k3s-watcher",
+                        "eventKey": event_key,
+                        "eventType": "restartLoop",
+                        "severity": "critical",
+                        "namespace": namespace,
+                        "workload": workload_for_pod(pod),
+                        "pod": pod_name,
+                        "message": message,
+                        "occurredAt": _utc_now(),
+                    })
                 if len(events) >= RESTART_THRESHOLD and cooldown_ok(f"restart_loop_{key}"):
                     send_discord_alert(
                         "🔁 Restart loop detected",
                         f"{key} restarted {len(events)} times in {RESTART_WINDOW_SECONDS / 60:.0f} minutes.",
                         extra_user_ids=extra_recipients_for(namespace),
                     )
+    return collection_complete, active_event_keys
 
 
 def check_log_errors():
@@ -253,12 +460,12 @@ def check_log_errors():
         streams = response.json()["data"]["result"]
     except Exception as exc:
         print(f"[k3s-watcher] Loki query failed: {exc}")
-        return
-    finally:
-        _last_log_query_ns = end_ns
+        return False, set()
+    _last_log_query_ns = end_ns
 
     rollout_state = {}
     ready_state = None
+    active_event_keys = set()
     for stream in streams:
         labels = stream["stream"]
         container = labels.get("container", labels.get("app_kubernetes_io_name", "unknown"))
@@ -285,12 +492,66 @@ def check_log_errors():
             key = alert_fingerprint(namespace, container, line, match)
             if not persistent_error(key):
                 continue
+            _active_log_events[key] = time.time()
+            active_event_keys.add(key)
+            workload = _safe_workload(
+                labels.get("app_kubernetes_io_name")
+                or labels.get("app")
+                or container
+            )
+            queue_operations_alert({
+                "source": "k3s-watcher",
+                "eventKey": key,
+                "eventType": "logError",
+                "severity": "warning",
+                "namespace": namespace,
+                "workload": workload,
+                "pod": labels.get("pod"),
+                "message": f"{container} repeatedly matched log pattern: {match.group(0)}",
+                "occurredAt": _utc_now(),
+            })
             if cooldown_ok(key):
                 send_discord_alert(
                     f"⚠️ {container} log alert",
                     f"Matched pattern: `{match.group(0)}`\n\n{line}",
                     extra_user_ids=extra_recipients_for(namespace),
                 )
+    now = time.time()
+    for key, last_seen in list(_active_log_events.items()):
+        if now - last_seen <= ERROR_PENDING_GAP_SECONDS:
+            active_event_keys.add(key)
+        else:
+            _active_log_events.pop(key, None)
+    return True, active_event_keys
+
+
+def run_checks_once():
+    """Collect, deliver, and reconcile one pass without partial resolution."""
+    restart_complete = False
+    log_complete = False
+    restart_keys = set()
+    log_keys = set()
+    try:
+        restart_complete, restart_keys = check_restart_loops()
+    except Exception as exc:
+        print(f"[k3s-watcher] Restart-loop check error: {exc}")
+    try:
+        log_complete, log_keys = check_log_errors()
+    except Exception as exc:
+        print(f"[k3s-watcher] Log-error check error: {exc}")
+    try:
+        flush_operations_alerts()
+    except Exception as exc:
+        print(f"[k3s-watcher] Unexpected Operations delivery error: {exc}")
+    if restart_complete and log_complete:
+        active_keys = restart_keys | log_keys
+        finish_operations_lifecycle(active_keys)
+        if time.time() - _reconciliation_started_at < _reconciliation_warmup_seconds:
+            return
+        try:
+            reconcile_operations(active_keys)
+        except Exception as exc:
+            print(f"[k3s-watcher] Unexpected Operations reconciliation error: {exc}")
 
 
 if __name__ == "__main__":
@@ -307,12 +568,5 @@ if __name__ == "__main__":
         color=0x2ECC71,
     )
     while True:
-        try:
-            check_restart_loops()
-        except Exception as exc:
-            print(f"[k3s-watcher] Restart-loop check error: {exc}")
-        try:
-            check_log_errors()
-        except Exception as exc:
-            print(f"[k3s-watcher] Log-error check error: {exc}")
+        run_checks_once()
         time.sleep(POLL_INTERVAL_SECONDS)
