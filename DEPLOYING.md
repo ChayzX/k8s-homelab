@@ -78,6 +78,9 @@ workflow**. Leave `paper_build` blank for the latest stable build. Check
 `Deploy the published image` only when you also want the staged apply, restart,
 and readiness verification jobs to run. The deployment uses the scoped
 `KUBE_CONFIG_MINECRAFT` secret and preserves the Recreate strategy/world PVC.
+Before the first deployment, make the `paper-minecraft` GHCR package readable
+by the cluster (public package, or an image-pull Secret wired into the
+Deployment).
 
 ### For JMusicBot
 
@@ -88,6 +91,8 @@ release (or enter a tag), then run it with deploy unchecked to publish only.
 Check deploy when you want the apply, restart, and `/health` readiness stages as
 well. It applies the tracked voice-channel and health-endpoint patches before
 publishing. Configure `KUBE_CONFIG_JMUSICBOT` before using the deploy option.
+Make the `jmusicbot` GHCR package readable by the cluster before its first
+deployment (public package, or an image-pull Secret in the namespace).
 
 ## If Something Goes Wrong
 
