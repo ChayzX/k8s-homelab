@@ -4,9 +4,10 @@ In-cluster only: no kubeconfig file, no `kubectl` binary. Every call here
 rides the opsbot-sa ServiceAccount token that Kubernetes projects into the
 pod automatically (see ../40-deployment.yaml's automountServiceAccountToken:
 true), authorized by exactly the Role/RoleBinding grants in ../20-rbac.yaml
--- get/list/watch on pods, get/list/watch/patch on deployments (all three
-whitelisted namespaces), plus pods/exec create in the minecraft namespace
-only. Nothing here needs a Secret: the RCON password lives in the
+— get/list/watch on pods, get/list/watch/patch on deployments (the three
+whitelisted namespaces), plus the separate diagnostics ClusterRole for
+allowlisted non-shell pods/exec in any namespace. Nothing here needs a Secret:
+the RCON password lives in the
 minecraft pod's own RCON_PASSWORD env var (see ../../minecraft/Rcon.java),
 read by rcon.jar *inside* the pod after we exec into it -- opsbot itself
 never sees or needs the password.
@@ -75,6 +76,39 @@ def list_deployment_names(namespace: str) -> list[str]:
     instead of having to remember/spell one exactly."""
     apps = client.AppsV1Api()
     return [d.metadata.name for d in apps.list_namespaced_deployment(namespace).items]
+
+
+def list_namespaces() -> list[str]:
+    """Return namespaces visible to the bot for `/pods exec` autocomplete."""
+    return sorted(n.metadata.name for n in client.CoreV1Api().list_namespace().items)
+
+
+def list_pod_names(namespace: str) -> list[str]:
+    """Return live pod names in a namespace for exec autocomplete."""
+    return sorted(p.metadata.name for p in client.CoreV1Api().list_namespaced_pod(namespace).items)
+
+
+def exec_pod(namespace: str, pod: str, container: str, argv: list[str]) -> str:
+    """Run an allowlisted, non-shell command in a selected pod/container."""
+    v1 = client.CoreV1Api()
+    try:
+        v1.read_namespaced_pod(pod, namespace)
+    except ApiException as e:
+        if e.status == 404:
+            raise NotFoundError(f"pod {pod!r} not found in namespace {namespace!r}") from e
+        raise
+    return stream(
+        v1.connect_get_namespaced_pod_exec,
+        pod,
+        namespace,
+        container=container,
+        command=argv,
+        stderr=True,
+        stdin=False,
+        stdout=True,
+        tty=False,
+        _request_timeout=30,
+    )
 
 
 def restart_deployment(namespace: str, name: str) -> None:

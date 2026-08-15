@@ -1,7 +1,9 @@
 # =============================================================================
-# opsbot RBAC — namespaced Role + RoleBinding, per whitelisted namespace
+# opsbot RBAC — namespaced workload controls plus read-only diagnostics
 # =============================================================================
-# Deliberately NOT a ClusterRole/ClusterRoleBinding. Contrast with Keel
+# Workload restart controls remain namespaced Roles. The separate diagnostics
+# ClusterRole below is intentionally limited to pod discovery and non-shell
+# exec because `/pods exec` can target any namespace by design. Contrast with Keel
 # (../keel/20-clusterrole-clusterrolebinding.yaml): Keel is cluster-scoped
 # because it has to *discover* annotated Deployments anywhere in the cluster
 # without being told a namespace list. opsbot has the opposite requirement —
@@ -10,7 +12,7 @@
 # actual security boundary the design calls for (see `bd show k8s-homelab-bi6`
 # and `k8s-homelab-bi6.2`).
 #
-# Whitelist: jmusicbot, pantry-bot, minecraft. Deliberately EXCLUDES keel
+# Workload restart whitelist: jmusicbot, pantry-bot, minecraft. Deliberately EXCLUDES keel
 # (nothing to restart there day-to-day; also avoids opsbot ever touching the
 # updater that manages pantry-bot) and observability (out of scope for a
 # Discord ops bot; a bad slash command should not be able to touch metrics
@@ -84,6 +86,41 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: opsbot-workload-viewer
+subjects:
+  - kind: ServiceAccount
+    name: opsbot-sa
+    namespace: opsbot
+---
+# `/pods exec` capability (k8s-homelab-jhu). This is deliberately a separate
+# ClusterRole so the broader target scope is conspicuous in review. The bot
+# still cannot exec a shell: opsbot/bot/util.py accepts only read-only
+# diagnostic executables and rejects shell operators/credential paths.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: opsbot-pod-exec
+  labels:
+    app.kubernetes.io/name: opsbot
+    app.kubernetes.io/part-of: homelab
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: opsbot-pod-exec
+  labels:
+    app.kubernetes.io/name: opsbot
+    app.kubernetes.io/part-of: homelab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: opsbot-pod-exec
 subjects:
   - kind: ServiceAccount
     name: opsbot-sa

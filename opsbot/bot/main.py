@@ -192,6 +192,37 @@ async def _deployment_autocomplete(
     return [app_commands.Choice(name=n, value=n) for n in matches[:25]]
 
 
+async def _exec_namespace_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    """Authorized-only namespace suggestions for `/pods exec`."""
+    if not util.is_authorized(interaction.user.id, ALLOWLIST):
+        return []
+    try:
+        names = k8s_ops.list_namespaces()
+    except Exception:
+        return []
+    needle = current.lower()
+    return [app_commands.Choice(name=n, value=n) for n in names if needle in n.lower()][:25]
+
+
+async def _pod_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    """Authorized-only pod suggestions after a namespace is selected."""
+    if not util.is_authorized(interaction.user.id, ALLOWLIST):
+        return []
+    namespace = interaction.namespace.namespace
+    if not namespace:
+        return []
+    try:
+        names = k8s_ops.list_pod_names(namespace)
+    except Exception:
+        return []
+    needle = current.lower()
+    return [app_commands.Choice(name=n, value=n) for n in names if needle in n.lower()][:25]
+
+
 # Discord followup tokens die 15 minutes after the initial response
 # (Discord's docs). k8s_ops.wait_for_rollout's own 120s timeout is well
 # inside that, but a slow event loop / long queue could still eat the
@@ -252,6 +283,43 @@ async def deploy_restart(interaction: discord.Interaction, namespace: str, deplo
     await _reply(interaction, f"Restart triggered: {namespace}/{deployment}")
     _audit(interaction, True, result="restarted")
     asyncio.create_task(_watch_rollout(interaction, namespace, deployment))
+
+
+@pods_group.command(name="exec", description="Run an allowlisted diagnostic command in any pod")
+@app_commands.autocomplete(namespace=_exec_namespace_autocomplete, pod=_pod_autocomplete)
+async def pods_exec(
+    interaction: discord.Interaction,
+    namespace: str,
+    pod: str,
+    container: str,
+    command: str,
+) -> None:
+    """Execute a non-shell, read-only diagnostic against a selected pod."""
+    await interaction.response.defer(thinking=True)
+    try:
+        argv = util.parse_exec_command(command)
+    except ValueError as e:
+        await _reply(interaction, f"Rejected command: {e}")
+        _audit(interaction, True, result=f"rejected exec: {e}")
+        return
+    try:
+        output = await asyncio.wait_for(
+            asyncio.to_thread(k8s_ops.exec_pod, namespace, pod, container, argv),
+            timeout=35,
+        )
+    except k8s_ops.NotFoundError as e:
+        await _reply(interaction, str(e))
+        _audit(interaction, True, result=f"not found: {e}")
+        return
+    except asyncio.TimeoutError:
+        await _reply(interaction, "Command timed out after 35 seconds.")
+        _audit(interaction, True, result="exec timeout")
+        return
+    except Exception as e:
+        _audit(interaction, True, result=f"exec error: {e}")
+        raise
+    await _reply(interaction, output)
+    _audit(interaction, True, result=f"exec {namespace}/{pod} {argv[0]}")
 
 
 @app_commands.command(name="mc", description="Run a Minecraft RCON console command")
