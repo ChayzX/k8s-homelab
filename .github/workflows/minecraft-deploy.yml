@@ -1,0 +1,169 @@
+# Bead: k8s-homelab-5vu
+# Publish is safe on every push; the live deployment stages run only when the
+# operator explicitly dispatches this workflow with deploy=true.
+name: Minecraft CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - minecraft/**
+      - scripts/minecraft-download-plugins.sh
+      - .github/workflows/minecraft-deploy.yml
+  workflow_dispatch:
+    inputs:
+      paper_build:
+        description: "Paper build number (blank uses the latest stable build)"
+        required: false
+        default: ""
+      deploy:
+        description: "Deploy the published image to the Minecraft pod"
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/chayzx/paper-minecraft
+  MC_VERSION: "26.2"
+
+jobs:
+  publish-image:
+    name: 1 - Build and publish Minecraft image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v5
+      - name: Download and verify Paper and Bedrock plugins
+        id: meta
+        run: |
+          set -euo pipefail
+          build='${{ inputs.paper_build }}'
+          if [ -z "$build" ]; then
+            build="$(curl -fsSL "https://fill.papermc.io/v3/projects/paper/versions/${MC_VERSION}/builds" | jq -r '[.[] | select(.channel == "STABLE")] | max_by(.id) | .id')"
+          fi
+          test "$build" != null
+          paper_meta="$(curl -fsSL "https://fill.papermc.io/v3/projects/paper/versions/${MC_VERSION}/builds/${build}")"
+          paper_url="$(jq -r '.downloads.application.url' <<<"$paper_meta")"
+          paper_sha="$(jq -r '.downloads.application.sha256' <<<"$paper_meta")"
+          test -n "$paper_url"; test -n "$paper_sha"; test "$paper_url" != null; test "$paper_sha" != null
+          curl -fsSL "$paper_url" -o minecraft/paper.jar
+          echo "$paper_sha  minecraft/paper.jar" | sha256sum -c -
+          curl -fsSL "https://download.geysermc.org/v2/projects/geyser/versions/2.11.1/builds/1219/downloads/spigot" -o minecraft/plugins/Geyser-Spigot.jar
+          echo '855e38736d67c9ee8354758a0c4ca881b1f329c681be206189c7074667dad8df  minecraft/plugins/Geyser-Spigot.jar' | sha256sum -c -
+          curl -fsSL "https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/140/downloads/spigot" -o minecraft/plugins/floodgate-spigot.jar
+          echo '9f436c42ffd8b1091a437d7a4e16f82181b9d5314f8b1732dfa9d5a4fffb19fe  minecraft/plugins/floodgate-spigot.jar' | sha256sum -c -
+          echo "tag=${MC_VERSION}-b${build}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          echo "Paper ${MC_VERSION}-${build} prepared"
+      - uses: docker/setup-buildx-action@v4
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish image
+        id: publish
+        uses: docker/build-push-action@v7
+        with:
+          context: minecraft
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}
+            ${{ env.IMAGE }}:latest
+      - name: Publish stage summary
+        if: always()
+        run: |
+          {
+            echo '## Minecraft CI/CD pipeline'; echo ''
+            echo '### Build and publish: ${{ steps.publish.outcome }}';
+            echo '- Image: `${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}`';
+            if [ '${{ github.event_name }}' = push ] || [ '${{ inputs.deploy }}' != true ]; then
+              echo '### Apply/restart/verify: ⏸ not run (publish-only)';
+            else
+              echo '### Apply/restart/verify: ▶ continuing (manual deploy requested)';
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  apply-release:
+    name: 2 - Apply image release (manual deploy)
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy == true
+    needs: publish-image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Connect to cluster and set image
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_MINECRAFT }}
+          IMAGE_TAG: ${{ needs.publish-image.outputs.tag }}
+        run: |
+          set -euo pipefail
+          test -n "$TUNNEL_SERVICE_TOKEN_ID"; test -n "$TUNNEL_SERVICE_TOKEN_SECRET"; test -n "$KUBE_CONFIG_B64"
+          curl -fsSL -o cloudflared https://github.com/cloudflare/cloudflared/releases/download/2026.7.3/cloudflared-linux-amd64
+          echo '9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared' | sha256sum -c -
+          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
+          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 &
+          sleep 3
+          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/minecraft.kubeconfig"; chmod 600 "$RUNNER_TEMP/minecraft.kubeconfig"
+          KUBECONFIG="$RUNNER_TEMP/minecraft.kubeconfig" kubectl get deployment/minecraft -n minecraft
+          KUBECONFIG="$RUNNER_TEMP/minecraft.kubeconfig" kubectl set image deployment/minecraft minecraft="${IMAGE}:${IMAGE_TAG}" -n minecraft
+          echo '### Image release applied: ✅' >> "$GITHUB_STEP_SUMMARY"
+
+  restart:
+    name: 3 - Restart Minecraft pod (manual deploy)
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy == true
+    needs: apply-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restart deployment
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_MINECRAFT }}
+        run: |
+          set -euo pipefail
+          test -n "$KUBE_CONFIG_B64"
+          curl -fsSL -o cloudflared https://github.com/cloudflare/cloudflared/releases/download/2026.7.3/cloudflared-linux-amd64
+          echo '9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared' | sha256sum -c -
+          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
+          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
+          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/minecraft.kubeconfig"; chmod 600 "$RUNNER_TEMP/minecraft.kubeconfig"
+          KUBECONFIG="$RUNNER_TEMP/minecraft.kubeconfig" kubectl rollout restart deployment/minecraft -n minecraft
+          echo '### Pod restart requested: ✅' >> "$GITHUB_STEP_SUMMARY"
+
+  verify:
+    name: 4 - Verify Minecraft rollout and health (manual deploy)
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy == true
+    needs: [publish-image, restart]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify ready pod and image
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_MINECRAFT }}
+          EXPECTED_TAG: ${{ needs.publish-image.outputs.tag }}
+        run: |
+          set -euo pipefail
+          test -n "$KUBE_CONFIG_B64"
+          curl -fsSL -o cloudflared https://github.com/cloudflare/cloudflared/releases/download/2026.7.3/cloudflared-linux-amd64
+          echo '9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared' | sha256sum -c -
+          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
+          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
+          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/minecraft.kubeconfig"; chmod 600 "$RUNNER_TEMP/minecraft.kubeconfig"
+          KUBECONFIG="$RUNNER_TEMP/minecraft.kubeconfig" kubectl rollout status deployment/minecraft -n minecraft --timeout=300s
+          pod="$(KUBECONFIG="$RUNNER_TEMP/minecraft.kubeconfig" kubectl get pod -n minecraft -l app.kubernetes.io/name=minecraft -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}' | awk '{print $1}')"
+          test -n "$pod"
+          image="$(KUBECONFIG="$RUNNER_TEMP/minecraft.kubeconfig" kubectl get pod "$pod" -n minecraft -o jsonpath='{.spec.containers[?(@.name=="minecraft")].image}')"
+          case "$image" in *"${EXPECTED_TAG}") ;; *) echo "unexpected image: $image" >&2; exit 1 ;; esac
+          echo '### Pod health: ✅ passed' >> "$GITHUB_STEP_SUMMARY"
+          echo "- Pod: `$pod`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Image: `$image`" >> "$GITHUB_STEP_SUMMARY"

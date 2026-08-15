@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   apply-configmap:
-    name: 1 - Apply dashboard ConfigMap
+    name: 1 - Apply dashboard ConfigMap (automatic on main push)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

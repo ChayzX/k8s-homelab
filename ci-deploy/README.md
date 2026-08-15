@@ -2,7 +2,8 @@
 
 Not a namespace of its own — these manifests create ServiceAccounts, Roles,
 RoleBindings, and token Secrets **inside** the existing `pantry-bot`, `opsbot`,
-and `observability` namespaces (see `../_bootstrap/00-namespaces.yaml`). Nothing here
+`observability`, `minecraft`, and `jmusicbot` namespaces (see
+`../_bootstrap/00-namespaces.yaml`). Nothing here
 creates a namespace, and nothing here runs a pod.
 
 Replaces a cluster-admin kubeconfig that was about to be handed to the
@@ -15,15 +16,16 @@ cluster; a CI runner only needs to run `kubectl set image`,
 
 | File | Purpose |
 |---|---|
-| `10-serviceaccount.yaml` | Three `ci-deploy` ServiceAccounts — one in `pantry-bot`, one in `opsbot`, and one in `observability`. |
+| `10-serviceaccount.yaml` | One `ci-deploy` ServiceAccount per deployable namespace. |
 | `20-rbac.yaml` | A `Role` + `RoleBinding` per namespace. App namespaces get deployment mutation and read-only pod access; observability additionally gets only the dashboard ConfigMap write needed by Grafana deploys. |
 | `30-token-secret.yaml` | A durable token `Secret` per ServiceAccount (SAs stopped auto-creating these in Kubernetes 1.24+). |
 
 ## Apply order
 
 ```bash
-# 0. prerequisite — pantry-bot, opsbot, and observability namespaces already exist
-#    (../_bootstrap/00-namespaces.yaml). Do not reapply/recreate them here.
+# 0. prerequisite — pantry-bot, opsbot, observability, and jmusicbot namespaces
+#    already exist (../_bootstrap/00-namespaces.yaml). The minecraft namespace
+#    is created by ../minecraft/minecraft.yaml, so apply that namespace first.
 
 kubectl apply -f 10-serviceaccount.yaml
 kubectl apply -f 20-rbac.yaml
@@ -44,6 +46,8 @@ kubectl get secret ci-deploy-token -n opsbot -o jsonpath='{.data.token}' | base6
 
 # observability (used by the Grafana deploy workflow)
 kubectl get secret ci-deploy-token -n observability -o jsonpath='{.data.token}' | base64 -d
+kubectl get secret ci-deploy-token -n minecraft -o jsonpath='{.data.token}' | base64 -d
+kubectl get secret ci-deploy-token -n jmusicbot -o jsonpath='{.data.token}' | base64 -d
 ```
 
 The cluster CA and API server address are NOT in these Secrets — pull them
@@ -56,11 +60,12 @@ kubectl config view --minify --raw
 Take `.clusters[0].cluster.server` and `.clusters[0].cluster.certificate-authority-data`
 from that output, combine with the token above, and assemble a minimal
 kubeconfig (one `cluster`, one `user` with `token:`, one `context` pointing
-at the target namespace). Three separate kubeconfigs, one per token — the
+at the target namespace). One kubeconfig is needed per token — the
 `pantry-bot` token cannot authenticate anything the `opsbot` Role wasn't
 also bound to, and vice versa, since each RoleBinding only references the
 ServiceAccount in its own namespace. Store the observability kubeconfig in
-the repository secret `KUBE_CONFIG_GRAFANA` for the Grafana deploy workflow.
+`KUBE_CONFIG_GRAFANA`, and the Minecraft/JMusicBot kubeconfigs in
+`KUBE_CONFIG_MINECRAFT`/`KUBE_CONFIG_JMUSICBOT` respectively.
 
 ## What this deliberately does NOT grant
 

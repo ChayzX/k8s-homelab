@@ -1,0 +1,152 @@
+# Bead: k8s-homelab-a77
+# This workflow is intentionally manual: upstream releases never deploy or
+# publish into our registry until an operator clicks Run workflow.
+name: JMusicBot CI/CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: "MusicBot tag/branch (blank uses arif-banai/MusicBot latest release)"
+        required: false
+        default: ""
+      deploy:
+        description: "Deploy the published image to the JMusicBot pod"
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/chayzx/jmusicbot
+
+jobs:
+  publish-image:
+    name: 1 - Resolve upstream, build, and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - name: Checkout homelab patches
+        uses: actions/checkout@v5
+      - name: Resolve upstream and apply required patches
+        id: meta
+        run: |
+          set -euo pipefail
+          ref='${{ inputs.upstream_ref }}'
+          if [ -z "$ref" ]; then ref="$(curl -fsSL https://api.github.com/repos/arif-banai/MusicBot/releases/latest | jq -r .tag_name)"; fi
+          test -n "$ref"; test "$ref" != null
+          git clone --depth 1 --branch "$ref" https://github.com/arif-banai/MusicBot.git "$RUNNER_TEMP/musicbot"
+          git -C "$RUNNER_TEMP/musicbot" apply --check scripts/patches/voice-channel-text-chat.patch
+          git -C "$RUNNER_TEMP/musicbot" apply scripts/patches/voice-channel-text-chat.patch
+          git -C "$RUNNER_TEMP/musicbot" apply --check scripts/patches/jmusicbot-health-endpoint.patch
+          git -C "$RUNNER_TEMP/musicbot" apply scripts/patches/jmusicbot-health-endpoint.patch
+          yts="$(curl -fsSL https://api.github.com/repos/lavalink-devs/youtube-source/releases/latest | jq -r .tag_name | sed 's/^v//')"
+          sed -i "s|<youtube-source.version>[^<]*</youtube-source.version>|<youtube-source.version>${yts}</youtube-source.version>|" "$RUNNER_TEMP/musicbot/pom.xml"
+          echo "tag=upstream-${ref#v}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          echo "Upstream: $ref; youtube-source: $yts"
+      - uses: docker/setup-buildx-action@v4
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish image
+        id: publish
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ runner.temp }}/musicbot
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}
+            ${{ env.IMAGE }}:latest
+      - name: Publish stage summary
+        if: always()
+        run: |
+          {
+            echo '## JMusicBot CI/CD pipeline'; echo '';
+            echo '### Resolve/build/publish: ${{ steps.publish.outcome }}';
+            echo '- Image: `${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}`';
+            if [ '${{ inputs.deploy }}' != true ]; then echo '### Apply/restart/verify: ⏸ not run (publish-only)'; else echo '### Apply/restart/verify: ▶ continuing (manual deploy requested)'; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  apply-release:
+    name: 2 - Apply image release (manual deploy)
+    if: inputs.deploy == true
+    needs: publish-image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Connect to cluster and set image
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_JMUSICBOT }}
+          IMAGE_TAG: ${{ needs.publish-image.outputs.tag }}
+        run: |
+          set -euo pipefail
+          test -n "$TUNNEL_SERVICE_TOKEN_ID"; test -n "$TUNNEL_SERVICE_TOKEN_SECRET"; test -n "$KUBE_CONFIG_B64"
+          curl -fsSL -o cloudflared https://github.com/cloudflare/cloudflared/releases/download/2026.7.3/cloudflared-linux-amd64
+          echo '9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared' | sha256sum -c -
+          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
+          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
+          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/jmusicbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/jmusicbot.kubeconfig"
+          KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl get deployment/jmusicbot -n jmusicbot
+          KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl set image deployment/jmusicbot jmusicbot="${IMAGE}:${IMAGE_TAG}" -n jmusicbot
+          echo '### Image release applied: ✅' >> "$GITHUB_STEP_SUMMARY"
+
+  restart:
+    name: 3 - Restart JMusicBot pod (manual deploy)
+    if: inputs.deploy == true
+    needs: apply-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restart deployment
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_JMUSICBOT }}
+        run: |
+          set -euo pipefail
+          test -n "$KUBE_CONFIG_B64"
+          curl -fsSL -o cloudflared https://github.com/cloudflare/cloudflared/releases/download/2026.7.3/cloudflared-linux-amd64
+          echo '9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared' | sha256sum -c -
+          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
+          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
+          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/jmusicbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/jmusicbot.kubeconfig"
+          KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl rollout restart deployment/jmusicbot -n jmusicbot
+          echo '### Pod restart requested: ✅' >> "$GITHUB_STEP_SUMMARY"
+
+  verify:
+    name: 4 - Verify JMusicBot rollout and health (manual deploy)
+    if: inputs.deploy == true
+    needs: [publish-image, restart]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify rollout and readiness
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_JMUSICBOT }}
+          EXPECTED_TAG: ${{ needs.publish-image.outputs.tag }}
+        run: |
+          set -euo pipefail
+          test -n "$KUBE_CONFIG_B64"
+          curl -fsSL -o cloudflared https://github.com/cloudflare/cloudflared/releases/download/2026.7.3/cloudflared-linux-amd64
+          echo '9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared' | sha256sum -c -
+          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
+          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
+          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/jmusicbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/jmusicbot.kubeconfig"
+          KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl rollout status deployment/jmusicbot -n jmusicbot --timeout=180s
+          pod="$(KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl get pod -n jmusicbot -l app.kubernetes.io/name=jmusicbot -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}' | awk '{print $1}')"
+          test -n "$pod"
+          ready="$(KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl get pod "$pod" -n jmusicbot -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')"
+          image="$(KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl get pod "$pod" -n jmusicbot -o jsonpath='{.spec.containers[?(@.name=="jmusicbot")].image}')"
+          test "$ready" = True; case "$image" in *"${EXPECTED_TAG}") ;; *) echo "unexpected image: $image" >&2; exit 1 ;; esac
+          echo '### Pod health: ✅ passed' >> "$GITHUB_STEP_SUMMARY"
+          echo "- Pod: `$pod`; Ready: `$ready`; Image: `$image`" >> "$GITHUB_STEP_SUMMARY"
