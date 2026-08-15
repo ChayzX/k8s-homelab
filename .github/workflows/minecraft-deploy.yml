@@ -112,7 +112,7 @@ jobs:
           chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
           cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 &
           sleep 3
-          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/minecraft.kubeconfig"; chmod 600 "$RUNNER_TEMP/minecraft.kubeconfig"
+          printf '%s' "$KUBE_CONFIG_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/minecraft.kubeconfig"; chmod 600 "$RUNNER_TEMP/minecraft.kubeconfig"
           KUBECONFIG="$RUNNER_TEMP/minecraft.kubeconfig" kubectl get deployment/minecraft -n minecraft
           KUBECONFIG="$RUNNER_TEMP/minecraft.kubeconfig" kubectl set image deployment/minecraft minecraft="${IMAGE}:${IMAGE_TAG}" -n minecraft
           echo '### Image release applied: ✅' >> "$GITHUB_STEP_SUMMARY"
@@ -134,7 +134,7 @@ jobs:
           echo '9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared' | sha256sum -c -
           chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
           cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
-          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/minecraft.kubeconfig"; chmod 600 "$RUNNER_TEMP/minecraft.kubeconfig"
+          printf '%s' "$KUBE_CONFIG_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/minecraft.kubeconfig"; chmod 600 "$RUNNER_TEMP/minecraft.kubeconfig"
           KUBECONFIG="$RUNNER_TEMP/minecraft.kubeconfig" kubectl rollout restart deployment/minecraft -n minecraft
           echo '### Pod restart requested: ✅' >> "$GITHUB_STEP_SUMMARY"
 
@@ -156,7 +156,7 @@ jobs:
           echo '9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared' | sha256sum -c -
           chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
           cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
-          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/minecraft.kubeconfig"; chmod 600 "$RUNNER_TEMP/minecraft.kubeconfig"
+          printf '%s' "$KUBE_CONFIG_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/minecraft.kubeconfig"; chmod 600 "$RUNNER_TEMP/minecraft.kubeconfig"
           KUBECONFIG="$RUNNER_TEMP/minecraft.kubeconfig" kubectl rollout status deployment/minecraft -n minecraft --timeout=300s
           pod="$(KUBECONFIG="$RUNNER_TEMP/minecraft.kubeconfig" kubectl get pod -n minecraft -l app.kubernetes.io/name=minecraft -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}' | awk '{print $1}')"
           test -n "$pod"
