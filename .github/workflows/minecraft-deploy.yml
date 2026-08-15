@@ -1,6 +1,6 @@
 # Bead: k8s-homelab-5vu
-# Publish is safe on every push; the live deployment stages run only when the
-# operator explicitly dispatches this workflow with deploy=true.
+# A merge to main is the deployment approval. The workflow resolves the newest
+# Paper version at merge time, publishes it, then applies/restarts/verifies it.
 name: Minecraft CI/CD
 
 on:
@@ -12,22 +12,16 @@ on:
       - .github/workflows/minecraft-deploy.yml
   workflow_dispatch:
     inputs:
-      paper_build:
-        description: "Paper build number (blank uses the latest stable build)"
+      minecraft_version:
+        description: "Minecraft version (blank uses newest Paper version)"
         required: false
         default: ""
-      deploy:
-        description: "Deploy the published image to the Minecraft pod"
-        type: boolean
-        required: true
-        default: false
 
 permissions:
   contents: read
 
 env:
   IMAGE: ghcr.io/chayzx/paper-minecraft
-  MC_VERSION: "26.2"
 
 jobs:
   publish-image:
@@ -38,6 +32,7 @@ jobs:
       packages: write
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
+      minecraft_version: ${{ steps.meta.outputs.minecraft_version }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v5
@@ -45,12 +40,14 @@ jobs:
         id: meta
         run: |
           set -euo pipefail
-          build='${{ inputs.paper_build }}'
-          if [ -z "$build" ]; then
-            build="$(curl -fsSL "https://fill.papermc.io/v3/projects/paper/versions/${MC_VERSION}/builds" | jq -r '[.[] | select(.channel == "STABLE")] | max_by(.id) | .id')"
+          mc_version='${{ inputs.minecraft_version }}'
+          if [ -z "$mc_version" ]; then
+            mc_version="$(curl -fsSL https://fill.papermc.io/v3/projects/paper | jq -r '.versions | keys | sort_by(split(".") | map(tonumber)) | last')"
           fi
+          test -n "$mc_version"; test "$mc_version" != null
+          build="$(curl -fsSL "https://fill.papermc.io/v3/projects/paper/versions/${mc_version}/builds" | jq -r '[.[] | select(.channel == "STABLE")] | max_by(.id) | .id')"
           test "$build" != null
-          paper_meta="$(curl -fsSL "https://fill.papermc.io/v3/projects/paper/versions/${MC_VERSION}/builds/${build}")"
+          paper_meta="$(curl -fsSL "https://fill.papermc.io/v3/projects/paper/versions/${mc_version}/builds/${build}")"
           # Paper's Fill v3 schema names the default server artifact
           # `server:default`; it is not an `application` download.
           paper_url="$(jq -r '.downloads["server:default"].url' <<<"$paper_meta")"
@@ -65,8 +62,9 @@ jobs:
           echo '855e38736d67c9ee8354758a0c4ca881b1f329c681be206189c7074667dad8df  minecraft/plugins/Geyser-Spigot.jar' | sha256sum -c -
           curl -fsSL "https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/140/downloads/spigot" -o minecraft/plugins/floodgate-spigot.jar
           echo '9f436c42ffd8b1091a437d7a4e16f82181b9d5314f8b1732dfa9d5a4fffb19fe  minecraft/plugins/floodgate-spigot.jar' | sha256sum -c -
-          echo "tag=${MC_VERSION}-b${build}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
-          echo "Paper ${MC_VERSION}-${build} prepared"
+          echo "tag=${mc_version}-b${build}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          echo "minecraft_version=${mc_version}" >> "$GITHUB_OUTPUT"
+          echo "Paper ${mc_version}-${build} prepared"
       - uses: docker/setup-buildx-action@v4
       - name: Login to GHCR
         uses: docker/login-action@v4
@@ -83,6 +81,8 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}
             ${{ env.IMAGE }}:latest
+          build-args: |
+            MC_VERSION=${{ steps.meta.outputs.minecraft_version }}
       - name: Publish stage summary
         if: always()
         run: |
@@ -90,16 +90,11 @@ jobs:
             echo '## Minecraft CI/CD pipeline'; echo ''
             echo '### Build and publish: ${{ steps.publish.outcome }}';
             echo '- Image: `${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}`';
-            if [ '${{ github.event_name }}' = push ] || [ '${{ inputs.deploy }}' != true ]; then
-              echo '### Apply/restart/verify: ⏸ not run (publish-only)';
-            else
-              echo '### Apply/restart/verify: ▶ continuing (manual deploy requested)';
-            fi
+            echo '### Apply/restart/verify: ▶ continuing (merge to main approved deployment)';
           } >> "$GITHUB_STEP_SUMMARY"
 
   apply-release:
-    name: 2 - Apply image release (manual deploy)
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy == true
+    name: 2 - Apply image release (merge deploy)
     needs: publish-image
     runs-on: ubuntu-latest
     steps:
@@ -123,8 +118,7 @@ jobs:
           echo '### Image release applied: ✅' >> "$GITHUB_STEP_SUMMARY"
 
   restart:
-    name: 3 - Restart Minecraft pod (manual deploy)
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy == true
+    name: 3 - Restart Minecraft pod (merge deploy)
     needs: apply-release
     runs-on: ubuntu-latest
     steps:
@@ -145,8 +139,7 @@ jobs:
           echo '### Pod restart requested: ✅' >> "$GITHUB_STEP_SUMMARY"
 
   verify:
-    name: 4 - Verify Minecraft rollout and health (manual deploy)
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy == true
+    name: 4 - Verify Minecraft rollout and health (merge deploy)
     needs: [publish-image, restart]
     runs-on: ubuntu-latest
     steps:
