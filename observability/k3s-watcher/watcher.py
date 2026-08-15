@@ -49,6 +49,9 @@ ROLLOUT_POST_SUPPRESSION_SECONDS = int(
 )
 ERROR_CONFIRMATION_SECONDS = int(os.environ.get("ERROR_CONFIRMATION_SECONDS", "300"))
 ERROR_PENDING_GAP_SECONDS = int(os.environ.get("ERROR_PENDING_GAP_SECONDS", "90"))
+WORKLOAD_CONFIRMATION_SECONDS = int(
+    os.environ.get("WORKLOAD_CONFIRMATION_SECONDS", "300")
+)
 CLOUDFLARED_READY_URL = os.environ.get(
     "CLOUDFLARED_READY_URL", "http://cloudflared.pantry-bot.svc:2000/ready"
 )
@@ -113,6 +116,7 @@ _restart_events = {}
 _last_log_query_ns = time.time_ns()
 _rollout_suppression_started = {}
 _pending_errors = {}
+_pending_workload_conditions = {}
 _active_log_events = {}
 _operations_pending = OrderedDict()
 _operations_active_events = set()
@@ -324,6 +328,20 @@ def persistent_error(key, now=None):
     return now - previous["first_seen"] >= ERROR_CONFIRMATION_SECONDS
 
 
+def persistent_workload_condition(key, active, now=None):
+    """Require a Kubernetes outage condition to persist before alerting."""
+    now = time.time() if now is None else now
+    if not active:
+        _pending_workload_conditions.pop(key, None)
+        return False
+    previous = _pending_workload_conditions.get(key)
+    if previous is None or now - previous["last_seen"] > ERROR_PENDING_GAP_SECONDS:
+        _pending_workload_conditions[key] = {"first_seen": now, "last_seen": now}
+        return False
+    previous["last_seen"] = now
+    return now - previous["first_seen"] >= WORKLOAD_CONFIRMATION_SECONDS
+
+
 def cloudflared_ready(session=requests):
     """Return True only for a successful readiness response; fail open."""
     try:
@@ -444,6 +462,118 @@ def check_restart_loops():
     return collection_complete, active_event_keys
 
 
+def check_workload_health():
+    """Alert on pull/config failures and unavailable Deployments.
+
+    These conditions produce Kubernetes Events, not container logs, so Loki
+    and the restart-loop check cannot see them. A five-minute confirmation
+    window prevents normal pod replacement during a deploy from paging.
+    """
+    waiting_reasons = {
+        "ErrImagePull",
+        "ImagePullBackOff",
+        "CreateContainerConfigError",
+        "InvalidImageName",
+    }
+    active_event_keys = set()
+    collection_complete = True
+    for namespace in WATCH_NAMESPACES:
+        namespace_has_waiting_failure = False
+        pods_result = subprocess.run(
+            ["kubectl", "get", "pods", "-n", namespace, "-o", "json"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if pods_result.returncode != 0:
+            print(
+                f"[k3s-watcher] kubectl get pods -n {namespace} failed: "
+                f"{pods_result.stderr.strip()}"
+            )
+            collection_complete = False
+        else:
+            for pod in json.loads(pods_result.stdout).get("items", []):
+                pod_name = pod.get("metadata", {}).get("name", "unknown")
+                for status in pod.get("status", {}).get("containerStatuses", []):
+                    waiting = status.get("state", {}).get("waiting", {})
+                    reason = waiting.get("reason")
+                    if reason not in waiting_reasons:
+                        continue
+                    namespace_has_waiting_failure = True
+                    container = status.get("name", "unknown")
+                    identity = f"waiting/{namespace}/{pod_name}/{container}/{reason}"
+                    key = _event_key("workload", identity)
+                    if not persistent_workload_condition(key, True):
+                        continue
+                    active_event_keys.add(key)
+                    message = (
+                        f"Pod {pod_name} container {container} has been in {reason} "
+                        f"for at least {WORKLOAD_CONFIRMATION_SECONDS / 60:.0f} minutes. "
+                        "Inspect Kubernetes Events and image/Secret configuration."
+                    )
+                    queue_operations_alert({
+                        "source": "k3s-watcher",
+                        "eventKey": key,
+                        "eventType": "workloadUnavailable",
+                        "severity": "critical",
+                        "namespace": namespace,
+                        "workload": workload_for_pod(pod),
+                        "pod": pod_name,
+                        "message": message,
+                        "occurredAt": _utc_now(),
+                    })
+                    if cooldown_ok(key):
+                        send_discord_alert(
+                            f"🚨 {namespace} image/container unavailable",
+                            message,
+                            extra_user_ids=extra_recipients_for(namespace),
+                        )
+
+        deployments_result = subprocess.run(
+            ["kubectl", "get", "deployments", "-n", namespace, "-o", "json"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if deployments_result.returncode != 0:
+            print(
+                f"[k3s-watcher] kubectl get deployments -n {namespace} failed: "
+                f"{deployments_result.stderr.strip()}"
+            )
+            collection_complete = False
+            continue
+        for deployment in json.loads(deployments_result.stdout).get("items", []):
+            metadata = deployment.get("metadata", {})
+            status = deployment.get("status", {})
+            desired = deployment.get("spec", {}).get("replicas", 1)
+            available = status.get("availableReplicas", 0)
+            name = metadata.get("name", "unknown")
+            identity = f"unavailable/{namespace}/{name}"
+            key = _event_key("workload", identity)
+            active = desired > 0 and available < desired and not namespace_has_waiting_failure
+            if not persistent_workload_condition(key, active):
+                continue
+            active_event_keys.add(key)
+            message = (
+                f"Deployment {namespace}/{name} has {available}/{desired} available "
+                f"replicas for at least {WORKLOAD_CONFIRMATION_SECONDS / 60:.0f} minutes. "
+                "Check pod status, readiness, and rollout conditions."
+            )
+            queue_operations_alert({
+                "source": "k3s-watcher",
+                "eventKey": key,
+                "eventType": "workloadUnavailable",
+                "severity": "critical",
+                "namespace": namespace,
+                "workload": _safe_workload(name),
+                "message": message,
+                "occurredAt": _utc_now(),
+            })
+            if cooldown_ok(key):
+                send_discord_alert(
+                    f"🚨 {namespace}/{name} unavailable",
+                    message,
+                    extra_user_ids=extra_recipients_for(namespace),
+                )
+    return collection_complete, active_event_keys
+
+
 def check_log_errors():
     global _last_log_query_ns
     namespace_regex = "|".join(WATCH_NAMESPACES)
@@ -528,13 +658,19 @@ def check_log_errors():
 def run_checks_once():
     """Collect, deliver, and reconcile one pass without partial resolution."""
     restart_complete = False
+    workload_complete = False
     log_complete = False
     restart_keys = set()
+    workload_keys = set()
     log_keys = set()
     try:
         restart_complete, restart_keys = check_restart_loops()
     except Exception as exc:
         print(f"[k3s-watcher] Restart-loop check error: {exc}")
+    try:
+        workload_complete, workload_keys = check_workload_health()
+    except Exception as exc:
+        print(f"[k3s-watcher] Workload health check error: {exc}")
     try:
         log_complete, log_keys = check_log_errors()
     except Exception as exc:
@@ -543,8 +679,8 @@ def run_checks_once():
         flush_operations_alerts()
     except Exception as exc:
         print(f"[k3s-watcher] Unexpected Operations delivery error: {exc}")
-    if restart_complete and log_complete:
-        active_keys = restart_keys | log_keys
+    if restart_complete and workload_complete and log_complete:
+        active_keys = restart_keys | workload_keys | log_keys
         finish_operations_lifecycle(active_keys)
         if time.time() - _reconciliation_started_at < _reconciliation_warmup_seconds:
             return

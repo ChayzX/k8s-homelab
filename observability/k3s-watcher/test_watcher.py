@@ -24,6 +24,18 @@ assert watcher.persistent_error("error", now=1240) is False
 assert watcher.persistent_error("error", now=1300) is True
 assert watcher.persistent_error("error", now=1391) is False
 
+watcher._pending_workload_conditions.clear()
+watcher.WORKLOAD_CONFIRMATION_SECONDS = 300
+assert watcher.persistent_workload_condition("image-pull", True, now=1000) is False
+assert watcher.persistent_workload_condition("image-pull", True, now=1060) is False
+assert watcher.persistent_workload_condition("image-pull", True, now=1120) is False
+assert watcher.persistent_workload_condition("image-pull", True, now=1180) is False
+assert watcher.persistent_workload_condition("image-pull", True, now=1240) is False
+assert watcher.persistent_workload_condition("image-pull", True, now=1300) is True
+assert watcher.persistent_workload_condition("image-pull", False, now=1310) is False
+assert watcher.persistent_workload_condition("image-pull", True, now=1311) is False
+assert watcher.persistent_workload_condition("image-pull", True, now=1402) is False
+
 for line in (
     "Connection error occurred",
     "EventSub disconnected, will reconnect",

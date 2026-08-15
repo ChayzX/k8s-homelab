@@ -18,6 +18,14 @@ rollout, expected startup/origin-refused errors
 are suppressed for 180 seconds after the rollout completes as well as while
 it is active; set `ROLLOUT_POST_SUPPRESSION_SECONDS` to tune that grace period.
 
+Kubernetes waiting states such as `ImagePullBackOff` do not produce container
+logs, so the watcher also polls pod container states and Deployment
+availability directly. Image-pull/configuration failures and replica gaps must
+persist for five minutes (`WORKLOAD_CONFIRMATION_SECONDS`) before alerting;
+this keeps normal merge deploys quiet while still reporting a replacement pod
+that cannot start. The JMusicBot dashboard's Pod Status and Ready Containers
+panels expose the same Kubernetes state in Grafana.
+
 The Discord token, user ID, Loki URL, kubeconfig, and systemd unit remain
 host-local secrets/configuration. Install this directory on the host and
 point `k3s-watcher.service` at `watcher.py`; do not commit `.env` files.
