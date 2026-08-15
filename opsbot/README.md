@@ -25,6 +25,21 @@ option-B rationale for the full comparison against a web dashboard (rejected:
 more new attack surface) and a WireGuard VPN (rejected: more infra, still
 needs client apps on the phone).
 
+## `/pods exec` — diagnostics across the cluster (k8s-homelab-jhu)
+
+Authorized operators can run `/pods exec` against a selected namespace, pod,
+and container. The command is deliberately **not** a general shell: only the
+read-only diagnostic executables listed in `bot/util.py` are accepted, shell
+operators are rejected, credential paths are blocked, output is split into
+Discord-sized replies, and Kubernetes execution is bounded by a 35-second
+timeout. Every attempt is written to the Opsbot audit log.
+
+This is the one operation that can target namespaces outside the normal
+restart allowlist. `20-rbac.yaml` grants the service account a separate,
+conspicuous `ClusterRole` for pod discovery and `pods/exec`; it does not grant
+secrets, deletes, deployment mutation, or any other cluster-wide write access.
+Apply that manifest and publish a new Opsbot image before using the command.
+
 ---
 
 ## Apply order
@@ -87,13 +102,16 @@ Full reasoning in `20-rbac.yaml`'s header comment.
 | `jmusicbot`, `pantry-bot`, `minecraft` | `deployments` (apps) | `get`, `list`, `watch`, `patch` |
 | `observability` | `pods`, `deployments` (apps) | `get`, `list`, `watch` (status only) |
 
-The `observability` namespace is status-only: `/pods status observability` is
-available for triage, while `/deploy restart observability` is not offered and
-the service account has no deployment patch permission. Any `secrets` verb,
-`delete`/`deletecollection`,
-`exec`/`attach`/`portforward`, and anything cluster-scoped. (Contrast with
-`../ci-deploy/`'s Role, a separate narrower credential used only by the
-GitHub Actions deploy pipeline, not this bot.)
+The `observability` namespace is status-only for restart commands:
+`/pods status observability` is available for triage, while `/deploy restart
+observability` is not offered and the service account has no deployment patch
+permission. The separate `opsbot-pod-exec` ClusterRole is the only exception
+to the old namespace boundary: it grants pod get/list/watch and `pods/exec`
+get/create for the allowlisted, non-shell `/pods exec` diagnostics in any
+namespace. It grants no `secrets`, delete/deletecollection, attach,
+portforward, or deployment mutation access. (Contrast with `../ci-deploy/`'s
+Role, a separate narrower credential used only by the GitHub Actions deploy
+pipeline, not this bot.)
 
 ---
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime
 import os
+import shlex
 
 # Writable namespace allowlist. This mirrors the mutation-capable
 # Role/RoleBinding set in ../20-rbac.yaml. Observability is intentionally not
@@ -44,6 +45,18 @@ REPORT_OPEN_ACCESS = os.environ.get("REPORT_OPEN_ACCESS", "true").strip().lower(
 
 MINECRAFT_NAMESPACE = "minecraft"
 
+# `/pods exec` is intentionally command-exec, never shell-exec. These are
+# read-only diagnostics that are useful across arbitrary workloads without
+# giving a Discord-facing bot a general-purpose shell primitive.
+EXECUTABLES = frozenset({
+    "cat", "df", "du", "env", "free", "head", "id", "ls", "printenv",
+    "ps", "pwd", "uname", "uptime", "whoami",
+})
+EXEC_BLOCKED_TOKENS = frozenset({
+    "/var/run/secrets", "/etc/shadow", "/etc/sudoers", "password", "passwd",
+    "secret", "token", ".env",
+})
+
 DISCORD_MESSAGE_LIMIT = 2000
 _CODE_FENCE = "```"
 # Leave headroom for the fence itself (3 backticks + newline, twice) plus a
@@ -65,6 +78,29 @@ def parse_user_allowlist(raw: str | None) -> frozenset[int]:
 
 def is_authorized(user_id: int, allowlist: frozenset[int]) -> bool:
     return user_id in allowlist
+
+
+def parse_exec_command(raw: str) -> list[str]:
+    """Validate and tokenize a non-shell diagnostic command.
+
+    The bot may target any pod, but it must not become an arbitrary remote
+    shell. Shell metacharacters, command chaining, sensitive paths, and
+    unknown executables are rejected before Kubernetes is called.
+    """
+    if not raw or len(raw) > 256:
+        raise ValueError("command must be between 1 and 256 characters")
+    try:
+        argv = shlex.split(raw)
+    except ValueError as exc:
+        raise ValueError(f"invalid command quoting: {exc}") from exc
+    if not argv or argv[0] not in EXECUTABLES:
+        raise ValueError(f"executable must be one of: {', '.join(sorted(EXECUTABLES))}")
+    lowered = raw.lower()
+    if any(token in lowered for token in (";", "&&", "||", "|", ">", "<", "`", "$(")):
+        raise ValueError("shell operators are not allowed")
+    if any(token in lowered for token in EXEC_BLOCKED_TOKENS):
+        raise ValueError("sensitive paths or credentials are not readable")
+    return argv
 
 
 def rfc3339_now() -> str:
@@ -171,6 +207,16 @@ def demo() -> None:
     allowlist = parse_user_allowlist("929216447723499562")
     assert is_authorized(929216447723499562, allowlist) is True
     assert is_authorized(123, allowlist) is False
+
+    assert parse_exec_command("ps aux")[0] == "ps"
+    assert parse_exec_command("cat /etc/os-release") == ["cat", "/etc/os-release"]
+    for unsafe in ("sh -c 'id'", "cat /var/run/secrets/token", "env | head"):
+        try:
+            parse_exec_command(unsafe)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"unsafe command accepted: {unsafe}")
 
     assert "jmusicbot" in ALLOWED_NAMESPACES
     assert "keel" not in ALLOWED_NAMESPACES
