@@ -164,6 +164,36 @@ Expect `200` once the bot is logged in (until then it's `503`). Then point the
 Uptime Kuma "Discord Music Bot" monitor (k8s-homelab-6ba) at that URL — `200` is
 UP, `503` is still starting, connection-refused is DOWN.
 
+### F. YouTube poToken fix — build + deploy the `potok` image (k8s-homelab#41)
+
+Fixes "song cuts off partway / Sign in to confirm you're not a bot" — YouTube
+started blocking lavaplayer's `TVHTML5`/`TVHTML5_SIMPLY` clients. The fix sends
+a **poToken + visitorData** on the `Web` client, the same mechanism the
+SeVile/MusicBot fork exposes via `ytpotoken`/`ytvisitordata` config keys. The
+OAuth token (`youtubetoken.txt`, on the config PVC) is unaffected and still
+required — the poToken is an *additional* anti-bot signal.
+
+- Patch source: `scripts/patches/jmusicbot-potoken.patch` (adds the config keys
+  to `ConfigOption`/`BotConfig` and calls `Web.setPoTokenAndVisitorData()` in
+  `AudioSource`). The patch is already applied in the `potok` image.
+- Config: `config.txt` (Secret `jmusicbot-config-txt`) needs the top-level keys
+  `ytpotoken` and `ytvisitordata`; both must be present or playback can worsen.
+  Values come from a trusted-session generator (e.g. `youtube-trusted-session-generator`).
+- Build (same path as E):
+  ```bash
+  cd /home/chase/docker/jmusicbot/custom-build
+  TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  docker build --build-arg BUILD_TIMESTAMP="$TS" -t jmusicbot-custom:potok .
+  docker save jmusicbot-custom:potok | sudo k3s ctr images import -
+  kubectl -n jmusicbot set image deployment/jmusicbot jmusicbot=docker.io/library/jmusicbot-custom:potok
+  kubectl -n jmusicbot rollout status deployment/jmusicbot --timeout=180s
+  ```
+- Verify: the pod log must contain
+  `[INFO] [AudioSource]: Applied YouTube poToken + visitorData (Web client)`.
+  A `Deprecated/unknown keys (will be ignored): [ytpotoken, ytvisitordata]`
+  warning is cosmetic (ConfigDiagnostics doesn't know the new keys, but the bot
+  reads them fine) and is harmless.
+
 ---
 
 ## Verification
