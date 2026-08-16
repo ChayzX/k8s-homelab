@@ -88,7 +88,7 @@ Prometheus and one Loki source configured.
 
 ### `host-pc.json` — Main PC — Bare-Metal Health
 
-This is the focused physical-host dashboard requested in bead `k8s-homelab-8nc`.
+This is the focused physical-host dashboard for bare-metal health.
 It intentionally excludes pod, deployment, kube-system, and Prometheus-target
 panels so it answers a different question from `cluster-overview.json`: is the
 PC itself being overworked by containers or other processes? It covers whole-host
@@ -107,7 +107,7 @@ host / host-health dashboard in Grafana", this is it — the k8s successor to
 the old Docker `host-overview` dashboard (from the four retired above). It
 ships a stable `uid: homelab-cluster-overview`, tags `homelab, k3s, node,
 host`, and the title/tags have carried the `Host Health` name since commit
-`5b2f7b2` (k8s-homelab-8nc). Because Grafana's file provisioning keys on the
+`5b2f7b2`. Because Grafana's file provisioning keys on the
 JSON `uid` — never the title — renaming it did not change URLs/bookmarks and
 cannot duplicate the dashboard.
 
@@ -136,7 +136,7 @@ they run inside the single k3s process, so there's no `kube_pod_*`
 series for them; use the Node-Ready stat for that), scrape-target-down
 count, node-pressure-condition count, and hwmon temperatures.
 
-**Long-term uptime scope — Uptime Kuma + this dashboard (k8s-homelab-8nc).**
+**Long-term uptime scope — Uptime Kuma + this dashboard.**
 Prometheus is pinned to **7d / 15 GB retention**
 (`observability/prometheus.yaml`), deliberately — this host's `/` is a
 5900rpm HDD and huge TSDB blocks are hostile to it (HDD-tuning note in
