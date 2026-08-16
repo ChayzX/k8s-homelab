@@ -117,6 +117,7 @@ _last_log_query_ns = time.time_ns()
 _rollout_suppression_started = {}
 _pending_errors = {}
 _pending_workload_conditions = {}
+_active_workload_alerts = {}
 _active_log_events = {}
 _operations_pending = OrderedDict()
 _operations_active_events = set()
@@ -342,6 +343,44 @@ def persistent_workload_condition(key, active, now=None):
     return now - previous["first_seen"] >= WORKLOAD_CONFIRMATION_SECONDS
 
 
+def sweep_workload_recoveries(active_event_keys):
+    """Notify when a previously-alerted workload condition has cleared.
+
+    `check_workload_health` records every confirmed + alerted condition in
+    `_active_workload_alerts`. Any such key absent from the current pass's
+    active keys is a recovery: send a "back up" DM and a recovery Operations
+    event, then drop the tracking entry. The DM uses the same cooldown as
+    alerts so flapping workloads don't produce a recovery after every clear.
+    Runs only when the collection pass fully succeeded (callers check
+    collection_complete) so a kubectl failure can't masquerade as a recovery.
+    """
+    for key, info in list(_active_workload_alerts.items()):
+        if key in active_event_keys:
+            continue
+        _active_workload_alerts.pop(key, None)
+        recovery_message = info.get(
+            "recovery_message", "Workload is back up (was unavailable)."
+        )
+        queue_operations_alert({
+            "source": "k3s-watcher",
+            "eventKey": f"{key}:recovered",
+            "eventType": "workloadRecovered",
+            "severity": "info",
+            "namespace": info.get("namespace"),
+            "workload": info.get("workload"),
+            "pod": info.get("pod"),
+            "message": recovery_message,
+            "occurredAt": _utc_now(),
+        })
+        if cooldown_ok(f"recovered:{key}"):
+            send_discord_alert(
+                f"✅ {info.get('namespace', '')} workload back up",
+                recovery_message,
+                color=0x2ECC71,
+                extra_user_ids=extra_recipients_for(info.get("namespace", "")),
+            )
+
+
 def cloudflared_ready(session=requests):
     """Return True only for a successful readiness response; fail open."""
     try:
@@ -526,6 +565,15 @@ def check_workload_health():
                             message,
                             extra_user_ids=extra_recipients_for(namespace),
                         )
+                    _active_workload_alerts.setdefault(key, {
+                        "namespace": namespace,
+                        "workload": workload_for_pod(pod),
+                        "pod": pod_name,
+                        "recovery_message": (
+                            f"Pod {pod_name} container {container} is back up "
+                            f"(was {reason})."
+                        ),
+                    })
 
         deployments_result = subprocess.run(
             ["kubectl", "get", "deployments", "-n", namespace, "-o", "json"],
@@ -571,6 +619,16 @@ def check_workload_health():
                     message,
                     extra_user_ids=extra_recipients_for(namespace),
                 )
+            _active_workload_alerts.setdefault(key, {
+                "namespace": namespace,
+                "workload": _safe_workload(name),
+                "pod": None,
+                "recovery_message": (
+                    f"Deployment {namespace}/{name} is back up (was unavailable)."
+                ),
+            })
+    if collection_complete:
+        sweep_workload_recoveries(active_event_keys)
     return collection_complete, active_event_keys
 
 
