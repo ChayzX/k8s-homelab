@@ -92,11 +92,47 @@ zero `secrets` access on purpose.
 
 ---
 
+## `opsbot-github` — fine-grained PAT for `/bug` (GitHub Issues)
+
+`/bug` (k8s-homelab-cq8) files bug reports as GitHub issues on the repo that
+owns the affected bot — `ChayzX/k8s-homelab` for `music`, `ChayzX/pantry-bot`
+for `pantry` (see `bot/util.py` `BOT_REPOS`). It calls the GitHub REST API
+over outbound HTTPS from `bot/gh_ops.py`; no local DB, no hostPath mounts.
+
+Create a **fine-grained PAT** (not classic):
+
+1. https://github.com/settings/personal-access-tokens/new → **Generate new token**
+2. **Repository access**: Only select repositories → `ChayzX/k8s-homelab` + `ChayzX/pantry-bot`
+3. **Permissions**: Repository → **Issues: Read and write**
+4. Name it e.g. `opsbot-github`, set an expiry, generate.
+5. Store the value in the Secret:
+
+```bash
+kubectl -n opsbot create secret generic opsbot-github \
+  --from-literal=GITHUB_TOKEN='<FINE_GRAINED_PAT>'
+```
+
+The key name must match exactly — the Deployment consumes it via `secretKeyRef`
+(`env: GITHUB_TOKEN`), which `bot/gh_ops.py` reads at create time.
+
+Scope of impact: this token can only read + write issues in those two repos —
+no repo contents, no other repos. It has **zero** permission to trigger
+workflows, push code, or touch `ChayzX/Operations-ios-app` / `ChayzX/aios`
+even though those boards also migrated. (If `/bug` later grows to file issues
+on other repos, add them to the PAT's repo selection + `BOT_REPOS` together.)
+
+Retired token note: the original `/bug` ran `bd create` against mounted beads
+databases and needed no GitHub token. That backend is gone — if the Secret
+already exists from an earlier flow, delete it and recreate with the fine-
+grained PAT above (`kubectl -n opsbot delete secret opsbot-github`).
+
+---
+
 ## Checklist before applying `40-deployment.yaml`
 
 ```bash
-kubectl -n opsbot get secret opsbot-discord ghcr-pull-secret
+kubectl -n opsbot get secret opsbot-discord ghcr-pull-secret opsbot-github
 ```
 
-Both must exist. Never commit them, never `kubectl get -o yaml` them into a
+All three must exist. Never commit them, never `kubectl get -o yaml` them into a
 paste.

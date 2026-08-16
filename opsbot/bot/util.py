@@ -20,22 +20,18 @@ ALLOWED_NAMESPACES = frozenset({"jmusicbot", "pantry-bot", "minecraft"})
 # restart permission.
 STATUS_NAMESPACES = ALLOWED_NAMESPACES | {"observability"}
 
-# /bug (see bd_ops.py) -- which Discord-facing bot label maps to which
-# beads board. Each value is the --directory to run `bd create` against: a
-# checkout whose only content is the project's `.beads/` dir (mounted into
-# the pod by ../40-deployment.yaml's hostPath volumes). Defaults are the
-# pod mount paths; overridable per-deployment so the command can be
-# exercised without the mounts (and so a path change is a manifest edit,
-# not a code edit). The embedded Dolt backend serializes writers with an
-# exclusive lock, so pod and host can safely share these databases -- see
-# bd_ops.py's retry logic.
+# /bug (see gh_ops.py) -- which Discord-facing bot label maps to which
+# GitHub repo. Each value is the (owner, repo) pair whose issue tracker owns
+# that bot's bug reports; /bug files issues there via the GitHub REST API
+# (gh_ops.py). The repos are the same ones surfaced on the GitHub Projects
+# kanban board.
 BOT_LABELS = {
     "music": "music bot (jmusicbot)",
     "pantry": "pantry-bot",
 }
-BOARD_CHECKOUTS = {
-    "music": os.environ.get("BEADS_CHECKOUT_K8S_HOMELAB", "/boards/k8s-homelab"),
-    "pantry": os.environ.get("BEADS_CHECKOUT_PANTRY_BOT", "/boards/pantry-bot"),
+BOT_REPOS = {
+    "music": ("ChayzX", "k8s-homelab"),
+    "pantry": ("ChayzX", "pantry-bot"),
 }
 # If truthy (default), /bug is usable by ANY Discord user who can see the
 # bot -- the point of the card is server members filing bugs. The reporter's
@@ -172,13 +168,12 @@ def report_title(bot_label: str, what: str) -> str:
 
 
 def bug_template(bot_label: str, reporter: str, reporter_id: int, what: str) -> str:
-    """Fixed bug-bead template for /bug (k8s-homelab-cq8). Every field is
-    present even if the reporter's text is short; the section headers match
-    what `bd create --validate` expects for the bug type, so the pod's create
-    can validate and the resulting bead reads the same as a hand-filed one.
-    `reporter` is the Discord display name, `reporter_id` the numeric snowflake
-    -- both go into the description (durable in the DB) as well as the audit
-    log."""
+    """Fixed bug-report template for /bug (k8s-homelab-cq8). Every section is
+    present even if the reporter's text is short; the markdown headers match
+    what a hand-filed GitHub issue would contain, so the /bug-created issue
+    reads the same as a manually created one. `reporter` is the Discord
+    display name, `reporter_id` the numeric snowflake -- both go into the body
+    (durable in GitHub) as well as the audit log."""
     return (
         "## Reported By\n"
         f"{reporter} (discord id {reporter_id}) via opsbot /bug\n"
@@ -258,10 +253,12 @@ def demo() -> None:
     reassembled = "".join(c[len(_CODE_FENCE) + 1 : -(len(_CODE_FENCE) + 1)] for c in long_chunks)
     assert reassembled == long_text
 
-    # /bug board routing: both boards must resolve to a directory.
-    assert set(BOT_LABELS) == set(BOARD_CHECKOUTS) == {"music", "pantry"}
+    # /bug board routing: each bot label must resolve to a (owner, repo) pair.
+    assert set(BOT_LABELS) == set(BOT_REPOS) == {"music", "pantry"}
     for label in BOT_LABELS.values():
         assert label
+    assert BOT_REPOS["music"] == ("ChayzX", "k8s-homelab")
+    assert BOT_REPOS["pantry"] == ("ChayzX", "pantry-bot")
 
     # report_title: one-line, bounded, never empty.
     assert report_title("pantry-bot", "snacks not showing") == "pantry-bot bug: snacks not showing"

@@ -1,16 +1,14 @@
 # `opsbot` namespace
 
-**Status: applied and live.** The bot's Python source (`opsbot/bot/*.py`,
-`bd show k8s-homelab-bi6.3`) landed and `40-deployment.yaml` is running
-(`opsbot` pod `1/1 Running`). `bi6.1` (Discord application/bot token setup)
-is still open in Beads as of this writing even though the Secret exists and
-the pod is healthy — check `bd show k8s-homelab-bi6.1` before assuming that
-task is fully closed out. See `ARCHITECTURE.md`'s `opsbot` section for the
-current live-status summary.
+**Status: applied and live.** The bot's Python source (`opsbot/bot/*.py`)
+landed and `40-deployment.yaml` is running (`opsbot` pod `1/1 Running`).
+The original beads issue tracker is retired — work now lives in GitHub
+Issues on the kanban board (see `../AGENTS.md`); historical design refs
+(`bd show k8s-homelab-bi6*`) are kept only for provenance.
 
-Full design rationale, options compared, and open questions:
-`bd show k8s-homelab-bi6` (epic). RBAC-specific reasoning:
-`bd show k8s-homelab-bi6.2`.
+Full design rationale, options compared, and open questions (historical
+beads refs, retired): `bd show k8s-homelab-bi6` (epic),
+`bd show k8s-homelab-bi6.2` (RBAC).
 
 Deploys **opsbot**: a standalone Discord bot giving remote, phone-friendly
 control over specific homelab workloads — restart/status checks on
@@ -60,34 +58,32 @@ kubectl apply -f 20-rbac.yaml
 
 # 3. secrets (imperative, never in git) — see SECRETS.md
 #    creates: opsbot-discord (DISCORD_BOT_TOKEN, DISCORD_USER_ID),
+#    opsbot-github (GITHUB_TOKEN — fine-grained PAT, /bug),
 #    ghcr-pull-secret (private GHCR image pull)
 
-# 4. workload — will not come up until both secrets exist AND
+# 4. workload — will not come up until all three secrets exist AND
 #    ghcr.io/chayzx/opsbot:latest has been published (see
-#    .github/workflows/opsbot-publish.yml, or build manually per SECRETS.md)
+#    .github/workflows/opsbot-deploy.yml)
 kubectl apply -f 40-deployment.yaml
 ```
 
-## `/bug` — bug beads from Discord (k8s-homelab-cq8)
+## `/bug` — bug issues from Discord (k8s-homelab-cq8)
 
-`/bug <bot> <what happened>` files a bug bead on the correct board by
-running `bd create` inside the pod against hostPath-mounted **live** beads
-databases (`/home/chase/k8s-homelab/.beads` → k8s-homelab board,
-`/home/chase/Downloads/pantry-bot/.beads` → pantry-bot board). The reporter's
-Discord identity is baked into the bead; open to any Discord user by default
-(`REPORT_OPEN_ACCESS`, flip to `false` to restrict to `DISCORD_USER_ID`).
-Requires a rebuilt image (the `bd` binary is baked in, pinned to the host's
-version) and the two hostPath volumes in `40-deployment.yaml`. Rebuild via
-`.github/workflows/opsbot-publish.yml` (push to `opsbot/bot/**`, or
-`workflow_dispatch`) then `.github/workflows/opsbot-deploy.yml`
-(`workflow_dispatch`, manual-click) — see `ARCHITECTURE.md`'s CI/CD note.
+`/bug <bot> <what happened>` files a bug issue on the GitHub repo that owns
+the bot — `ChayzX/k8s-homelab` for `music`, `ChayzX/pantry-bot` for `pantry`
+via the GitHub REST API (`bot/gh_ops.py`), over the pod's existing outbound
+HTTPS path. The reporter's Discord identity is baked into the issue body;
+open to any Discord user by default (`REPORT_OPEN_ACCESS`, flip to `false`
+to restrict to `DISCORD_USER_ID`). Requires the `opsbot-github` Secret (a
+fine-grained PAT, Issues Read+Write on those two repos) — see `SECRETS.md`.
+No image rebuild or cluster manifests are needed to change the /bug target:
+repo routing lives in `bot/util.py` (`BOT_REPOS`).
 
-Because the pod writes the host's own Dolt databases, a filed bug appears in
-the board immediately and reaches GitHub on the host's next `bd dolt push`
-— no new credentials, no push-from-pod. Known limits: single-node only
-(node == workstation), and pod/host `bd` writes serialize on the embedded
-Dolt lock (`bd_ops.py` retries on lock contention, including on the host's
-own `bd` writes racing the pod's — see its own comments).
+This replaces the original beads-backed `/bug`: `bd create` against
+hostPath-mounted Dolt databases (`40-deployment.yaml` no longer mounts
+`.beads/` dirs). A filed issue lands on GitHub immediately and is visible on
+the GitHub Projects board; nothing waits on a host `bd dolt push`, and the
+pod is no longer bound to the single node hosting those databases.
 
 ---
 
@@ -115,10 +111,8 @@ pipeline, not this bot.)
 
 ---
 
-## What's still open (tracked in Beads, not blocking these manifests)
+## What's still open (tracked in GitHub Issues, not blocking these manifests)
 
-- `bi6.1` — Discord application + bot token (open in Beads; Secret exists and pod is healthy, ticket not yet formally closed — see status note above)
-- `bi6.7` — end-to-end test from the Discord mobile app
-- `bi6.8` — README/ARCHITECTURE.md updates once this is live (this edit)
-
-Closed: `bi6.3` (bot source), `bi6.4` (RCON bridge command), `bi6.5` (allowlist + audit logging).
+- GitHub issue for end-to-end test of `/bug` from the Discord mobile app (the
+  app must be reinstalled/published for slash-command sync — see `main.py`
+  `setup_hook`).

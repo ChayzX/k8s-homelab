@@ -1,5 +1,6 @@
 """HTTP health endpoint for Kuma monitoring -- same pattern as jmusicbot's
-(bd k8s-homelab-aos), same reasoning here: opsbot has no listener at all
+(`bd k8s-homelab-aos`, a historical beads ref), same reasoning here: opsbot
+has no listener at all
 (Discord-only, outbound gateway connection), so there's no network-level way
 to check it's actually working. aiohttp is already a hard dependency of
 discord.py, so this adds no new pip package.

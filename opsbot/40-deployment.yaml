@@ -2,7 +2,9 @@
 # opsbot — Discord bot: Deployment status/restart + Minecraft RCON console
 # =============================================================================
 # Full design rationale: `bd show k8s-homelab-bi6` (epic) and
-# `bd show k8s-homelab-bi6.2` (RBAC design). Short version: Discord's own
+# `bd show k8s-homelab-bi6.2` (RBAC design) -- historical beads refs, kept
+# for provenance; issue tracking moved to GitHub Issues (see AGENTS.md).
+# Short version: Discord's own
 # mobile app is the phone UI, so the bot only ever makes an OUTBOUND
 # connection to Discord's gateway — zero new inbound network exposure, same
 # trust model jmusicbot/pantry-bot already use in this cluster.
@@ -19,16 +21,14 @@
 # pantry-bot/jmusicbot-release-notifier's Recreate, which exists only because
 # those have a live SQLite/marker file on an RWO PVC — opsbot has neither).
 #
-# /bug beads mounts (k8s-homelab-cq8): the bug-report command files beads
-# by running `bd create` inside this pod against the project's beads databases
-# (bd_ops.py). Each volume is a hostPath to the LIVE `.beads/` dir of a board
-# -- this single-node cluster runs ON the workstation where those repos live
-# (verified: node "minecraftmachine" hosts /home/chase/...), and the pod runs
-# as uid 1000 == the owner of those dirs, so no chmod/secrets are needed. The
-# embedded Dolt backend serializes writers with an exclusive lock, so pod and
-# host sharing the DB is safe; bd_ops.py retries on lock contention. These
-# mounts are the ONLY reason this manifest is single-node-bound -- a
-# multi-node move needs PVC-backed copies + `bd dolt pull` instead.
+# /bug GitHub Issues (k8s-homelab-cq8): the bug-report command files a
+# GitHub issue on the repo that owns the affected bot via the GitHub REST
+# API (gh_ops.py). The pod needs ONLY an outbound HTTPS connection to
+# api.github.com — no hostPath mounts, no local DB, no uid-1000-equals-owner
+# coupling. The fine-grained PAT is injected via the opsbot-github Secret
+# (env GITHUB_TOKEN); create it per SECRETS.md. Dropping the beads mounts
+# removes the ONLY reason this manifest was single-node-bound; the pod is
+# now portable to any node.
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -66,12 +66,10 @@ spec:
         - name: ghcr-pull-secret
       terminationGracePeriodSeconds: 30
       securityContext:
-        # ponytail: no verified UID yet — opsbot/bot/ doesn't exist, so unlike
-        # pantry-bot's runAsUser: 1000 (verified against a running container)
-        # this is an assumption. Revisit once the image is built: either
-        # confirm 1000 is correct for the base image chosen, or drop
-        # runAsUser and rely on the image's own non-root default the way
-        # jmusicbot-release-notifier does for its (verified root) image.
+        # uid/gid 1000 created explicitly in the Dockerfile (groupadd/
+        # useradd) and verified there; /app is chowned to it. Kept from the
+        # beads era (where 1000 == host dir owner for the hostPath mounts);
+        # still correct today -- the image's non-root default.
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000
@@ -95,14 +93,15 @@ spec:
                 secretKeyRef:
                   name: opsbot-discord
                   key: DISCORD_USER_ID
-            # Beads checkouts /bug writes into (bd_ops.py / util.py). The
-            # defaults in code already match these mount paths; the env vars
-            # exist so a future path change is a manifest edit, not a code
-            # edit.
-            - name: BEADS_CHECKOUT_K8S_HOMELAB
-              value: /boards/k8s-homelab
-            - name: BEADS_CHECKOUT_PANTRY_BOT
-              value: /boards/pantry-bot
+            # /bug's GitHub token (gh_ops.py). Create per SECRETS.md: a
+            # fine-grained PAT scoped to ChayzX/k8s-homelab + ChayzX/pantry-bot
+            # with Issues: Read+Write. Without it /bug reports "GITHUB_TOKEN
+            # is not set"; with it the pod writes issues over outbound HTTPS.
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: opsbot-github
+                  key: GITHUB_TOKEN
             # Open /bug to any Discord user (the point of cq8); set "false"
             # to restrict to DISCORD_USER_ID.
             - name: REPORT_OPEN_ACCESS
@@ -136,14 +135,13 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 5
-          # Limits sized for a lightweight Discord bot originally; /bug
-          # (k8s-homelab-cq8) added `bd` shellouts, which is a Go binary
-          # with an embedded Dolt engine, not lightweight. Confirmed via
-          # cgroup cpu.stat: throttled 4888/6066 periods (~80%), ~465s
-          # accumulated throttle time -- bd never became slow, it was
-          # starved to the point `bd --help` (pure local, no I/O) couldn't
-          # complete in 45s. Bumped limits; requests stay low since the pod
-          # idles except during a /bug call.
+          # Limits sized for a lightweight Discord bot. The old /bug used
+          # `bd` shellouts (a Go binary with an embedded Dolt engine) that
+          # starved on the old 250m limit -- confirmed via cgroup cpu.stat
+          # (~80% throttled) -- which is why limits sit at 750m/512Mi today.
+          # /bug now calls the GitHub REST API (gh_ops.py), so steady-state
+          # CPU is back to near-idle; the generous limits are kept as
+          # headroom and should be revisited before any resource squeeze.
           resources:
             requests:
               cpu: 50m
@@ -155,20 +153,3 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
-          volumeMounts:
-            # Live beads databases for /bug (see header comment) --
-            # hostPath because the cluster node IS the workstation hosting
-            # these repos; pod uid 1000 == the dir owner.
-            - name: beads-k8s-homelab
-              mountPath: /boards/k8s-homelab/.beads
-            - name: beads-pantry-bot
-              mountPath: /boards/pantry-bot/.beads
-      volumes:
-        - name: beads-k8s-homelab
-          hostPath:
-            path: /home/chase/k8s-homelab/.beads
-            type: Directory
-        - name: beads-pantry-bot
-          hostPath:
-            path: /home/chase/Downloads/pantry-bot/.beads
-            type: Directory

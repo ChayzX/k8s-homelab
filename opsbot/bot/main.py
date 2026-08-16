@@ -7,7 +7,9 @@ connection to Discord's gateway -- zero new inbound network exposure.
 
 Full design: `bd show k8s-homelab-bi6` (epic), `k8s-homelab-bi6.3` (this
 command surface), `.4` (RCON bridge), `.5` (authorization + audit logging).
-RBAC this code relies on: ../20-rbac.yaml.
+RBAC this code relies on: ../20-rbac.yaml. Issue tracking lives in GitHub
+Issues (see AGENTS.md); /bug files via gh_ops.py (the beads/Dolt backend
+was retired -- the old `bd show k8s-homelab-bi6` design refs are historical).
 """
 from __future__ import annotations
 
@@ -20,7 +22,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-import bd_ops
+import gh_ops
 import health
 import k8s_ops
 import util
@@ -62,7 +64,7 @@ class OpsBotTree(app_commands.CommandTree):
     server members filing bugs, not just the owner, so when
     REPORT_OPEN_ACCESS is set the command skips the allowlist check. It is
     still audited here like everything else, and the reporter's Discord
-    identity is baked into the bead (bd_ops.py) -- open access is not
+    identity is baked into the GitHub issue (gh_ops.py) -- open access is not
     anonymity. The Kubernetes-touching commands stay allowlist-gated."""
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -355,10 +357,10 @@ _bug_choices = [
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=False)
 @app_commands.allowed_installs(guilds=True, users=False)
 async def bug(interaction: discord.Interaction, bot: str, what: str) -> None:
-    """File a bug bead on the correct board via `bd create` in a mounted beads
-    checkout (bd_ops.py). Open to all Discord users when REPORT_OPEN_ACCESS is
-    set (see OpsBotTree.interaction_check); the reporter's identity is always
-    recorded in the bead and the audit log."""
+    """File a bug issue on the GitHub repo that owns the bot (gh_ops.py).
+    Open to all Discord users when REPORT_OPEN_ACCESS is set (see
+    OpsBotTree.interaction_check); the reporter's identity is always recorded
+    in the issue body and the audit log."""
     await interaction.response.defer(thinking=True)
     what = what.strip()
     if not what:
@@ -366,24 +368,23 @@ async def bug(interaction: discord.Interaction, bot: str, what: str) -> None:
         _audit(interaction, True, result="rejected: empty bug report")
         return
     try:
-        issue_id = await asyncio.to_thread(
-            bd_ops.create_report,
-            util.BOARD_CHECKOUTS[bot],
-            bot=bot,
+        issue_url = await asyncio.to_thread(
+            gh_ops.create_report,
+            bot,
             reporter=interaction.user.name,
             reporter_id=interaction.user.id,
             what=what,
         )
-    except bd_ops.ReportError as e:
+    except gh_ops.ReportError as e:
         await _reply(interaction, f"Could not file the bug report: {e}")
         _audit(interaction, True, result=f"error: {e}")
         return
     await _reply(
         interaction,
-        f"Bug filed on the {util.BOT_LABELS[bot]} board: `{issue_id}` "
+        f"Bug filed on the {util.BOT_LABELS[bot]} board: {issue_url} "
         f"(reported by {interaction.user})"
     )
-    _audit(interaction, True, result=f"filed {issue_id}")
+    _audit(interaction, True, result=f"filed {issue_url}")
 
 
 @bot.event

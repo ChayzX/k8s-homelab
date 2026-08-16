@@ -1,22 +1,5 @@
 {
-  "env": {
-    "BEADS_ACTOR": "claude"
-  },
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bd prime --hook-json"
-          }
-        ]
-      }
-    ]
-  },
   "enabledPlugins": {
-    "beads@beads-marketplace": true,
     "planning-with-files@planning-with-files": true
   }
 }

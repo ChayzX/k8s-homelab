@@ -19,7 +19,6 @@ secrets, SQLite databases, world data, or kubeconfigs into Git.
 | Uptime Kuma | `observability/uptime-kuma.yaml` | `observability` namespace, Service port 3001, external hostname `status.greeniespantry.uk` | Manage monitors in the Kuma UI. Host heartbeat setup is documented in `scripts/README.md`; do not put push tokens in Git. |
 | Cloudflare connectors | `pantry-bot/60-deployment-cloudflared.yaml` and `ci-tunnel/20-deployment.yaml` | `pantry-bot` and `ci-tunnel` namespaces | Check `/ready` on metrics port 2000 and connector logs. Dashboard-managed hostname routing lives in Cloudflare, not this repo. Keep DNS, dial, origin, and readiness failures alertable. |
 | k3s-watcher | Tracked source in `observability/k3s-watcher/`; host-installed copy consumed by `~/.config/systemd/user/k3s-watcher.service` | Host systemd user service; polls Loki and Kubernetes, sends Discord DMs | Copy/install from the tracked source, keep `.env` host-local, run `PYTHONPATH=. python3 test_watcher.py`, then restart the user unit. It health-gates only narrow Cloudflared QUIC teardown noise and deduplicates fingerprints. |
-| Scotty / bead-me-up-scotty | Upstream checkout `/home/chase/bead-me-up-scotty` ([upstream](https://github.com/brendan-appstart/bead-me-up-scotty)); manifests in `scotty/` | `scotty` namespace, hostPath-mounted config and Beads databases | Build and side-load `bead-me-up-scotty:local` as described in `scotty/README.md`. Config is `/home/chase/.config/bead-me-up-scotty-k8s/config.json`; restart after hand edits because config is cached. |
 
 ## File-level map
 
@@ -81,11 +80,10 @@ secrets, SQLite databases, world data, or kubeconfigs into Git.
 ### Opsbot
 
 - `opsbot/bot/main.py` — Discord bot startup and command registration.
-- `opsbot/bot/commands.py`, `opsbot/bot/bd_ops.py`, and
-  `opsbot/bot/minecraft_ops.py` — allowlisted pod/deploy operations, Beads bug
-  filing, and Minecraft/RCON operations.
-- `opsbot/40-deployment.yaml` — image, hostPath Beads mounts, probes, and
-  environment wiring; `opsbot/20-rbac.yaml` is the authorization boundary.
+- `opsbot/bot/gh_ops.py`, `opsbot/bot/k8s_ops.py` — GitHub issue filing
+  (`/bug`) and allowlisted pod/deploy operations.
+- `opsbot/40-deployment.yaml` — image, probes, and environment wiring;
+  `opsbot/20-rbac.yaml` is the authorization boundary.
 - `.github/workflows/opsbot-deploy.yml` — publish/apply/restart/verify stages;
   `opsbot/SECRETS.md` documents required secrets.
 
@@ -108,16 +106,13 @@ secrets, SQLite databases, world data, or kubeconfigs into Git.
 - `.github/workflows/grafana-deploy.yml` — dashboard ConfigMap/apply/restart/
   rollout/health pipeline.
 
-### Scotty and Beads
+### Scotty and Beads (retired)
 
-- `scotty/10-deployment.yaml` — hostPath mounts for config and the two local
-  Beads databases; `scotty/20-service.yaml` exposes the UI internally.
-- `/home/chase/bead-me-up-scotty/app/` — upstream UI routes/pages.
-- `/home/chase/bead-me-up-scotty/lib/bd.ts` — Beads command execution and
-  actor stamping; `lib/config.ts` — persisted config; `lib/attribution.ts` —
-  human/agent origin classification.
-- `.beads/dolt/` — live local issue database; sync with `bd dolt pull/push`.
-  `.beads/issues.jsonl` is an export, not the sync source of truth.
+Beads is retired: issue tracking lives in GitHub Issues + Projects v2 (see
+`AGENTS.md`). The `scotty` namespace, `/home/chase/bead-me-up-scotty/`, the
+host-side `bd` CLI, and all local `.beads/` databases are retired and must
+not be resurrected. Historical references to them in this file are
+provenance only.
 
 ## Common access patterns
 

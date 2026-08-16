@@ -11,33 +11,13 @@ serial cutover.
 | `minecraft_exporter.py` | `~/docker/observability/monitoring/minecraft-exporter/minecraft_exporter.py` | `minecraft-exporter.service` (user), always on |
 | `kuma-host-heartbeat.sh` | new | user crontab, every minute |
 
-### Scotty Beads freshness pull
-
-`beads-dolt-pull.sh` pulls the configured Dolt `origin` remote for the
-`k8s-homelab`, `pantry-bot`, and `aios` checkouts. Scotty reads those host-local
-databases directly, so this makes changes from another computer visible
-without a manual pull. The host cron runs it every five minutes:
-
-```cron
-*/5 * * * * /home/chase/k8s-homelab/scripts/beads-dolt-pull.sh
-```
-
-The script uses `/tmp/k8s-homelab-beads-dolt-pull.lock` to prevent overlap and
-logs to `scripts/beads-dolt-pull.log`. Override checkout or log paths with
-`BEADS_K8S_CHECKOUT`, `BEADS_PANTRY_CHECKOUT`, `BEADS_AIOS_CHECKOUT`, or `BEADS_PULL_LOG_FILE` when
-running it manually. Remove the cron line to disable it; the script deletes
-nothing.
-
-If a pull reports `local changes would be stomped by merge: events` after a
-Beads upgrade, do not delete `.beads` or import `issues.jsonl`. Back up the
-`.beads` directory, designate one clone as the migrator, run
-`bd migrate schema --force`, then `bd dolt push` once. Other clones can then
-pull normally. This recovery was performed on 2026-08-13 for all three boards;
-the next pull completed successfully for each.
+**Retired:** `beads-dolt-pull.sh` (5-minute Dolt pull for the beads boards,
+removed with the beads migration — issue tracking now lives in GitHub Issues
++ Projects v2, see `../AGENTS.md`). Its cron line is gone; `bd`, scotty, and
+the `.beads/` databases are retired.
 
 The workload scripts below are runbooks and are installed manually as part of
-the migration. The Scotty Beads freshness pull is installed on this host as a
-five-minute cron; its setup and rollback are documented below.
+the migration.
 
 ---
 

@@ -1,33 +1,13 @@
 # syntax=docker/dockerfile:1
 #
 # opsbot -- Discord bot, Python. Built + pushed to GHCR by
-# .github/workflows/opsbot-publish.yml on every push to opsbot/bot/**, then
-# deployed via opsbot-deploy.yml (manual workflow_dispatch). No more local
-# sideload -- see ../40-deployment.yaml's header comment (k8s-homelab-oiv).
+# .github/workflows/opsbot-deploy.yml on every push to opsbot/bot/**, then
+# deployed by the same workflow. No more local sideload -- see
+# ../40-deployment.yaml's header comment (k8s-homelab-oiv).
 #
 # python:3.12-slim-bookworm (glibc, not Alpine/musl) so discord.py's and the
 # kubernetes client's dependencies install from prebuilt wheels -- no
 # compiler toolchain needed in the image at all.
-FROM python:3.12-slim-bookworm
-
-# `bd` (beads CLI) -- pinned to the same schema line as the host/scotty so the
-# on-disk Dolt DB schema matches (a pod-side bd of a different minor could
-# trip schema-skew guards when /bug writes into the mounted boards). Host DBs
-# are at schema v65 (migrated by the accidental v1.2.1 release); v1.2.1 is the
-# newest release asset that speaks v65 (v1.2.2 stable speaks v53 only). The
-# runtime stage only needs the binary; this stage holds the download tooling.
-# /bug (bd_ops.py) invokes this from the container; no git is required.
-FROM debian:bookworm-slim AS beads
-ARG BEADS_VERSION=1.2.1
-RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates \
- && rm -rf /var/lib/apt/lists/* \
- && curl -fsSL -o /tmp/beads.tar.gz \
-      "https://github.com/gastownhall/beads/releases/download/v${BEADS_VERSION}/beads_${BEADS_VERSION}_linux_amd64.tar.gz" \
- && tar -xzf /tmp/beads.tar.gz -C /usr/local/bin bd \
- && chmod +x /usr/local/bin/bd \
- && rm -f /tmp/beads.tar.gz
-
 FROM python:3.12-slim-bookworm
 
 # Unbuffered stdout -- without this, print() output (including the audit
@@ -38,8 +18,7 @@ FROM python:3.12-slim-bookworm
 # A crash before the buffer flushes would silently lose audit entries.
 ENV PYTHONUNBUFFERED=1
 
-# bd writes per-user state (e.g. the beads.role warning) under HOME; /app is
-# owned by uid 1000 below, so point HOME there rather than at /root.
+# Writable per-user state lives under /app (uid 1000 owns it, below).
 ENV HOME=/app
 
 WORKDIR /app
@@ -47,9 +26,7 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY --from=beads /usr/local/bin/bd /usr/local/bin/bd
-
-COPY main.py bd_ops.py health.py k8s_ops.py util.py ./
+COPY main.py gh_ops.py health.py k8s_ops.py util.py ./
 
 # uid/gid 1000 to match ../40-deployment.yaml's securityContext
 # (runAsNonRoot, runAsUser: 1000, runAsGroup: 1000) -- python:*-slim has no
