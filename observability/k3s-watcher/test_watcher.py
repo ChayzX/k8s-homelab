@@ -317,4 +317,57 @@ with tempfile.NamedTemporaryFile() as lock_file:
     finally:
         lock.close()
 
+# A previously-alerted workload condition that clears produces a recovery
+# DM (green, cooldown-gated) and a distinct workloadRecovered event; a
+# condition that is still active stays tracked and sends nothing.
+original_queue = watcher.queue_operations_alert
+original_discord = watcher.send_discord_alert
+original_cooldown_ok = watcher.cooldown_ok
+watcher._active_workload_alerts.clear()
+watcher._last_alert_time.clear()
+try:
+    watcher._active_workload_alerts["workload:" + "e" * 64] = {
+        "namespace": "pantry-bot",
+        "workload": "pantry-bot",
+        "pod": "pantry-bot-abc",
+        "recovery_message": "Pod pantry-bot-abc container app is back up (was CreateContainerConfigError).",
+    }
+    watcher._active_workload_alerts["workload:" + "f" * 64] = {
+        "namespace": "jmusicbot",
+        "workload": "jmusicbot",
+        "pod": None,
+        "recovery_message": "Deployment jmusicbot/jmusicbot is back up (was unavailable).",
+    }
+    captured = []
+    watcher.queue_operations_alert = captured.append
+    watcher.send_discord_alert = Mock()
+    watcher.cooldown_ok = Mock(return_value=True)
+    watcher.sweep_workload_recoveries(set())
+    assert watcher._active_workload_alerts == {}
+    assert watcher.send_discord_alert.call_count == 2
+    dm = watcher.send_discord_alert.call_args_list[0]
+    assert dm.args[0] == "✅ pantry-bot workload back up"
+    assert dm.kwargs["color"] == 0x2ECC71
+    assert len(captured) == 2
+    assert all(event["eventType"] == "workloadRecovered" for event in captured)
+    assert all(event["eventKey"].endswith(":recovered") for event in captured)
+
+    # An active key remains tracked and produces no recovery message.
+    watcher._active_workload_alerts.clear()
+    watcher.send_discord_alert.reset_mock()
+    watcher._active_workload_alerts["workload:" + "e" * 64] = {
+        "namespace": "pantry-bot",
+        "workload": "pantry-bot",
+        "pod": "pantry-bot-abc",
+        "recovery_message": "still down",
+    }
+    watcher.sweep_workload_recoveries({"workload:" + "e" * 64})
+    assert len(watcher._active_workload_alerts) == 1
+    watcher.send_discord_alert.assert_not_called()
+finally:
+    watcher.queue_operations_alert = original_queue
+    watcher.send_discord_alert = original_discord
+    watcher.cooldown_ok = original_cooldown_ok
+    watcher._active_workload_alerts.clear()
+
 print("test_watcher: all assertions passed")
