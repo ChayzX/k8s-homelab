@@ -1,0 +1,27 @@
+name: Security Scan
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run Oculum Security Scan
+        uses: OculumDev/oculum-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          depth: validated
+          fail-on: none
+          sarif: false
+          oculum-api-key: ${{ secrets.OCULUM_API_KEY }}

@@ -10,13 +10,15 @@
 # compiler toolchain needed in the image at all.
 FROM python:3.12-slim-bookworm
 
-# `bd` (beads CLI) -- pinned to the exact version running on the host so the
+# `bd` (beads CLI) -- pinned to the same schema line as the host/scotty so the
 # on-disk Dolt DB schema matches (a pod-side bd of a different minor could
-# trip schema-skew guards when /bug writes into the mounted boards). The
+# trip schema-skew guards when /bug writes into the mounted boards). Host DBs
+# are at schema v65 (migrated by the accidental v1.2.1 release); v1.2.1 is the
+# newest release asset that speaks v65 (v1.2.2 stable speaks v53 only). The
 # runtime stage only needs the binary; this stage holds the download tooling.
 # /bug (bd_ops.py) invokes this from the container; no git is required.
 FROM debian:bookworm-slim AS beads
-ARG BEADS_VERSION=1.1.2
+ARG BEADS_VERSION=1.2.1
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
