@@ -26,7 +26,7 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py gh_ops.py health.py k8s_ops.py util.py ./
+COPY main.py gh_ops.py health.py k8s_ops.py util.py _operations_contract.py ./
 
 # uid/gid 1000 to match ../40-deployment.yaml's securityContext
 # (runAsNonRoot, runAsUser: 1000, runAsGroup: 1000) -- python:*-slim has no

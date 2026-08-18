@@ -11,13 +11,21 @@ import datetime
 import os
 import shlex
 
+from _operations_contract import MUTATION_NAMESPACES
+
 # Writable namespace allowlist. This mirrors the mutation-capable
-# Role/RoleBinding set in ../20-rbac.yaml. Observability is intentionally not
+# Role/RoleBinding set in ../20-rbac.yaml, and is now sourced from
+# _operations_contract.py (a synced copy of Operations-ios-app's
+# src/operations_api/contracts.py) so this set can't quietly drift from the
+# web dashboard's restart policy -- see that file's header for why it's a
+# copy rather than a package dependency. Observability is intentionally not
 # here: the bot may report its health, but must not restart monitoring.
-ALLOWED_NAMESPACES = frozenset({"jmusicbot", "pantry-bot", "minecraft"})
+ALLOWED_NAMESPACES = MUTATION_NAMESPACES
 # Read-only status coverage includes the monitoring stack itself. Keep this a
 # separate set so adding a dashboard/status target can never accidentally add
-# restart permission.
+# restart permission. Deliberately NOT sourced from the shared contract --
+# Operations' STATUS_NAMESPACES is a broader, single-owner-only surface; see
+# _operations_contract.py's header for why this stays a separate policy.
 STATUS_NAMESPACES = ALLOWED_NAMESPACES | {"observability"}
 
 # /bug (see gh_ops.py) -- which Discord-facing bot label maps to which

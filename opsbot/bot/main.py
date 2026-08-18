@@ -26,6 +26,7 @@ import gh_ops
 import health
 import k8s_ops
 import util
+from _operations_contract import HiddenNamespaceError, require_restart_target
 
 DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 ALLOWLIST = util.parse_user_allowlist(os.environ.get("DISCORD_USER_ID"))
@@ -269,9 +270,20 @@ async def _watch_rollout(interaction: discord.Interaction, namespace: str, deplo
 @app_commands.autocomplete(deployment=_deployment_autocomplete)
 async def deploy_restart(interaction: discord.Interaction, namespace: str, deployment: str) -> None:
     await interaction.response.defer(thinking=True)
-    if namespace not in util.ALLOWED_NAMESPACES:
-        await _reply(interaction, f"Namespace {namespace!r} is not allowed.")
-        _audit(interaction, True, result="rejected: namespace not allowed")
+    # Namespace-level RBAC (../20-rbac.yaml) grants patch on every Deployment
+    # in jmusicbot/pantry-bot/minecraft, not just the app deployment sharing
+    # that namespace's name -- e.g. pantry-bot's namespace also holds its
+    # cloudflared tunnel deployment. require_restart_target enforces the
+    # same (namespace, deployment) pair allowlist the web dashboard uses
+    # (Operations-ios-app's contracts.py, synced into _operations_contract.py)
+    # so a slash command can't restart a workload the canonical policy never
+    # intended to expose, even though the Kubernetes API would technically
+    # allow it.
+    try:
+        namespace, deployment = require_restart_target(namespace, deployment)
+    except HiddenNamespaceError:
+        await _reply(interaction, f"{namespace}/{deployment} is not a restart target.")
+        _audit(interaction, True, result="rejected: not an allowed restart target")
         return
     try:
         k8s_ops.restart_deployment(namespace, deployment)
