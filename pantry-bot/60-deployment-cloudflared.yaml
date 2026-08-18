@@ -30,6 +30,17 @@
 # Ordering: Compose used `depends_on: bot`. Kubernetes has no equivalent and
 # does not need one — cloudflared retries its origin connection, and the
 # Service resolves whether or not a pantry-bot pod is Ready yet.
+#
+# 3. TUNNEL_TRANSPORT_PROTOCOL=http2, added after diagnosing intermittent
+#    "application not found" on the Authentik-fronted apps (auth/grafana/
+#    status/operations, all served through this same tunnel). Live logs
+#    showed cloudflared repeatedly cycling all 4 QUIC connections with
+#    `failed to accept QUIC stream: timeout: no recent network activity`
+#    (157 occurrences in one 1000-line log window) — a known failure mode
+#    where a router/firewall's UDP idle timeout drops the QUIC session
+#    under Cloudflare's default transport. http2 runs over a persistent TCP
+#    connection instead, which is far more tolerant of typical home-router
+#    UDP handling. See ChayzX/k8s-homelab#72 and ChayzX/Operations-ios-app#61.
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -95,6 +106,10 @@ spec:
                 secretKeyRef:
                   name: cloudflared-tunnel
                   key: TUNNEL_TOKEN
+            # See change 3 in the header comment: forces TCP-based HTTP/2
+            # transport instead of the QUIC/UDP default.
+            - name: TUNNEL_TRANSPORT_PROTOCOL
+              value: http2
           ports:
             - name: metrics
               containerPort: 2000

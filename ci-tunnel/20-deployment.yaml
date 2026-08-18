@@ -14,6 +14,11 @@
 # kubernetes.default.svc specifically (its cert is signed by the cluster's
 # internal CA, not a public one -- default cloudflared origin TLS
 # verification will fail against it without that config).
+#
+# TUNNEL_TRANSPORT_PROTOCOL=http2 was added alongside the same change on the
+# pantry-bot tunnel (see that file's header, change 3) after this connector
+# was found showing the identical QUIC idle-timeout disconnect pattern in
+# its own logs. See ChayzX/k8s-homelab#72.
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -64,6 +69,8 @@ spec:
                 secretKeyRef:
                   name: ci-tunnel-token
                   key: TUNNEL_TOKEN
+            - name: TUNNEL_TRANSPORT_PROTOCOL
+              value: http2
           ports:
             - name: metrics
               containerPort: 2000
