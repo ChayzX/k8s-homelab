@@ -186,6 +186,15 @@ spec:
             - name: minecraft-logs
               mountPath: /var/log/minecraft
               readOnly: true
+            # Host systemd journal (persistent storage; confirmed present
+            # at /var/log/journal, journald.conf has Storage=auto). Read
+            # via the same absolute path so promtail's journal reader
+            # (go-systemd sdjournal) resolves it transparently. Existing
+            # root + DAC_READ_SEARCH already covers the systemd-journal
+            # group's file permissions -- no securityContext change needed.
+            - name: host-journal
+              mountPath: /var/log/journal
+              readOnly: true
       volumes:
         - name: config
           configMap:
@@ -205,6 +214,10 @@ spec:
         - name: minecraft-logs
           hostPath:
             path: /home/chase/minecraft/logs
+            type: Directory
+        - name: host-journal
+          hostPath:
+            path: /var/log/journal
             type: Directory
 ---
 apiVersion: v1

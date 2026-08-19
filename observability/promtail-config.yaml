@@ -399,3 +399,21 @@ data:
               template: '{{ $l := .Value | ToLower }}{{ if or (eq $l "error") (eq $l "fatal") (eq $l "severe") }}error{{ else if or (eq $l "warn") (eq $l "warning") }}warn{{ else if or (eq $l "debug") (eq $l "trace") }}debug{{ else }}info{{ end }}'
           - labels:
               level:
+
+      # =============================================================
+      # 4. Host systemd journal
+      # =============================================================
+      # Requires the /var/log/journal hostPath mount added in
+      # promtail.yaml. `host` is hardcoded to match the Kubernetes node
+      # name exactly (single-node cluster, confirmed via `kubectl get
+      # nodes` -- lowercase "minecraftmachine") so the Operations app's
+      # host-logs query ({job="systemd-journal", host="<node>"}) matches.
+      # No `level` pipeline yet -- journald exposes a native numeric
+      # PRIORITY field that could drive one; left as a follow-up rather
+      # than scope-creeping this addition.
+      - job_name: systemd-journal
+        journal:
+          max_age: 12h
+          labels:
+            job: systemd-journal
+            host: minecraftmachine
