@@ -49,10 +49,6 @@ jobs:
           git -C "$RUNNER_TEMP/musicbot" apply "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-health-endpoint.patch"
           git -C "$RUNNER_TEMP/musicbot" apply --check "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-potoken.patch"
           git -C "$RUNNER_TEMP/musicbot" apply "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-potoken.patch"
-          # Must come after jmusicbot-potoken.patch: it edits the same buildYoutubeClients()
-          # block and makes the PO token reachable from the playback path.
-          git -C "$RUNNER_TEMP/musicbot" apply --check "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-web-playback-fallback.patch"
-          git -C "$RUNNER_TEMP/musicbot" apply "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-web-playback-fallback.patch"
           yts="$(curl -fsSL https://api.github.com/repos/lavalink-devs/youtube-source/releases/latest | jq -r .tag_name | sed 's/^v//')"
           sed -i "s|<youtube-source.version>[^<]*</youtube-source.version>|<youtube-source.version>${yts}</youtube-source.version>|" "$RUNNER_TEMP/musicbot/pom.xml"
           echo "tag=upstream-${ref#v}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
