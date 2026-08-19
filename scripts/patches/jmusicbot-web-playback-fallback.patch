@@ -1,0 +1,61 @@
+diff --git a/src/main/java/com/jagrosh/jmusicbot/audio/AudioSource.java b/src/main/java/com/jagrosh/jmusicbot/audio/AudioSource.java
+index 27d98b4..da55d49 100644
+--- a/src/main/java/com/jagrosh/jmusicbot/audio/AudioSource.java
++++ b/src/main/java/com/jagrosh/jmusicbot/audio/AudioSource.java
+@@ -286,6 +286,9 @@ public enum AudioSource
+      *       audio stream formats during playback.</li>
+      *   <li><b>TvHtml5SimplyWithThumbnail</b> - *Not oAuth compatible* Used as fallback for loading
+      *       audio stream formats during playback.</li>
++     *   <li><b>WebPlaybackFallback</b> - Last-resort streaming-only WEB client. Carries the
++     *       ytpotoken/ytvisitordata pair, so it can still produce a stream URL when both TV
++     *       clients fail. See {@link WebPlaybackFallback} for why this is a separate instance.</li>
+      * </ul>
+      * 
+      * <p>
+@@ -304,7 +307,8 @@ public enum AudioSource
+                 new MWebWithThumbnail(metadataOnly),      // metadata loading (non-embedded, non-OAuth)
+                 new WebWithThumbnail(metadataOnly),       // metadata loading (non-embedded, non-OAuth)
+                 new Tv(),
+-                new TvHtml5SimplyWithThumbnail()
++                new TvHtml5SimplyWithThumbnail(),
++                new WebPlaybackFallback()                 // playback only; last resort, carries poToken
+             };
+         }
+         // Clients are required even without OAuth to properly handle YouTube URLs
+@@ -362,4 +366,36 @@ public enum AudioSource
+             return null;
+         }
+     }
++
++    /**
++     * A WEB client that exists purely as a last-resort playback (stream format) fallback.
++     *
++     * <p><b>Why this is needed.</b> In the OAuth client set, the WEB/MWEB/ANDROID_VR clients are
++     * constructed with {@code ClientOptions.setPlayback(false)}. youtube-source derives
++     * {@code Client.supportsFormatLoading()} from {@code ClientOptions.getPlayback()}, and
++     * {@code YoutubeAudioTrack.process()} skips every client for which that is false. The result
++     * is that TVHTML5 ({@link Tv}) and TVHTML5_SIMPLY were the only clients that could ever
++     * resolve a stream URL, and the ytpotoken/ytvisitordata pair installed by
++     * {@code Web.setPoTokenAndVisitorData(...)} only ever influenced metadata lookups - never
++     * playback. When TVHTML5 dropped a stream mid-track and TVHTML5_SIMPLY hit "Sign in to
++     * confirm you're not a bot", the track was dropped with AllClientsFailedException.
++     *
++     * <p><b>Why a separate instance.</b> The playback flag is per-{@code ClientOptions}, so the
++     * metadata-only WEB instance cannot also serve playback. This instance keeps playback enabled
++     * and is placed <em>last</em> in the client array, so the existing TVHTML5-first ordering is
++     * untouched and this only ever runs as a recovery attempt.
++     *
++     * <p><b>Why canHandleRequest is false.</b> Mirrors {@link Tv}: returning false keeps this
++     * client out of {@code YoutubeAudioSourceManager.loadItem()} entirely, so track/playlist/mix
++     * resolution behaviour is byte-for-byte identical to before. Only the playback loop, which
++     * ignores canHandleRequest and looks solely at supportsFormatLoading(), can reach it.
++     */
++    private static final class WebPlaybackFallback extends WebWithThumbnail
++    {
++        @Override
++        public boolean canHandleRequest(String identifier)
++        {
++            return false;
++        }
++    }
+ }
