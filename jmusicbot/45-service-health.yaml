@@ -1,4 +1,4 @@
-# ClusterIP Service exposing jmusicbot's health endpoint (bd k8s-homelab-aos).
+# ClusterIP Service exposing jmusicbot's health endpoint (gh k8s-homelab-aos).
 #
 # jmusicbot has no HTTP listener of its own and publishes nothing to the host,
 # so nothing on the network could check whether it was alive -- that is why the

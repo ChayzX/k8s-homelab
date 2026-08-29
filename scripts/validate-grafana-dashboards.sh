@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bead: k8s-homelab-ytt
+# GitHub issue: k8s-homelab-ytt
 # Validate Grafana's editable JSON sources and the generated ConfigMap copy.
 
 set -euo pipefail

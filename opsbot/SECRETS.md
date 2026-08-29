@@ -12,8 +12,8 @@ Two values, one Secret:
 
 | Key | Meaning |
 |---|---|
-| `DISCORD_BOT_TOKEN` | The bot token from the Discord Developer Portal application (see `bd show k8s-homelab-bi6.1` — set up as a separate task, not yet done as of this writing). |
-| `DISCORD_USER_ID` | The single Discord user ID allowed to invoke commands. Reused from the existing convention already used by `scripts/minecraft_backup.py` and `scripts/minecraft_exporter.py` (`929216447723499562` — confirmed via `bd show k8s-homelab-bi6.5`'s notes, not a new value). |
+| `DISCORD_BOT_TOKEN` | The bot token from the Discord Developer Portal application (see the historical design record on the GitHub Project board — set up as a separate task, not yet done as of this writing). |
+| `DISCORD_USER_ID` | The single Discord user ID allowed to invoke commands. Reused from the existing convention already used by `scripts/minecraft_backup.py` and `scripts/minecraft_exporter.py` (`929216447723499562` — confirmed via the historical design record on the GitHub Project board's notes, not a new value). |
 
 ```bash
 kubectl -n opsbot create secret generic opsbot-discord \
@@ -32,7 +32,7 @@ kubectl -n opsbot get secret opsbot-discord -o jsonpath='{.data}' | tr ',' '\n'
 ```
 
 **Do not create this Secret yet if the Discord application doesn't exist
-yet** (`bd show k8s-homelab-bi6.1`) — `40-deployment.yaml` references it by
+yet** (the historical design record on the GitHub Project board) — `40-deployment.yaml` references it by
 name and will sit in `CreateContainerConfigError` until it exists, which is
 the intended, loud failure mode (same pattern as `../minecraft/minecraft.yaml`
 before its Secret is created).
@@ -121,7 +121,7 @@ workflows, push code, or touch `ChayzX/Operations-ios-app` / `ChayzX/aios`
 even though those boards also migrated. (If `/bug` later grows to file issues
 on other repos, add them to the PAT's repo selection + `BOT_REPOS` together.)
 
-Retired token note: the original `/bug` ran `bd create` against mounted beads
+Retired token note: the original `/bug` ran the GitHub REST API against mounted GitHub Issues
 databases and needed no GitHub token. That backend is gone — if the Secret
 already exists from an earlier flow, delete it and recreate with the fine-
 grained PAT above (`kubectl -n opsbot delete secret opsbot-github`).

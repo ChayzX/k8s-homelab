@@ -121,7 +121,7 @@ FIX_VERSION="1.18.2"
 STOCK_IMAGE="ghcr.io/arif-banai/musicbot:latest"
 WEBHOOK_URL="$(grep -oP '(?<=DISCORD_RELEASE_WEBHOOK_URL=).*' "$DIR/.env" || true)"
 
-# --- Voice-channel text-chat crash fix (bd issue k8s-homelab-4lj) ---
+# --- Voice-channel text-chat crash fix (gh issue k8s-homelab-4lj) ---
 #
 # arif-banai/MusicBot's music commands (both the v1 prefix commands and the
 # v2 slash commands) force-cast the invoking channel to TextChannel via
@@ -132,7 +132,7 @@ WEBHOOK_URL="$(grep -oP '(?<=DISCORD_RELEASE_WEBHOOK_URL=).*' "$DIR/.env" || tru
 # every time a music command (e.g. /play) is used from a voice channel's own
 # chat -- the command is silently dropped, no reply, no error visible to the
 # user. Confirmed in production logs (9 occurrences of this exact stack
-# trace); see bd issue k8s-homelab-4lj for the investigation.
+# trace); see gh issue k8s-homelab-4lj for the investigation.
 #
 # Tracked upstream at https://github.com/arif-banai/MusicBot/issues/73;
 # fixed, but not yet released, by
@@ -163,7 +163,7 @@ WEBHOOK_URL="$(grep -oP '(?<=DISCORD_RELEASE_WEBHOOK_URL=).*' "$DIR/.env" || tru
 VOICE_CHAT_FIX_RELEASED="${VOICE_CHAT_FIX_RELEASED:-0}"
 VOICE_CHAT_PATCH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/patches/voice-channel-text-chat.patch"
 
-# --- Health HTTP endpoint (bd issue k8s-homelab-aos) ---
+# --- Health HTTP endpoint (gh issue k8s-homelab-aos) ---
 #
 # jmusicbot has no HTTP listener of its own, so nothing (the kubelet, Uptime
 # Kuma) can check whether it's up -- that's what killed the 'Discord Music Bot'
@@ -493,19 +493,19 @@ fi
 voice_chat_patch_applied=0
 if [ "$VOICE_CHAT_FIX_RELEASED" != "1" ]; then
     if [ ! -f "$VOICE_CHAT_PATCH" ]; then
-        die "VOICE_CHAT_FIX_RELEASED=0 but ${VOICE_CHAT_PATCH} is missing. Refusing to build an image without the voice-channel-chat fix (bd k8s-homelab-4lj) -- restore the patch file, or set VOICE_CHAT_FIX_RELEASED=1 once arif-banai/MusicBot#73 is confirmed fixed upstream."
+        die "VOICE_CHAT_FIX_RELEASED=0 but ${VOICE_CHAT_PATCH} is missing. Refusing to build an image without the voice-channel-chat fix (gh k8s-homelab-4lj) -- restore the patch file, or set VOICE_CHAT_FIX_RELEASED=1 once arif-banai/MusicBot#73 is confirmed fixed upstream."
     fi
     if git -C "$TMP_BUILD" apply --check "$VOICE_CHAT_PATCH" 2>/tmp/jmusicbot-voice-chat-patch-check.log; then
         git -C "$TMP_BUILD" apply "$VOICE_CHAT_PATCH"
         voice_chat_patch_applied=1
-        log "Applied voice-channel-text-chat fix (bd k8s-homelab-4lj / arif-banai/MusicBot#73, unreleased upstream PR #74)."
+        log "Applied voice-channel-text-chat fix (gh k8s-homelab-4lj / arif-banai/MusicBot#73, unreleased upstream PR #74)."
     else
         notify "⚠️ scripts/patches/voice-channel-text-chat.patch no longer applies to MusicBot ${latest_musicbot_tag} -- upstream code has likely diverged (possibly arif-banai/MusicBot#73 shipped). Building WITHOUT the patch this run; check https://github.com/arif-banai/MusicBot/issues/73 and either refresh the patch or set VOICE_CHAT_FIX_RELEASED=1."
         log "WARN: voice-channel-text-chat patch did not apply; see /tmp/jmusicbot-voice-chat-patch-check.log. Continuing build without it."
     fi
 fi
 
-# Apply the health-endpoint patch (bd k8s-homelab-aos). FAIL-HARD by design,
+# Apply the health-endpoint patch (gh k8s-homelab-aos). FAIL-HARD by design,
 # unlike the voice-chat patch above: upstream will never ship this, so a patch
 # that stops applying means the tree moved under us and a build without the
 # endpoint would break the readiness probe (and the Kuma monitor this endpoint
@@ -513,13 +513,13 @@ fi
 health_patch_applied=0
 if [ "$HEALTH_ENDPOINT_RELEASED" != "1" ]; then
     if [ ! -f "$HEALTH_PATCH" ]; then
-        die "HEALTH_ENDPOINT_RELEASED=0 but ${HEALTH_PATCH} is missing. Refusing to build an image without the health endpoint (bd k8s-homelab-aos) -- restore the patch file, or set HEALTH_ENDPOINT_RELEASED=1 once the health probes/Service are removed."
+        die "HEALTH_ENDPOINT_RELEASED=0 but ${HEALTH_PATCH} is missing. Refusing to build an image without the health endpoint (gh k8s-homelab-aos) -- restore the patch file, or set HEALTH_ENDPOINT_RELEASED=1 once the health probes/Service are removed."
     fi
     if ! git -C "$TMP_BUILD" apply "$HEALTH_PATCH" >/tmp/jmusicbot-health-patch-check.log 2>&1; then
-        die "HEALTH_ENDPOINT_RELEASED=0 but ${HEALTH_PATCH} failed to apply to MusicBot ${latest_musicbot_tag}. Refusing to build an image without the health endpoint (bd k8s-homelab-aos). See /tmp/jmusicbot-health-patch-check.log -- refresh the patch, or set HEALTH_ENDPOINT_RELEASED=1 once the health probes/Service are removed."
+        die "HEALTH_ENDPOINT_RELEASED=0 but ${HEALTH_PATCH} failed to apply to MusicBot ${latest_musicbot_tag}. Refusing to build an image without the health endpoint (gh k8s-homelab-aos). See /tmp/jmusicbot-health-patch-check.log -- refresh the patch, or set HEALTH_ENDPOINT_RELEASED=1 once the health probes/Service are removed."
     fi
     health_patch_applied=1
-    log "Applied health-endpoint patch (bd k8s-homelab-aos): GET /health + /live on port 9091."
+    log "Applied health-endpoint patch (gh k8s-homelab-aos): GET /health + /live on port 9091."
 fi
 
 yts_version_num="${latest_yts_tag#v}"
@@ -591,8 +591,8 @@ rm -f "$manifest_backup"
 commit_manifest "jmusicbot: ${image_tag}
 
 MusicBot ${latest_musicbot_tag} + youtube-source ${yts_version_num} (upstream still pins ${upstream_yts_version}).
-Voice-channel text-chat fix (bd k8s-homelab-4lj) applied: ${voice_chat_patch_applied}.
-Health endpoint (bd k8s-homelab-aos) applied: ${health_patch_applied}.
+Voice-channel text-chat fix (gh k8s-homelab-4lj) applied: ${voice_chat_patch_applied}.
+Health endpoint (gh k8s-homelab-aos) applied: ${health_patch_applied}.
 Committed automatically by scripts/auto-update.sh."
 
 # --- Step 5: prune old builds from BOTH image stores ---
@@ -612,9 +612,9 @@ sudo -n "$K3S_BIN" ctr images ls -q 2>/dev/null \
 echo "$desired_state" > "$STATE_FILE"
 
 voice_chat_note="voice-channel-chat fix: NOT applied this run (see the WARN above -- check https://github.com/arif-banai/MusicBot/issues/73)."
-[ "$voice_chat_patch_applied" = "1" ] && voice_chat_note="voice-channel-chat fix (bd k8s-homelab-4lj) applied."
-health_note="health endpoint (bd k8s-homelab-aos): NOT applied this run (see the ERROR above)."
-[ "$health_patch_applied" = "1" ] && health_note="health endpoint (bd k8s-homelab-aos) applied: /health + /live on port 9091."
+[ "$voice_chat_patch_applied" = "1" ] && voice_chat_note="voice-channel-chat fix (gh k8s-homelab-4lj) applied."
+health_note="health endpoint (gh k8s-homelab-aos): NOT applied this run (see the ERROR above)."
+[ "$health_patch_applied" = "1" ] && health_note="health endpoint (gh k8s-homelab-aos) applied: /health + /live on port 9091."
 notify "Rebuilt and redeployed: MusicBot ${latest_musicbot_tag} + youtube-source ${yts_version_num} (image \`${image_tag}\`, rolled out to deployment/${DEPLOYMENT} in \`${NAMESPACE}\`). Still running the patched build -- upstream MusicBot pom.xml still pins youtube-source ${upstream_yts_version}, below the ${FIX_VERSION} fix. ${voice_chat_note} ${health_note}"
 
 # ---------------------------------------------------------------------------

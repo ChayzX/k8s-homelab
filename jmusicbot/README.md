@@ -130,7 +130,7 @@ Deliberate. It has its own pipeline (see C). Keel is scoped to pantry-bot only.
 ### E. Health endpoint — build + deploy the `-health1` image
 
 The Deployment's probes and the `jmusicbot-health` Service target port **9091**,
-which only the health-patched image listens on (bd k8s-homelab-aos). A stock
+which only the health-patched image listens on (gh k8s-homelab-aos). A stock
 image has no listener there and the pod would sit NotReady forever, so build the
 patched image **before** applying the manifest.
 
@@ -255,7 +255,7 @@ with the secret mounted at `/src` instead of over `/musicbot/config.txt`. Note
 the trade-off: `cp -n` means the Secret then seeds the file only once and later
 Secret edits are ignored until you delete the PVC copy.
 
-**Why the health endpoint exists (bd k8s-homelab-aos).** jmusicbot exposes no
+**Why the health endpoint exists (gh k8s-homelab-aos).** jmusicbot exposes no
 port and no HTTP listener of its own, so after the k3s migration the Uptime Kuma
 "Discord Music Bot" monitor (which polled `/var/run/docker.sock`) had nothing to
 check. The patched image runs a JDK-built-in `com.sun.net.httpserver.HttpServer`

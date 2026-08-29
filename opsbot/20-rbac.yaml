@@ -9,7 +9,7 @@
 # without being told a namespace list. opsbot has the opposite requirement —
 # an explicit, closed allowlist of namespaces the Discord bot is allowed to
 # touch at all — so a Role bound per-namespace is not just adequate, it's the
-# actual security boundary the design calls for (see `bd show k8s-homelab-bi6`
+# actual security boundary the design calls for (see the historical design record on the GitHub Project board
 # and `k8s-homelab-bi6.2`).
 #
 # Workload restart whitelist: jmusicbot, pantry-bot, minecraft. Deliberately EXCLUDES keel

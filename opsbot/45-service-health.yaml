@@ -1,4 +1,4 @@
-# ClusterIP Service exposing opsbot's health endpoint (bd k8s-homelab-aos
+# ClusterIP Service exposing opsbot's health endpoint (gh k8s-homelab-aos
 # follow-up -- opsbot had the same gap jmusicbot did: Discord-only, no
 # listener, nothing on the network could check it was alive).
 #

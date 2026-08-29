@@ -1,4 +1,4 @@
-# Bead: k8s-homelab-a77
+# GitHub issue: k8s-homelab-a77
 # A merge to main is the deployment approval. Each merge resolves the latest
 # upstream release, applies homelab patches, publishes, and verifies the pod.
 name: JMusicBot CI/CD
