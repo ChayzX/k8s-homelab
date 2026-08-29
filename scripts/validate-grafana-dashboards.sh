@@ -8,7 +8,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DASHBOARD_DIR="$REPO_ROOT/dashboards"
 CONFIGMAP="$DASHBOARD_DIR/dashboards-configmap.yaml"
 
-for required in jq kubectl; do
+for required in jq python3; do
   command -v "$required" >/dev/null || {
     echo "missing required command: $required" >&2
     exit 1
@@ -46,27 +46,45 @@ for dashboard_file in "${dashboard_files[@]}"; do
   fi
 done
 
-# This validator also runs before the deployment job establishes its API
-# tunnel, so client-side parsing must not attempt an OpenAPI download.
-configmap_json="$(kubectl create --dry-run=client --validate=false -f "$CONFIGMAP" -o json)"
-mapfile -t embedded_keys < <(jq -r '.data | keys[]' <<<"$configmap_json" | sort)
-mapfile -t source_keys < <(printf '%s\n' "${dashboard_files[@]##*/}" | sort)
+# Parse the generated ConfigMap locally. This validator runs before the
+# deployment job establishes its Kubernetes API tunnel, so kubectl discovery
+# cannot be part of validation.
+python3 - "$CONFIGMAP" "$DASHBOARD_DIR" <<'PY'
+import pathlib
+import re
+import sys
 
-if [[ "${embedded_keys[*]}" != "${source_keys[*]}" ]]; then
-  echo "dashboard ConfigMap keys do not match dashboard JSON sources" >&2
-  diff <(printf '%s\n' "${source_keys[@]}") <(printf '%s\n' "${embedded_keys[@]}") || true
-  exit 1
-fi
+configmap = pathlib.Path(sys.argv[1]).read_text()
+dashboard_dir = pathlib.Path(sys.argv[2])
+matches = list(re.finditer(r"^  ([^\s]+\.json): \|\n", configmap, re.MULTILINE))
+embedded = {}
+for index, match in enumerate(matches):
+    end = matches[index + 1].start() if index + 1 < len(matches) else len(configmap)
+    body = configmap[match.end():end]
+    body_lines = []
+    for line in body.splitlines():
+        if line and not line.startswith("    "):
+            break
+        body_lines.append(line)
+    embedded[match.group(1)] = "\n".join(
+        line[4:] if line.startswith("    ") else line
+        for line in body_lines
+    ).rstrip("\n")
 
-for dashboard_file in "${dashboard_files[@]}"; do
-  key="${dashboard_file##*/}"
-  embedded="$(jq -r --arg key "$key" '.data[$key]' <<<"$configmap_json")"
-  source="$(sed -e '${/^$/d;}' "$dashboard_file")"
-  if [[ "$embedded" != "$source" ]]; then
-    echo "$key differs from its embedded ConfigMap copy; regenerate dashboards-configmap.yaml" >&2
-    exit 1
-  fi
-done
+sources = {
+    path.name: path.read_text().rstrip("\n")
+    for path in sorted(dashboard_dir.glob("*.json"))
+}
+if sorted(embedded) != sorted(sources):
+    print("dashboard ConfigMap keys do not match dashboard JSON sources", file=sys.stderr)
+    print("sources:", sorted(sources), file=sys.stderr)
+    print("embedded:", sorted(embedded), file=sys.stderr)
+    raise SystemExit(1)
+for key, source in sources.items():
+    if embedded[key] != source:
+        print(f"{key} differs from its embedded ConfigMap copy; regenerate dashboards-configmap.yaml", file=sys.stderr)
+        raise SystemExit(1)
+PY
 
 configmap_bytes="$(wc -c < "$CONFIGMAP")"
 if (( configmap_bytes >= 900000 )); then
