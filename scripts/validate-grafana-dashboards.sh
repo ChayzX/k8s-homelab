@@ -46,7 +46,9 @@ for dashboard_file in "${dashboard_files[@]}"; do
   fi
 done
 
-configmap_json="$(kubectl create --dry-run=client -f "$CONFIGMAP" -o json)"
+# This validator also runs before the deployment job establishes its API
+# tunnel, so client-side parsing must not attempt an OpenAPI download.
+configmap_json="$(kubectl create --dry-run=client --validate=false -f "$CONFIGMAP" -o json)"
 mapfile -t embedded_keys < <(jq -r '.data | keys[]' <<<"$configmap_json" | sort)
 mapfile -t source_keys < <(printf '%s\n' "${dashboard_files[@]##*/}" | sort)
 
