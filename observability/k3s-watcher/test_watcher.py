@@ -47,6 +47,24 @@ for line in (
     assert watcher.ERROR_RE.search(line)
 assert not watcher.ERROR_RE.search("Overlay server listening on port 8080")
 
+health_session = Mock()
+health_session.get.return_value = Mock(status_code=200)
+assert watcher.functional_health_check(
+    "pantry-bot", "http://10.43.170.195/health", health_session
+) == (True, "")
+health_session.get.return_value = Mock(status_code=503)
+healthy, message = watcher.functional_health_check(
+    "pantry-bot", "http://10.43.170.195/health", health_session
+)
+assert healthy is False
+assert "HTTP 503" in message
+health_session.get.side_effect = watcher.requests.Timeout("timed out")
+healthy, message = watcher.functional_health_check(
+    "pantry-bot", "http://10.43.170.195/health", health_session
+)
+assert healthy is False
+assert "unreachable" in message
+
 teardown = 'failed to run the datagram handler error="context canceled" connIndex=2'
 assert watcher.CLOUDFLARED_BENIGN_RE.search(teardown)
 assert watcher.cloudflared_teardown_suppressed(teardown, True)
@@ -167,6 +185,27 @@ assert list(watcher._operations_pending) == [
     "restart:" + "3" * 64,
 ]
 watcher._operations_pending.clear()
+
+# CF Access client id/secret are optional: blank on both sides still enables
+# Operations delivery (current setup — Authentik's skip_path_regex already
+# exempts this path), and the headers omit CF-Access-* entirely rather than
+# sending empty values.
+watcher.OPERATIONS_CF_ACCESS_CLIENT_ID = ""
+watcher.OPERATIONS_CF_ACCESS_CLIENT_SECRET = ""
+assert watcher._operations_enabled() is True
+headers = watcher._operations_headers()
+assert "CF-Access-Client-Id" not in headers
+assert "CF-Access-Client-Secret" not in headers
+assert headers["X-Operations-Ingest-Key"] == "ingest"
+
+# One set and one blank is a real misconfiguration, not "unused" — delivery
+# stays disabled.
+watcher.OPERATIONS_CF_ACCESS_CLIENT_ID = "client"
+watcher.OPERATIONS_CF_ACCESS_CLIENT_SECRET = ""
+assert watcher._operations_enabled() is False
+watcher.OPERATIONS_CF_ACCESS_CLIENT_ID = "client"
+watcher.OPERATIONS_CF_ACCESS_CLIENT_SECRET = "secret"
+assert watcher._operations_enabled() is True
 
 # Reconciliation uses the same layered credentials and sorted active keys.
 reconcile_session = Mock()

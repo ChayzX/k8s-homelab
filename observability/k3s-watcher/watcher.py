@@ -38,6 +38,13 @@ WATCH_NAMESPACES = [
     for ns in os.environ.get("WATCH_NAMESPACES", "jmusicbot,pantry-bot").split(",")
     if ns.strip()
 ]
+FUNCTIONAL_HEALTH_URLS = {}
+for entry in os.environ.get("FUNCTIONAL_HEALTH_URLS", "").split(","):
+    entry = entry.strip()
+    if entry:
+        namespace, url = entry.split("=", 1)
+        if namespace.strip() and url.strip():
+            FUNCTIONAL_HEALTH_URLS[namespace.strip()] = url.strip()
 POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "30"))
 RESTART_THRESHOLD = int(os.environ.get("RESTART_THRESHOLD", "3"))
 RESTART_WINDOW_SECONDS = int(os.environ.get("RESTART_WINDOW_SECONDS", "600"))
@@ -173,27 +180,34 @@ def send_discord_alert(title, description, color=0xE74C3C, extra_user_ids=()):
 
 
 def _operations_enabled():
-    values = (
+    required = (
         OPERATIONS_ALERT_URL,
         OPERATIONS_RECONCILE_URL,
         OPERATIONS_ALERT_INGEST_KEY,
-        OPERATIONS_CF_ACCESS_CLIENT_ID,
-        OPERATIONS_CF_ACCESS_CLIENT_SECRET,
         OPERATIONS_TIMEOUT_SECONDS,
         OPERATIONS_PENDING_LIMIT,
         OPERATIONS_RETRY_BASE_SECONDS,
     )
-    if any(values) and not all(values):
+    # CF Access client id/secret are optional: either both set (Operations is
+    # still gated by a Cloudflare Access service token) or both blank (current
+    # setup — Authentik's skip_path_regex already exempts this ingest path).
+    # One set and one blank is a real misconfiguration, not "unused".
+    cf_access = (OPERATIONS_CF_ACCESS_CLIENT_ID, OPERATIONS_CF_ACCESS_CLIENT_SECRET)
+    incomplete = (any(required) and not all(required)) or (
+        any(cf_access) and not all(cf_access)
+    )
+    if incomplete:
         print("[k3s-watcher] Operations delivery is incomplete; check service environment")
-    return all(values)
+        return False
+    return all(required)
 
 
 def _operations_headers():
-    return {
-        "X-Operations-Ingest-Key": OPERATIONS_ALERT_INGEST_KEY,
-        "CF-Access-Client-Id": OPERATIONS_CF_ACCESS_CLIENT_ID,
-        "CF-Access-Client-Secret": OPERATIONS_CF_ACCESS_CLIENT_SECRET,
-    }
+    headers = {"X-Operations-Ingest-Key": OPERATIONS_ALERT_INGEST_KEY}
+    if OPERATIONS_CF_ACCESS_CLIENT_ID and OPERATIONS_CF_ACCESS_CLIENT_SECRET:
+        headers["CF-Access-Client-Id"] = OPERATIONS_CF_ACCESS_CLIENT_ID
+        headers["CF-Access-Client-Secret"] = OPERATIONS_CF_ACCESS_CLIENT_SECRET
+    return headers
 
 
 def queue_operations_alert(event):
@@ -501,6 +515,20 @@ def check_restart_loops():
     return collection_complete, active_event_keys
 
 
+def functional_health_check(namespace, url, session=requests):
+    """Return whether an application's dependency-aware health endpoint passes."""
+    try:
+        response = session.get(url, timeout=OPERATIONS_TIMEOUT_SECONDS)
+    except requests.RequestException as exc:
+        return False, f"{namespace} functional health endpoint is unreachable: {exc}"
+    if response.status_code != 200:
+        return False, (
+            f"{namespace} functional health endpoint returned HTTP "
+            f"{response.status_code}."
+        )
+    return True, ""
+
+
 def check_workload_health():
     """Alert on pull/config failures and unavailable Deployments.
 
@@ -626,6 +654,40 @@ def check_workload_health():
                 "recovery_message": (
                     f"Deployment {namespace}/{name} is back up (was unavailable)."
                 ),
+            })
+
+        health_url = FUNCTIONAL_HEALTH_URLS.get(namespace)
+        if health_url:
+            healthy, health_message = functional_health_check(namespace, health_url)
+            key = _event_key("functional", namespace)
+            if not persistent_workload_condition(key, not healthy):
+                continue
+            if healthy:
+                active_event_keys.discard(key)
+                continue
+            active_event_keys.add(key)
+            queue_operations_alert({
+                "source": "k3s-watcher",
+                "eventKey": key,
+                "eventType": "functionalHealth",
+                "severity": "critical",
+                "namespace": namespace,
+                "workload": namespace,
+                "pod": None,
+                "message": health_message,
+                "occurredAt": _utc_now(),
+            })
+            if cooldown_ok(key):
+                send_discord_alert(
+                    f"🚨 {namespace} functional health check failed",
+                    health_message,
+                    extra_user_ids=extra_recipients_for(namespace),
+                )
+            _active_workload_alerts.setdefault(key, {
+                "namespace": namespace,
+                "workload": namespace,
+                "pod": None,
+                "recovery_message": f"{namespace} functional health check is passing again.",
             })
     if collection_complete:
         sweep_workload_recoveries(active_event_keys)
