@@ -145,10 +145,10 @@ spec:
               value: "true"
             - name: GF_SECURITY_COOKIE_SAMESITE
               value: lax
-            # Rotate the cookie name so existing browsers establish a fresh
-            # session and Grafana can issue a new proxy login token.
-            - name: GF_SECURITY_COOKIE_NAME
-              value: grafana_session_v3
+            # Rotate the auth cookie after the old proxy-token sessions were
+            # invalidated, so browsers establish a fresh session.
+            - name: GF_AUTH_LOGIN_COOKIE_NAME
+              value: grafana_session_v4
             # Authentik supplies the authenticated username on every proxied
             # request. Grafana's frontend renews this token while the
             # Authentik proxy authenticates it.
