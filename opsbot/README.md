@@ -2,13 +2,13 @@
 
 **Status: applied and live.** The bot's Python source (`opsbot/bot/*.py`)
 landed and `40-deployment.yaml` is running (`opsbot` pod `1/1 Running`).
-The original beads issue tracker is retired — work now lives in GitHub
+The original legacy local tracker is retired — work now lives in GitHub
 Issues on the kanban board (see `../AGENTS.md`); historical design refs
-(`bd show k8s-homelab-bi6*`) are kept only for provenance.
+(the historical design record on the GitHub Project board) are kept only for provenance.
 
 Full design rationale, options compared, and open questions (historical
-beads refs, retired): `bd show k8s-homelab-bi6` (epic),
-`bd show k8s-homelab-bi6.2` (RBAC).
+legacy tracker references, retired): the historical design record on the GitHub Project board (epic),
+the historical design record on the GitHub Project board (RBAC).
 
 Deploys **opsbot**: a standalone Discord bot giving remote, phone-friendly
 control over specific homelab workloads — restart/status checks on
@@ -79,10 +79,10 @@ fine-grained PAT, Issues Read+Write on those two repos) — see `SECRETS.md`.
 No image rebuild or cluster manifests are needed to change the /bug target:
 repo routing lives in `bot/util.py` (`BOT_REPOS`).
 
-This replaces the original beads-backed `/bug`: `bd create` against
-hostPath-mounted Dolt databases (`40-deployment.yaml` no longer mounts
-`.beads/` dirs). A filed issue lands on GitHub immediately and is visible on
-the GitHub Projects board; nothing waits on a host `bd dolt push`, and the
+This replaces the original local-tracker-backed `/bug`: the GitHub REST API creates
+the issue directly in the owning repository (`40-deployment.yaml` has no tracker
+mounts). A filed issue lands on GitHub immediately and is visible on
+the GitHub Projects board; there is no host-side sync step, and the
 pod is no longer bound to the single node hosting those databases.
 
 ---

@@ -1,5 +1,5 @@
 # Dedicated namespace for the CI/CD Cloudflare Tunnel connector pod -- see
-# ../ci-deploy/README.md and bd show k8s-homelab-oiv.8.
+# ../ci-deploy/README.md and the historical GitHub Project record
 #
 # INTENT vs REALITY (2026-08-13 correction): this namespace/connector was
 # designed to be a fully separate Cloudflare Tunnel from pantry-bot's

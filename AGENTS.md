@@ -1,13 +1,14 @@
 # Agent Instructions
 
 This project tracks work as **GitHub Issues** in `ChayzX/k8s-homelab`, viewed
-on the GitHub Projects v2 kanban board. GitHub is the source of truth — there
-is no local issue database (no `bd`, no `.beads/`). Use the `gh` CLI.
+on the [k8s-homelab GitHub Project board](https://github.com/users/ChayzX/projects/2).
+GitHub is the source of truth — there
+there is no local issue database. Use the `gh` CLI.
 
 > **Architecture in one line:** Issues and their history live on GitHub under
 > `ChayzX/k8s-homelab` (the same repo that holds this code), and the multi-repo
 > kanban board is a GitHub Projects v2 project. GitHub Issues is the only issue
-> store; the old local Dolt database and `.beads/` directories are retired.
+> store; the old local tracker database and its directories are retired.
 
 ## Quick Reference
 

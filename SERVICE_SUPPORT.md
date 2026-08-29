@@ -106,11 +106,11 @@ secrets, SQLite databases, world data, or kubeconfigs into Git.
 - `.github/workflows/grafana-deploy.yml` — dashboard ConfigMap/apply/restart/
   rollout/health pipeline.
 
-### Scotty and Beads (retired)
+### Scotty and GitHub Issues (retired)
 
-Beads is retired: issue tracking lives in GitHub Issues + Projects v2 (see
-`AGENTS.md`). The `scotty` namespace, `/home/chase/bead-me-up-scotty/`, the
-host-side `bd` CLI, and all local `.beads/` databases are retired and must
+The legacy local tracker is retired: issue tracking lives in GitHub Issues + Projects v2
+(see `AGENTS.md`). The `scotty` namespace, `/home/chase/retired-scotty/`, and all
+local tracker databases are retired and must
 not be resurrected. Historical references to them in this file are
 provenance only.
 
@@ -130,11 +130,9 @@ quality checks, and use the matching workflow's manual dispatch. The CI
 tunnel and scoped kubeconfigs are documented in `ci-tunnel/MANUAL-SETUP.md`
 and `ci-deploy/README.md`.
 
-For Beads, use `bd show`, `bd ready`, and `bd update <id> --claim --actor CodeX`;
-sync with `bd dolt push`. Scotty reads its mounted local databases directly;
-it does not automatically pull another computer's Beads changes. Run
-`bd dolt pull` on the host that owns the mounted database when cross-machine
-updates are expected.
+For GitHub Issues, use `gh issue list`, `gh issue view <number>`, and
+`gh issue edit <number>`. Add each issue to the appropriate GitHub Project board;
+there is no local database or cross-machine sync step.
 
 ## Recovery rules
 

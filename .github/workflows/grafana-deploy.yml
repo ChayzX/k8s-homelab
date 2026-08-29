@@ -1,4 +1,4 @@
-# Bead: k8s-homelab-os2 — one visible workflow with ConfigMap, restart,
+# GitHub issue: k8s-homelab-os2 — one visible workflow with ConfigMap, restart,
 # rollout, and health-verification stages.
 # Dashboard/configuration deployment for Grafana. Dashboard JSON is kept in
 # dashboards/ and embedded in dashboards/dashboards-configmap.yaml; this

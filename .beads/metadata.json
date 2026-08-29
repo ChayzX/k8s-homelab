@@ -1,7 +1,0 @@
-{
-  "database": "dolt",
-  "backend": "dolt",
-  "dolt_mode": "embedded",
-  "dolt_database": "k8s_homelab",
-  "project_id": "032ef664-b14b-4a78-a66e-ebb16b2f1056"
-}

@@ -11,10 +11,9 @@ serial cutover.
 | `minecraft_exporter.py` | `~/docker/observability/monitoring/minecraft-exporter/minecraft_exporter.py` | `minecraft-exporter.service` (user), always on |
 | `kuma-host-heartbeat.sh` | new | user crontab, every minute |
 
-**Retired:** `beads-dolt-pull.sh` (5-minute Dolt pull for the beads boards,
-removed with the beads migration — issue tracking now lives in GitHub Issues
-+ Projects v2, see `../AGENTS.md`). Its cron line is gone; `bd`, scotty, and
-the `.beads/` databases are retired.
+**Retired:** the former local tracker sync script. Its
+cron line is gone; issue tracking now lives in the owning GitHub repository and
+the appropriate GitHub Project board (see `../AGENTS.md`).
 
 The workload scripts below are runbooks and are installed manually as part of
 the migration.
@@ -23,7 +22,7 @@ the migration.
 
 ## Host uptime heartbeat for Uptime Kuma
 
-`kuma-host-heartbeat.sh` is the host-side half of bead `k8s-homelab-8nc`'s
+`kuma-host-heartbeat.sh` is the host-side half of GitHub issue `k8s-homelab-8nc`'s
 long-term uptime scope. It does **not** collect CPU or memory trends; it only
 pushes a minute-by-minute "host is alive" signal into Uptime Kuma so Kuma can
 keep host uptime history beyond Grafana's 7-day Prometheus retention window.

@@ -39,7 +39,7 @@
 #    for observability-watcher.
 #
 # ============================================================
-# MONITOR RECONCILIATION RUNBOOK (bd k8s-homelab-6ba)
+# MONITOR RECONCILIATION RUNBOOK (gh k8s-homelab-6ba)
 # ============================================================
 # The two legacy "Docker Container" monitors (the migration's wall of red)
 # are, as of 2026-08-12 (live DB read-only check):
