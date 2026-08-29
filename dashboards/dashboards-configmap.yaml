@@ -788,7 +788,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "max(kube_node_status_condition{condition=\"Ready\", status=\"true\"})",
+              "expr": "max(kube_node_status_condition{condition=\"Ready\", status=\"true\"}) or vector(0)",
               "legendFormat": "Ready"
             }
           ],
@@ -2089,7 +2089,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__range]))",
+              "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__range])) or vector(0)",
               "queryType": "instant",
               "instant": true,
               "legendFormat": "lines"
@@ -2124,7 +2124,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__range]))",
+              "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__range])) or vector(0)",
               "queryType": "instant",
               "instant": true,
               "legendFormat": "errors"
@@ -2165,7 +2165,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"warn\"} |~ \"(?i)$search\" [$__range]))",
+              "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"warn\"} |~ \"(?i)$search\" [$__range])) or vector(0)",
               "queryType": "instant",
               "instant": true,
               "legendFormat": "warnings"
@@ -2200,7 +2200,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"\"} |~ \"(?i)$search\" [$__range]))",
+              "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"\"} |~ \"(?i)$search\" [$__range])) or vector(0)",
               "queryType": "instant",
               "instant": true,
               "legendFormat": "unclassified"
@@ -2234,7 +2234,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "count(sum by (pod) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__range])))",
+              "expr": "count(sum by (pod) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__range]))) or vector(0)",
               "queryType": "instant",
               "instant": true,
               "legendFormat": "pods"
