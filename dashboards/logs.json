@@ -112,7 +112,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__range]))",
+          "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__range])) or vector(0)",
           "queryType": "instant",
           "instant": true,
           "legendFormat": "lines"
@@ -147,7 +147,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__range]))",
+          "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__range])) or vector(0)",
           "queryType": "instant",
           "instant": true,
           "legendFormat": "errors"
@@ -188,7 +188,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"warn\"} |~ \"(?i)$search\" [$__range]))",
+          "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"warn\"} |~ \"(?i)$search\" [$__range])) or vector(0)",
           "queryType": "instant",
           "instant": true,
           "legendFormat": "warnings"
@@ -223,7 +223,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"\"} |~ \"(?i)$search\" [$__range]))",
+          "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"\"} |~ \"(?i)$search\" [$__range])) or vector(0)",
           "queryType": "instant",
           "instant": true,
           "legendFormat": "unclassified"
@@ -257,7 +257,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "count(sum by (pod) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__range])))",
+          "expr": "count(sum by (pod) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__range]))) or vector(0)",
           "queryType": "instant",
           "instant": true,
           "legendFormat": "pods"

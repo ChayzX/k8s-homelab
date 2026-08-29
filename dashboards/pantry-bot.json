@@ -1,7 +1,7 @@
 {
   "uid": "homelab-pantry-bot",
   "title": "Pantry Bot — Health & Usage",
-  "description": "Health and usage of the pantry-bot Twitch bot (namespace pantry-bot) at a glance: is it down (desired vs ready replicas, pod uptime), restarting (restart count), or erroring (always-error-scoped Loki panels)? Resource panels plot actual usage against the configured limits; log panels use promtail's extracted `level` label. There is no application-level exporter for this app (no /health, no prom-client), so readiness/uptime/restarts are the only Kubernetes-visible health signals — Twitch auth, SQLite and tunnel health only show up indirectly in the logs.",
+  "description": "Health and usage of the pantry-bot Twitch bot. This dashboard is deliberately scoped to the bot container; the Cloudflare connector has its own dashboard. There is no application-level exporter for this app (no /health, no prom-client), so readiness/uptime/restarts are the only Kubernetes-visible health signals.",
   "tags": ["homelab", "k3s", "pantry-bot"],
   "timezone": "browser",
   "editable": true,
@@ -37,14 +37,14 @@
       {
         "name": "pod",
         "label": "Pod",
-        "description": "Drills into one pod when a Deployment briefly has two during a Recreate rollout. Both containers (bot, cloudflared) share the pod's namespace label.",
+        "description": "Drills into the bot pod when a Deployment briefly has two during a Recreate rollout.",
         "type": "query",
         "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-        "definition": "label_values({namespace=\"pantry-bot\"}, pod)",
+        "definition": "label_values({namespace=\"pantry-bot\", container=\"bot\"}, pod)",
         "query": {
           "label": "pod",
           "refId": "LokiVariableQueryEditor-VariableQuery",
-          "stream": "{namespace=\"pantry-bot\"}",
+          "stream": "{namespace=\"pantry-bot\", container=\"bot\"}",
           "type": 1
         },
         "refresh": 2,
@@ -124,7 +124,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"pantry-bot\"}[24h])) or vector(0)",
+          "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"pantry-bot\", container=\"bot\"}[24h])) or vector(0)",
           "legendFormat": "restarts"
         }
       ],
@@ -156,20 +156,20 @@
       "id": 3,
       "type": "stat",
       "title": "Replicas — Desired vs Ready",
-      "description": "kube_deployment_spec_replicas vs kube_deployment_status_replicas_available for both Deployments in the namespace. With strategy: Recreate and a single replica each, ready < desired means the replacement pod has not come up after the old one released its RWO PVC — that is what 'bot is down' looks like from Kubernetes' point of view.",
+      "description": "kube_deployment_spec_replicas vs kube_deployment_status_replicas_available for pantry-bot. With strategy: Recreate and a single RWO SQLite PVC, ready < desired means the replacement pod has not come up after the old one released its volume.",
       "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "kube_deployment_spec_replicas{namespace=\"pantry-bot\"}",
+          "expr": "kube_deployment_spec_replicas{namespace=\"pantry-bot\", deployment=\"pantry-bot\"}",
           "legendFormat": "{{deployment}} desired"
         },
         {
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "kube_deployment_status_replicas_available{namespace=\"pantry-bot\"}",
+          "expr": "kube_deployment_status_replicas_available{namespace=\"pantry-bot\", deployment=\"pantry-bot\"}",
           "legendFormat": "{{deployment}} ready"
         }
       ],
@@ -197,7 +197,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum(count_over_time({namespace=\"pantry-bot\", pod=~\"$pod\", level=\"error\"} [$__range]))",
+          "expr": "sum(count_over_time({namespace=\"pantry-bot\", container=\"bot\", pod=~\"$pod\", level=\"error\"} [$__range]))",
           "queryType": "instant",
           "instant": true,
           "legendFormat": "errors"
@@ -239,26 +239,26 @@
       "id": 5,
       "type": "timeseries",
       "title": "Memory Working Set vs Limit / Request — per container",
-      "description": "Solid = actual working set (the number the cgroup OOM killer compares against, from cAdvisor container_memory_working_set_bytes). Dashed = configured limit, dotted = request. bot: 256Mi limit / 128Mi request; cloudflared: 128Mi / 64Mi. The 256Mi limit is the hard ceiling — a container at its limit is OOM-killed outright (pods cannot swap on cgroup v2).",
+      "description": "Solid = actual working set (the number the cgroup OOM killer compares against, from cAdvisor container_memory_working_set_bytes). Dashed = configured limit, dotted = request. The bot has a 256Mi limit and 128Mi request.",
       "gridPos": { "h": 9, "w": 12, "x": 0, "y": 6 },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (container) (container_memory_working_set_bytes{namespace=\"pantry-bot\", container!=\"\", container!=\"POD\"})",
+          "expr": "sum(container_memory_working_set_bytes{namespace=\"pantry-bot\", container=\"bot\"})",
           "legendFormat": "{{container}} working set"
         },
         {
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (container) (kube_pod_container_resource_limits{namespace=\"pantry-bot\", resource=\"memory\"})",
+          "expr": "sum(kube_pod_container_resource_limits{namespace=\"pantry-bot\", container=\"bot\", resource=\"memory\"})",
           "legendFormat": "{{container}} LIMIT"
         },
         {
           "refId": "C",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (container) (kube_pod_container_resource_requests{namespace=\"pantry-bot\", resource=\"memory\"})",
+          "expr": "sum(kube_pod_container_resource_requests{namespace=\"pantry-bot\", container=\"bot\", resource=\"memory\"})",
           "legendFormat": "{{container}} request"
         }
       ],
@@ -296,20 +296,20 @@
       "id": 6,
       "type": "timeseries",
       "title": "CPU Usage vs Limit — per container (cores)",
-      "description": "Solid = rate of container_cpu_usage_seconds_total from cAdvisor. Dashed = configured CPU limit. bot: 250m; cloudflared: 200m. Values are CPU cores (1.0 = one full core of the 16 available).",
+      "description": "Solid = rate of container_cpu_usage_seconds_total from cAdvisor. Dashed = the bot's configured 250m CPU limit. Values are CPU cores.",
       "gridPos": { "h": 9, "w": 12, "x": 12, "y": 6 },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (container) (rate(container_cpu_usage_seconds_total{namespace=\"pantry-bot\", container!=\"\", container!=\"POD\"}[5m]))",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"pantry-bot\", container=\"bot\"}[5m]))",
           "legendFormat": "{{container}} usage"
         },
         {
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (container) (kube_pod_container_resource_limits{namespace=\"pantry-bot\", resource=\"cpu\"})",
+          "expr": "sum(kube_pod_container_resource_limits{namespace=\"pantry-bot\", container=\"bot\", resource=\"cpu\"})",
           "legendFormat": "{{container}} LIMIT"
         }
       ],
@@ -355,7 +355,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum by (level) (count_over_time({namespace=\"pantry-bot\", pod=~\"$pod\", level=~\"$level\"} [$__auto]))",
+          "expr": "sum by (level) (count_over_time({namespace=\"pantry-bot\", container=\"bot\", pod=~\"$pod\", level=~\"$level\"} [$__auto]))",
           "queryType": "range",
           "legendFormat": "{{level}}"
         }
@@ -411,14 +411,14 @@
       "id": 8,
       "type": "bargauge",
       "title": "Top Error Sources (this range)",
-      "description": "Always error-scoped (ignores the Severity variable, honors the Pod variable). topk(5) by pod/container of count_over_time(level=\"error\") — with only bot + cloudflared in the namespace, a bar here means a specific container is erroring. See the ERROR stat at the top for the total.",
+      "description": "Always error-scoped (ignores the Severity variable, honors the Pod variable). This dashboard is scoped to the bot container; see the Cloudflare Tunnel dashboard for connector errors.",
       "gridPos": { "h": 9, "w": 12, "x": 12, "y": 16 },
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "topk(5, sum by (pod, container) (count_over_time({namespace=\"pantry-bot\", pod=~\"$pod\", level=\"error\"} [$__range])))",
+          "expr": "topk(5, sum by (pod, container) (count_over_time({namespace=\"pantry-bot\", container=\"bot\", pod=~\"$pod\", level=\"error\"} [$__range])))",
           "queryType": "instant",
           "instant": true,
           "legendFormat": "{{pod}}/{{container}}"
@@ -449,15 +449,15 @@
     {
       "id": 9,
       "type": "logs",
-      "title": "Live Logs (bot + cloudflared)",
-      "description": "All pantry-bot logs, filtered by the Pod and Severity variables: {namespace=\"pantry-bot\", pod=~\"$pod\", level=~\"$level\"}. Node.js console format for the bot container; cloudflared has its own plain-text format. Click a line to expand its labels.",
+      "title": "Pantry Bot Logs",
+      "description": "Bot log stream, filtered by the Pod and Severity variables. Click a line to expand its labels.",
       "gridPos": { "h": 13, "w": 24, "x": 0, "y": 25 },
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "{namespace=\"pantry-bot\", pod=~\"$pod\", level=~\"$level\"}",
+          "expr": "{namespace=\"pantry-bot\", container=\"bot\", pod=~\"$pod\", level=~\"$level\"}",
           "queryType": "range",
           "maxLines": 2000
         }

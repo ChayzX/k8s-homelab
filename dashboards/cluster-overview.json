@@ -197,7 +197,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "max(kube_node_status_condition{condition=\"Ready\", status=\"true\"})",
+          "expr": "max(kube_node_status_condition{condition=\"Ready\", status=\"true\"}) or vector(0)",
           "legendFormat": "Ready"
         }
       ],

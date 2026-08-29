@@ -27,6 +27,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Validate dashboard JSON and generated ConfigMap
+        run: scripts/validate-grafana-dashboards.sh
+
       - name: Install cloudflared
         env:
           CLOUDFLARED_VERSION: "2026.7.3"
