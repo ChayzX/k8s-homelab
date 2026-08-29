@@ -137,6 +137,33 @@ spec:
             # publishes it on 3002 to match the Compose-era host port.
             - name: GF_SERVER_HTTP_PORT
               value: "3000"
+            - name: GF_SERVER_DOMAIN
+              value: grafana.greeniespantry.uk
+            - name: GF_SERVER_ROOT_URL
+              value: https://grafana.greeniespantry.uk/
+            - name: GF_SECURITY_COOKIE_SECURE
+              value: "true"
+            - name: GF_SECURITY_COOKIE_SAMESITE
+              value: lax
+            # Authentik supplies the authenticated username on every proxied
+            # request. Login-token mode is intentionally disabled: the
+            # persisted Grafana database may not contain a matching
+            # user_auth_token after a session/database migration, which
+            # otherwise causes the frontend to loop on token rotation.
+            - name: GF_AUTH_PROXY_ENABLED
+              value: "true"
+            - name: GF_AUTH_PROXY_HEADER_NAME
+              value: X-authentik-username
+            - name: GF_AUTH_PROXY_HEADER_PROPERTY
+              value: username
+            - name: GF_AUTH_PROXY_AUTO_SIGN_UP
+              value: "true"
+            - name: GF_AUTH_PROXY_DEFAULT
+              value: "true"
+            - name: GF_AUTH_DISABLE_LOGIN_FORM
+              value: "true"
+            - name: GF_AUTH_PROXY_ENABLE_LOGIN_TOKEN
+              value: "false"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
