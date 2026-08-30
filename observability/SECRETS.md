@@ -73,6 +73,38 @@ kubectl -n observability create secret generic grafana-admin \
 
 ---
 
+## 3. `grafana-cloud-loki` — Grafana Cloud Loki push credential (promtail)
+
+Consumed by the promtail DaemonSet (`promtail.yaml`) as a mounted file, and
+referenced from `promtail-config.yaml`'s second `clients` entry via
+`password_file: /etc/promtail/secrets/grafana-cloud-loki-password` — kept out
+of the ConfigMap so the credential never sits in plaintext config.
+
+**This Secret MUST exist before `promtail.yaml` is applied**, or the pod sits
+in `CreateContainerConfigError` (the volume references it directly, not
+`optional: true`).
+
+```bash
+kubectl -n observability create secret generic grafana-cloud-loki \
+  --from-literal=grafana-cloud-loki-password='<the glc_... access token>'
+```
+
+The key must be exactly `grafana-cloud-loki-password` — that's the filename
+promtail's config expects under the mount. Username (`1769810`) and the push
+URL (`https://logs-prod-036.grafana.net/loki/api/v1/push`) are not secret and
+are already in `promtail-config.yaml` directly.
+
+This is currently a **dual-write**: promtail sends to both the local `loki`
+service and Grafana Cloud. Once Grafana Cloud is confirmed receiving data
+(check `{job=~".+"}` in Grafana Cloud's Explore, or the local Grafana's Loki
+datasource repointed at `logs-prod-036.grafana.net`), the local `loki` client
+entry can be removed and the in-cluster Loki Deployment decommissioned to
+actually free its RAM and stop the HDD-compaction latency noted in
+`promtail-config.yaml`. That cutover is a separate, deliberate follow-up, not
+done here.
+
+---
+
 ## Checklist before applying the Deployments
 
 ```bash

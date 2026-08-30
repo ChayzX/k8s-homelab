@@ -83,6 +83,23 @@ data:
           min_period: 500ms
           max_period: 5m
           max_retries: 10
+      # Dual-write to Grafana Cloud (free tier: 50GB/mo, 14d retention --
+      # measured local ingest is ~1.3GB/mo, comfortable margin). This is
+      # step 1 of moving Loki off-host: verify data actually lands here
+      # before removing the local `loki` client above and decommissioning
+      # the in-cluster Loki deployment (which is what would actually free
+      # its ~176Mi RAM and stop the HDD-compaction pain point noted above).
+      # Password comes from the grafana-cloud-loki Secret, mounted as a
+      # file rather than templated into this ConfigMap so the credential
+      # never sits in plaintext config.
+      - url: https://logs-prod-036.grafana.net/loki/api/v1/push
+        basic_auth:
+          username: "1769810"
+          password_file: /etc/promtail/secrets/grafana-cloud-loki-password
+        backoff_config:
+          min_period: 500ms
+          max_period: 5m
+          max_retries: 10
 
     scrape_configs:
 

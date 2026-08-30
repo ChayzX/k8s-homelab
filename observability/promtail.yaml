@@ -94,7 +94,7 @@ spec:
         app.kubernetes.io/name: promtail
         app.kubernetes.io/part-of: observability
       annotations:
-        homelab.local/config-revision: "1"
+        homelab.local/config-revision: "2"
     spec:
       serviceAccountName: promtail-sa
       automountServiceAccountToken: true
@@ -195,6 +195,12 @@ spec:
             - name: host-journal
               mountPath: /var/log/journal
               readOnly: true
+            # Grafana Cloud Loki push credential (see promtail-config.yaml's
+            # second `clients` entry). Secret, not the ConfigMap, so the
+            # password never sits in plaintext config.
+            - name: grafana-cloud-loki-secret
+              mountPath: /etc/promtail/secrets
+              readOnly: true
       volumes:
         - name: config
           configMap:
@@ -219,6 +225,9 @@ spec:
           hostPath:
             path: /var/log/journal
             type: Directory
+        - name: grafana-cloud-loki-secret
+          secret:
+            secretName: grafana-cloud-loki
 ---
 apiVersion: v1
 kind: Service
