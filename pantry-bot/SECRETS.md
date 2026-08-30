@@ -107,24 +107,29 @@ resulting pull Secret will silently be empty. In that case use the explicit
 
 ---
 
-## 4. `pantry-bot-discord-alerts` — optional operational alert webhook
+## 4. `pantry-bot-discord-alerts` — optional operational alerts (Discord bot DM)
 
 Not required — `envFrom` references it with `optional: true`, and
 `src/discordAlert.ts` no-ops gracefully (with a console log) if unset. Create
-it only if you want fatal errors, lost Twitch/EventSub connections, and
-broken channel-point setup posted to a Discord channel (typically a second
-server's mod/ops channel — separate from k3s-watcher's personal DM alerts,
-which cover cluster/pod health, not bot-internal application state).
+it only if you want fatal errors, lost Twitch chat/EventSub connections, and
+broken channel-point setup DMed to you or your mods — bot-internal
+application state, distinct from k3s-watcher's cluster/pod health alerts.
+
+Reuses the **same Discord bot** (bot token) that `observability/k3s-watcher`
+already DMs alerts with — no separate webhook. See
+`observability/k3s-watcher/watcher.env`'s `DISCORD_BOT_TOKEN` on the host for
+the existing token.
 
 ```bash
 kubectl -n pantry-bot create secret generic pantry-bot-discord-alerts \
-  --from-literal=DISCORD_ALERT_WEBHOOK_URL='https://discord.com/api/webhooks/REPLACE/ME'
+  --from-literal=DISCORD_BOT_TOKEN='<same token as k3s-watcher DISCORD_BOT_TOKEN>' \
+  --from-literal=DISCORD_ALERT_USER_IDS='<comma-separated Discord user IDs to DM>'
 ```
 
-Key must be exactly `DISCORD_ALERT_WEBHOOK_URL` — that's what `discordAlert.ts`
-reads. Create the webhook in the target channel's settings (Integrations ->
-Webhooks -> New Webhook -> Copy URL) in whichever Discord server should
-receive these.
+Keys must be exactly `DISCORD_BOT_TOKEN` and `DISCORD_ALERT_USER_IDS` — that's
+what `discordAlert.ts` reads. `DISCORD_ALERT_USER_IDS` accepts one or more
+IDs (comma-separated) so both the homelab owner and the streamer/mods can be
+DMed independently of k3s-watcher's own recipient list.
 
 ---
 
