@@ -413,6 +413,9 @@ data:
       # than scope-creeping this addition.
       - job_name: systemd-journal
         journal:
+          # Debian keeps the active volatile journal here; the persistent
+          # directory alone only contains rotated history on this host.
+          path: /run/log/journal
           max_age: 12h
           labels:
             job: systemd-journal
