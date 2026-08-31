@@ -195,6 +195,9 @@ spec:
             - name: host-journal
               mountPath: /var/log/journal
               readOnly: true
+            - name: runtime-journal
+              mountPath: /run/log/journal
+              readOnly: true
       volumes:
         - name: config
           configMap:
@@ -218,6 +221,10 @@ spec:
         - name: host-journal
           hostPath:
             path: /var/log/journal
+            type: Directory
+        - name: runtime-journal
+          hostPath:
+            path: /run/log/journal
             type: Directory
 ---
 apiVersion: v1
