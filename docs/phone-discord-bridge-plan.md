@@ -1,9 +1,10 @@
 # Phone → Discord Voice Bridge — Plan & Feasibility
 
-**Status: BLOCKED at Phase 1 (feasibility gate).** Implementation has not
-started. This document is Phase 0 discovery plus the Phase 1 feasibility
-spike required before any code is written (see the coordinator brief this
-plan implements).
+**Status: Phase 1.5 — running the falsifiable spike.** The original
+feasibility blocker (below) has been revised by follow-up research; owner
+decisions have unblocked a narrower scope. See "Decision log" for what's
+settled and what's next. Implementation of the actual bridge has not
+started — only a diagnostic spike script exists so far (`phone-bridge/spike/`).
 
 ## Phase 0 — Repository & environment discovery
 
@@ -156,7 +157,86 @@ No Discord bot token, secret, or channel ID has been created or requested.
   gateway connection; keeping them separate keeps opsbot's current, narrow
   attack surface unchanged.
 
+## Decision log (post-blocker)
+
+The owner chose **alternative 3 — build the receive path ourselves**
+(ChayzX/k8s-homelab#173). Two follow-up findings and decisions since then:
+
+1. **New Discord Application, not a reused one.** The bridge runs under its
+   own bot token/application in the Discord Developer Portal, separate from
+   `opsbot`'s and `jmusicbot`'s. Consistent with the Phase 0 conclusion
+   above (different network posture, separate service).
+2. **Must be free to run.** Discord side already is (existing k3s cluster,
+   free gateway API). Telephony/SIP cost is an open question for the
+   Telephony Agent phase — flagged, not yet resolved; no billable resource
+   created.
+3. **Revised feasibility finding (escalated research, Discord Protocol
+   Agent, `claude-opus-5`):** the original "no library does receive-side
+   DAVE decryption" verdict was too pessimistic **specifically for `davey`**
+   (the dependency `discord.py`'s existing tentative *send* support already
+   uses). `davey`'s `DaveSession.decrypt(user_id, media_type, packet)` is a
+   real, non-stub implementation verified against its Rust source
+   (`davey/src/session.rs`, `davey/src/cryptor/decryptor.rs`), and per-sender
+   ratchet keys are derived automatically for *every* group member the
+   moment the bot joins the call — because deriving other members' keys is
+   inherent to correctly joining an MLS group at all (confirmed against the
+   DAVE whitepaper: "any member of the group can derive the key for any
+   sender"). `discord.py` never calls `decrypt()` only because it has no
+   incoming-UDP receive loop (a 2021 decision to keep voice receive out of
+   core, three years before DAVE existed) — not because decryption itself
+   is unsolved.
+
+   **What's actually missing is ordinary networking code, not
+   cryptography:** a UDP receive loop for incoming RTP, SSRC→user_id
+   mapping (from voice-gateway SPEAKING events), RTP header stripping
+   before handing the payload to `davey.decrypt()`, and Opus decode of the
+   plaintext it returns — plus a subclass/hook into discord.py's
+   semi-private `voice_client._connection.dave_session` (or a fully custom
+   voice client as fallback). Full agent report:
+   ChayzX/k8s-homelab#173 (comment).
+
+4. **Owner decisions on the revised scope (both confirmed, proceed):**
+   - Proceed on the reduced scope — receive-loop plumbing on top of
+     `davey`'s already-working `decrypt()`, not a from-scratch MLS/crypto
+     implementation.
+   - Accept the security/consent posture: this bridge decrypts other
+     Discord participants' audio at a point we control, using `davey` — a
+     community reimplementation of DAVE **not covered by** the Trail of
+     Bits audit Discord commissioned for its own client and for `libdave`
+     itself. That undoes DAVE's core guarantee (intermediaries can't listen
+     in) for any call the bridge is in, which affects the three existing
+     Discord users too. Owner accepted this explicitly, without a
+     separate pre-notification requirement to those users.
+
+## Phase 1.5 — falsifiable spike (in progress)
+
+Per the Discord Protocol Agent's recommendation, the smallest test that can
+confirm or kill the revised finding, in order:
+
+1. Connect a bot to a real DAVE voice channel via `discord.py`, then read
+   `voice_client._connection.dave_session.get_user_ids()` /
+   `get_decryption_stats(other_user_id)` — if another real participant's
+   ratchet state already shows up, the headline finding is confirmed with
+   **zero MLS code written**.
+2. If step 1 succeeds: capture one raw incoming RTP packet from that user,
+   strip the RTP header, call
+   `dave_session.decrypt(other_user_id, davey.MediaType.audio, payload)` —
+   success is real plaintext Opus bytes back.
+
+A diagnostic script for this lives at `phone-bridge/spike/dave_receive_probe.py`
+(see its README for how to run it). **It has not been run against a real
+Discord voice channel yet** — discord.py's DAVE-receive internals are
+new/undocumented, so the script is defensive (dumps attribute names/types it
+finds rather than assuming exact private API shapes) and needs a real test
+run to produce evidence, not just a design read. This repo/session has no
+Discord bot token and no confirmed direct-UDP network path to Discord's
+voice servers, so the actual live run needs to happen where both of those
+are available (see the spike README).
+
 ## Next step
 
-Awaiting a decision from the repo owner on which alternative (1–4 above) to
-pursue before any Phase 2 design or Phase 3 implementation work begins.
+Run `phone-bridge/spike/dave_receive_probe.py` against a real test Discord
+server (a throwaway bot application, not opsbot's/jmusicbot's) with at least
+one other real participant present and speaking, and report the output back.
+That result decides whether Phase 2 design proceeds on the `davey`-based
+plumbing plan above, or whether the finding needs revisiting again.
