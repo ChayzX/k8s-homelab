@@ -159,8 +159,12 @@ class ProbeClient(discord.Client):
             return
         print(f"  session.get_user_ids() = {user_ids}")
 
-        other_ids = [m.id for m in other_members]
-        confirmed_ids = [uid for uid in other_ids if uid in user_ids]
+        # get_user_ids() has been observed returning string snowflakes while
+        # decrypt()/get_decryption_stats() are typed to take int -- normalize
+        # to str for the membership check, but keep confirmed_ids as the
+        # original discord.py ints (member.id) for those downstream calls.
+        user_ids_str = {str(uid) for uid in user_ids}
+        confirmed_ids = [m.id for m in other_members if str(m.id) in user_ids_str]
         if not confirmed_ids:
             print("INCONCLUSIVE: no other real participant's user ID appeared in "
                   "get_user_ids(). Either no one else was in the channel in time, "

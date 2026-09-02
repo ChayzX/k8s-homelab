@@ -224,14 +224,25 @@ confirm or kill the revised finding, in order:
    success is real plaintext Opus bytes back.
 
 A diagnostic script for this lives at `phone-bridge/spike/dave_receive_probe.py`
-(see its README for how to run it). **It has not been run against a real
-Discord voice channel yet** — discord.py's DAVE-receive internals are
-new/undocumented, so the script is defensive (dumps attribute names/types it
-finds rather than assuming exact private API shapes) and needs a real test
-run to produce evidence, not just a design read. This repo/session has no
-Discord bot token and no confirmed direct-UDP network path to Discord's
-voice servers, so the actual live run needs to happen where both of those
-are available (see the spike README).
+(see its README for how to run it).
+
+**First real run (2026-09-01, `phone-bridge/spike/RESULTS.md`):** voice
+connect and the DAVE handshake succeeded; `dave_session` was found exactly
+where expected (`voice_client._connection.dave_session`, `ready=true,
+status=ACTIVE`); `get_user_ids()` returned two IDs — the bot's own and one
+other real participant's. The script itself printed INCONCLUSIVE, but that
+was a bug in the script, not a real negative: `get_user_ids()` returns
+string snowflakes while the comparison used `member.id` (an int), so the
+membership check could never match. The raw session data already showed
+the other participant's key present after group join — consistent with the
+finding under test — but step 1 didn't reach `get_decryption_stats()`
+before returning, and step 2 (real packet decrypt) never ran because step 1
+short-circuited. **Fixed** (normalize to string for the membership check,
+keep the confirmed IDs as ints for the calls that need them —
+`decrypt()`/`get_decryption_stats()` are int-typed per davey's stubs);
+`PyNaCl` also added to `requirements.txt` (discord.py's voice code hard-requires
+it, the first run had to install it manually to get past a `RuntimeError`).
+**Needs a clean re-run** to get a real step 1 PASS and reach step 2.
 
 ## Next step
 
