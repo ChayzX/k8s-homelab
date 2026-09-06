@@ -1,0 +1,40 @@
+# Litestream config for pantry-bot's SQLite database (STEP A of the
+# cross-node failover migration — see pantry-bot-infra's docs/ARCHITECTURE.md
+# and docs/DEPLOYMENT-PIPELINE-IMPACT.md for the full picture).
+#
+# This is additive-only: it makes the litestream sidecar in 40-deployment.yaml
+# continuously ship a backup of pantry.db to R2. It does NOT change where the
+# live database lives — that's still the `pantry-bot-data` PVC (30-pvc.yaml).
+#
+# STEP B (deliberately NOT done here): swapping the PVC for an emptyDir +
+# restore-on-start, which is what actually lets this pod reschedule onto a
+# second node. Sequenced separately, after this replica has been verified
+# to actually work (`litestream restore` tested against real data) — this
+# is explicitly called out in 30-pvc.yaml as "the one PVC in the whole
+# migration where corruption is unrecoverable," so the backup has to be
+# proven before the safety net it provides is relied on.
+#
+# Bucket/endpoint are not secrets — the credentials that authorize writing to
+# them are (see SECRETS.md, `pantry-bot-litestream`).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pantry-bot-litestream-config
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: pantry-bot
+    app.kubernetes.io/part-of: homelab
+data:
+  litestream.yml: |
+    dbs:
+      - path: /data/pantry.db
+        replicas:
+          - type: s3
+            bucket: pantry-bot-backups
+            path: pantry-bot/pantry.db
+            endpoint: https://0d22ee71e5473142b1678cb7005f80f8.r2.cloudflarestorage.com
+            force-path-style: true
+            # access-key-id / secret-access-key are NOT set here — litestream
+            # reads them from the LITESTREAM_ACCESS_KEY_ID /
+            # LITESTREAM_SECRET_ACCESS_KEY env vars automatically (see the
+            # litestream container's env in 40-deployment.yaml).

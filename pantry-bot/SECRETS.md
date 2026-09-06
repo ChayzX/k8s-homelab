@@ -3,7 +3,7 @@
 No secret values live in this repo. Create these imperatively on the node,
 **before** applying the Deployments.
 
-Three Secrets are needed here. Deploy pipeline is GitHub Actions
+Four Secrets are needed here (a fifth is optional). Deploy pipeline is GitHub Actions
 (`.github/workflows/publish.yml` + `deploy.yml` in the pantry-bot repo,
 manual-click `workflow_dispatch` for deploy) — GitHub Actions secrets
 (`CF_ACCESS_CLIENT_ID`/`SECRET`, `KUBE_CONFIG_PANTRYBOT`) live in the GitHub
@@ -107,7 +107,35 @@ resulting pull Secret will silently be empty. In that case use the explicit
 
 ---
 
-## 4. `pantry-bot-discord-alerts` — optional operational alert webhook
+## 4. `pantry-bot-litestream` — R2 credentials for continuous SQLite backup
+
+New as of the litestream sidecar (`25-configmap-litestream.yaml`,
+`40-deployment.yaml`) — Step A of the cross-node failover migration, see
+that ConfigMap's header comment. Without this Secret the pod fails to start
+(`CreateContainerConfigError`), by design — the sidecar has nothing useful
+to do without R2 credentials, so failing loudly beats silently not backing
+up.
+
+```bash
+kubectl -n pantry-bot create secret generic pantry-bot-litestream \
+  --from-literal=LITESTREAM_ACCESS_KEY_ID='REPLACE_ME' \
+  --from-literal=LITESTREAM_SECRET_ACCESS_KEY='REPLACE_ME'
+```
+
+Use an R2 API token scoped only to the backup bucket/path — don't reuse the
+Terraform-state token from `pantry-bot-infra` for this; different blast
+radius. Also edit `25-configmap-litestream.yaml`'s `REPLACE_ME_R2_BUCKET` /
+`REPLACE_ME_R2_ENDPOINT` before applying.
+
+Before trusting this backup: after it's been running a while, actually test
+a restore (`litestream restore` against the R2 path, into a scratch file,
+and open it) rather than assuming replication working means restoration
+works. This is the exact gap Step B's PVC cutover depends on being closed
+first.
+
+---
+
+## 5. `pantry-bot-discord-alerts` — optional operational alert webhook
 
 Not required — `envFrom` references it with `optional: true`, and
 `src/discordAlert.ts` no-ops gracefully (with a console log) if unset. Create
@@ -146,8 +174,8 @@ kubectl -n pantry-bot get pods -w
 ## Checklist before applying the Deployments
 
 ```bash
-kubectl -n pantry-bot get secret pantry-bot-twitch cloudflared-tunnel ghcr-pull-secret
+kubectl -n pantry-bot get secret pantry-bot-twitch cloudflared-tunnel ghcr-pull-secret pantry-bot-litestream
 ```
 
-All three must exist. Never commit them, never `kubectl get -o yaml` them into
-a paste.
+All four must exist (`pantry-bot-discord-alerts` is optional). Never commit
+them, never `kubectl get -o yaml` them into a paste.
