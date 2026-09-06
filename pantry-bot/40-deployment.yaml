@@ -45,9 +45,14 @@ metadata:
     app.kubernetes.io/component: bot
 spec:
   replicas: 1
-  # Recreate: RWO PVC holding a live SQLite database in WAL mode. A rolling
-  # update would overlap two writers on one DB file — the exact corruption
-  # hazard the migration plan calls out.
+  # Recreate: still only one writer allowed on the SQLite WAL file at a time.
+  # Originally this guarded against two pods sharing one RWO PVC; as of STEP B
+  # (data now lives on an emptyDir restored from R2 on every start, not a
+  # PVC -- see the restore-db initContainer and k8s-homelab-0br's follow-up)
+  # the hazard is the same but the storage underneath it changed: Recreate is
+  # what guarantees the old pod's litestream sidecar has fully stopped
+  # writing before the new pod's restore reads the replica, not just what
+  # prevents two pods mounting the same volume.
   strategy:
     type: Recreate
   selector:
@@ -65,6 +70,59 @@ spec:
       automountServiceAccountToken: false
       imagePullSecrets:
         - name: ghcr-pull-secret
+      # ===================================================================
+      # STEP B: restore-on-start (k8s-homelab-0br follow-up, see #177)
+      # ===================================================================
+      # Runs before the `bot` container starts. `data` below is an emptyDir,
+      # not a PVC -- it starts empty every time this pod is scheduled,
+      # whether that's the same node as last time or a different one after a
+      # node failure. This restore is what actually makes cross-node
+      # failover work; without it, a rescheduled pod would just start with
+      # an empty database.
+      #
+      # Verified against the real replica before this went in (not assumed
+      # from replication looking healthy): a manual `litestream restore` into
+      # a scratch file reproduced the exact same `users` row count as the
+      # live database. Restoring is fundamentally different from replicating
+      # and either can be broken independently -- see #177's discussion.
+      initContainers:
+        - name: restore-db
+          image: litestream/litestream:0.3.13
+          # -if-db-not-exists: makes this a no-op if /data/pantry.db is
+          # already present. emptyDir survives a plain container restart
+          # within the same pod (only a full pod reschedule wipes it), so
+          # without this flag a crash-loop on the bot container would
+          # re-run this restore every time and clobber whatever the running
+          # instance had already written locally with an older snapshot.
+          command:
+            - litestream
+            - restore
+            - -config
+            - /etc/litestream.yml
+            - -if-db-not-exists
+            - /data/pantry.db
+          env:
+            - name: LITESTREAM_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: pantry-bot-litestream
+                  key: LITESTREAM_ACCESS_KEY_ID
+            - name: LITESTREAM_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pantry-bot-litestream
+                  key: LITESTREAM_SECRET_ACCESS_KEY
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: litestream-config
+              mountPath: /etc/litestream.yml
+              subPath: litestream.yml
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
       # 60s (not the 30s default): give the process time to close SQLite
       # cleanly and checkpoint the WAL back into pantry.db on SIGTERM.
       terminationGracePeriodSeconds: 60
@@ -196,8 +254,8 @@ spec:
         # ===================================================================
         # litestream — continuous SQLite backup to R2 (STEP A, see
         # 25-configmap-litestream.yaml header comment for the full context).
-        # Additive only: reads the same PVC-backed /data the bot writes to,
-        # ships changes to R2. Does not change where the live DB lives.
+        # Reads the same /data the bot writes to (now an emptyDir restored by
+        # the initContainer above, as of STEP B), ships changes to R2.
         # ===================================================================
         - name: litestream
           image: litestream/litestream:0.3.13
@@ -232,9 +290,15 @@ spec:
             capabilities:
               drop: ["ALL"]
       volumes:
+        # emptyDir, not a PVC (as of STEP B, #177) -- node-local and
+        # disposable by design. The restore-db initContainer above populates
+        # it from the R2 replica on every pod start; the litestream sidecar
+        # keeps shipping changes back out continuously. This is what lets the
+        # pod actually reschedule onto a different node (a PVC using
+        # `local-path` storage is pinned to whichever node created it and
+        # would leave a rescheduled pod stuck Pending forever).
         - name: data
-          persistentVolumeClaim:
-            claimName: pantry-bot-data
+          emptyDir: {}
         - name: litestream-config
           configMap:
             name: pantry-bot-litestream-config

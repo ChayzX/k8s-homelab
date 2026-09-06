@@ -1,0 +1,55 @@
+# RETIRED as of STEP B (#177) -- kept for history, not applied.
+#
+# The `.retired` extension is deliberate: `kubectl apply -f pantry-bot/` (or
+# any *.yaml glob) silently skips this file now, so there's no risk of
+# accidentally re-creating a claim the Deployment no longer references.
+#
+# The bot's Deployment (40-deployment.yaml) now uses an emptyDir restored
+# from the R2/Litestream replica on every start, not this PVC -- that's what
+# lets the pod actually reschedule onto a different node. See that file's
+# STEP B comments and #177 for the full migration record.
+#
+# IMPORTANT: the PVC this file used to create (`pantry-bot-data`) may still
+# exist in the cluster with real historical data on it, orphaned now that
+# nothing references it. Do NOT `kubectl delete pvc pantry-bot-data` casually
+# -- leave it as an extra safety net until the emptyDir+restore path has been
+# running in production long enough to fully trust (a real failover test,
+# not just a manual restore check). Deleting it destroys that fallback
+# permanently and it cannot be recreated from anywhere else.
+#
+# -----------------------------------------------------------------------------
+# Original file content and rationale below, preserved as-is.
+# -----------------------------------------------------------------------------
+#
+# Persistent storage for pantry-bot's SQLite database.
+#
+# Replaces the named Docker volume `pantry-bot_pantry-data` mounted at /data.
+#
+# This is the one PVC in the whole migration where corruption is unrecoverable
+# — it holds live user data with no upstream source to re-derive it from.
+# Two properties protect it:
+#
+#   1. `strategy: Recreate` on the Deployment. SQLite in WAL mode tolerates
+#      multiple readers/writers only through a shared filesystem lock; two pods
+#      on the same volume across a rolling update is exactly the scenario that
+#      produces a corrupt WAL. Recreate guarantees the old pod is fully gone.
+#   2. ReadWriteOnce + single node. The second pod could not mount it anyway.
+#
+# The directory contains pantry.db plus pantry.db-wal and pantry.db-shm while
+# the DB is open. All three must be copied together, from a STOPPED database —
+# copying pantry.db alone from a running bot yields a DB missing every committed
+# transaction still in the WAL.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pantry-bot-data
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: pantry-bot
+    app.kubernetes.io/part-of: homelab
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
