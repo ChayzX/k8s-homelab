@@ -109,6 +109,8 @@ Docker Desktop holds `3001`/`3002`/`25565` on the host until each old container 
 
 Every stateful app uses `Deployment` + `strategy: Recreate` + a `ReadWriteOnce` PVC — never `StatefulSet`, never `RollingUpdate` on a stateful app. This is the core safety pattern of the whole design: `Recreate` guarantees the old pod is fully terminated and its volume released *before* the replacement pod mounts the same PVC, which is what prevents two processes from ever opening the same SQLite file, Loki WAL, Prometheus TSDB, or embedded MariaDB datadir at once.
 
+**One deliberate exception as of #177/#180**: `pantry-bot` no longer uses a PVC at all — its storage is now an `emptyDir`, restored from a Litestream/R2 replica by an `initContainer` on every start. This happened specifically because the cluster grew a second node (`pantry-bot-oracle`, arm64, `chayzx/pantry-bot-infra`) and a `local-path` PVC pins a pod to whichever node created it, which would have made cross-node failover impossible. `Recreate` is still used, for the same single-writer reason as always — it now protects the Litestream sidecar's stop/restore handoff instead of a shared PVC mount. See the `pantry-bot` namespace section below and `40-deployment.yaml`'s own comments for the full detail. This pattern (emptyDir + external-replica restore instead of a PVC) is worth considering for any other stateful app that might someday need to run across both nodes — it isn't pantry-bot-specific in principle, just the only one that's needed it so far.
+
 ### `jmusicbot` namespace
 
 **Live status: fully migrated and verified, as of this writing.** Both Deployments `1/1 Running`. `jmusicbot`'s logs confirm `serversettings.json loaded`, `YouTube access token refreshed successfully`, `Login Successful!`, `Finished Loading!` — the PVC data migration and the OAuth token both survived, no Discord re-auth was needed. `jmusicbot-release-notifier`'s log shows `Last seen release: v0.7.0`, matching `last_release.json` on the pre-migration host path — its state survived too. Old Docker containers for this stack are stopped and no longer present in `docker ps`.
@@ -122,16 +124,16 @@ Every stateful app uses `Deployment` + `strategy: Recreate` + a `ReadWriteOnce` 
 
 ### `pantry-bot` namespace
 
-**Live status: applied and live, cut over 2026-08-11.** All 6 manifests applied, both Deployments `1/1 Running`, real production data migrated (zero-downtime `better-sqlite3` backup from the live Docker container), Cloudflare Tunnel fully repointed at the k8s Service — see the top status section for the full incident/fix narrative. Old Docker containers `pantry-bot-bot-1` and `pantry-bot-watchtower-1` are still running but should **not** stay up as a "safe fallback" — see the top status section: pantry-bot is a Twitch bot with its own outbound connection, not gated by inbound tunnel routing like the HTTP-only oauth/overlay servers, so both old and new instances have been live and connected simultaneously (a real bug, user asked to stop them). `pantry-bot-cloudflared-1` has been stopped (no longer needed once the k8s `cloudflared` connector was verified serving all four tunnel hostnames).
+**Live status: applied and live, cut over 2026-08-11; storage migrated PVC→emptyDir 2026-09-06 (#177/#180).** All manifests applied, `pantry-bot` and one `cloudflared` replica per node `Running`, real production data migrated originally (zero-downtime `better-sqlite3` backup from the live Docker container) and again onto the new storage model, verified with a real cross-node failover test onto `pantry-bot-oracle` (row counts matched exactly). Cloudflare Tunnel fully repointed at the k8s Service. Old Docker containers referenced below (`pantry-bot-bot-1` etc.) are long gone — that paragraph is left for historical record of the original migration, not current state.
 
-| Workload | Image | Ports | Requests/Limits | UID | SA (API access?) | PVC |
+| Workload | Image | Ports | Requests/Limits | UID | SA (API access?) | Storage |
 |---|---|---|---|---|---|---|
-| `pantry-bot` (Deployment, Recreate) | `ghcr.io/chayzx/pantry-bot:latest` (**private**, needs `imagePullSecrets: ghcr-pull-secret`) | 3000 (http), 8080 (ws) | 100m/250m CPU, 128Mi/256Mi mem | `1000:1000` (verified) | `pantry-bot-sa`, no API access | `pantry-bot-data` (1Gi, holds `pantry.db` SQLite + WAL) |
-| `cloudflared` (Deployment, RollingUpdate — safe here, stateless) | `cloudflare/cloudflared:latest` | 2000 (metrics/`/ready`) | 50m/200m CPU, 64Mi/128Mi mem | `65532:65532` (nonroot, verified) | `cloudflared-sa`, no API access | none |
+| `pantry-bot` (Deployment, Recreate) | `ghcr.io/chayzx/pantry-bot:latest` (**private**, needs `imagePullSecrets: ghcr-pull-secret`; multi-arch amd64+arm64 as of `pantry-bot#128` — see #127 for why this matters) | 3000 (http), 8080 (ws) | 100m/250m CPU, 128Mi/256Mi mem | `1000:1000` (verified) | `pantry-bot-sa`, no API access | `emptyDir`, restored from R2/Litestream by `restore-db` initContainer on every start — **not** a PVC as of #177/#180. `pantry-bot-data` PVC still exists, orphaned, kept as a fallback — see `30-pvc.yaml.retired`. |
+| `cloudflared` (Deployment, RollingUpdate — safe here, stateless) | `cloudflare/cloudflared:latest` | 2000 (metrics/`/ready`) | 50m/200m CPU, 64Mi/128Mi mem | `65532:65532` (nonroot, verified) | `cloudflared-sa`, no API access | none. 2 replicas, pod anti-affinity (one per node) as of #178/#179 — was 1 replica when this table was first written. |
 
-**`pantry-bot` carries Keel annotations** (`keel.sh/policy: force`, `keel.sh/trigger: poll`, `keel.sh/pollSchedule: "@every 5m"`) reproducing the exact Watchtower behavior it replaces: poll GHCR every 5 minutes, redeploy on digest change even though the tag (`:latest`) never changes. **Two separate credentials are involved and both are required**: `imagePullSecrets` (kubelet pulls the image) and Keel's own registry credentials (Keel queries the GHCR API for the current digest) — missing the latter fails *silently*, the pod runs fine and Keel just never updates it.
+**Keel annotations are gone — this paragraph is historical.** `pantry-bot` originally carried `keel.sh/*` annotations reproducing Watchtower's poll-and-redeploy behavior. Keel itself was retired repo-wide (see `DEPLOYING.md`'s "Previous Auto-Deploy System" note); deploys are now merge-gated through `pantry-bot`'s own `deploy.yml` (`kubectl set image` + `rollout restart` + `rollout status`, manual-click by design).
 
-**Known probe hazard, already fixed in the manifest — don't "simplify" it**: pantry-bot's `/` returns HTTP 404 (verified live through the tunnel), which a plain `httpGet` probe would treat as failure on every check, permanently CrashLooping a healthy app. The probes use the same `node -e "require('http').get(...)"` exec-based check the original Compose healthcheck used (any response = alive), not `httpGet`. If a `/healthz` route returning 200 is ever added to the app, switch to `httpGet` then — not before.
+**Probes**: readiness now uses `httpGet: /ready` (the app grew a real `/ready` route since this was first written), not the original exec-based `node -e "require('http').get(...)"` check. Startup and liveness still use the exec form deliberately — see `40-deployment.yaml`'s own probe comments for exactly why each one is shaped the way it is; don't consolidate them to `httpGet` without reading that first.
 
 ### `observability` namespace
 
@@ -246,7 +248,7 @@ kubectl get pv "$PV" -o jsonpath='{.spec.local.path}'
 |---|---|---|---|
 | `jmusicbot-config` | `jmusicbot` | 1Gi | `10001:10001` |
 | `jmusicbot-notifier-data` | `jmusicbot` | 256Mi | `0:0` (root, image default) |
-| `pantry-bot-data` | `pantry-bot` | 1Gi | `1000:1000` |
+| `pantry-bot-data` (**retired, not mounted by any pod as of #177/#180** — orphaned on purpose, kept as a fallback, not live storage) | `pantry-bot` | 1Gi | `1000:1000` |
 | `loki-data` | `observability` | 20Gi | `10001:10001` |
 | `prometheus-data` | `observability` | 20Gi | `65534:65534` |
 | `grafana-data` | `observability` | 2Gi | `472:472` |
