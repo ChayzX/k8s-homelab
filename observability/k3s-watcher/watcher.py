@@ -689,9 +689,64 @@ def check_workload_health():
                 "pod": None,
                 "recovery_message": f"{namespace} functional health check is passing again.",
             })
-    if collection_complete:
-        sweep_workload_recoveries(active_event_keys)
     return collection_complete, active_event_keys
+
+
+def check_node_health():
+    """Alert when a cluster node (e.g. the Oracle failover node) goes NotReady.
+
+    Pod/Deployment checks above are node-agnostic -- they catch a workload
+    failing wherever it's scheduled, but say nothing if a whole node drops
+    off the cluster before its pods are evicted. This closes that gap:
+    infra-level, so it always goes to the primary recipient only, not the
+    per-namespace EXTRA_ALERT_RECIPIENTS list.
+    """
+    result = subprocess.run(
+        ["kubectl", "get", "nodes", "-o", "json"],
+        capture_output=True, text=True, timeout=15,
+    )
+    if result.returncode != 0:
+        print(f"[k3s-watcher] kubectl get nodes failed: {result.stderr.strip()}")
+        return False, set()
+    active_event_keys = set()
+    for node in json.loads(result.stdout).get("items", []):
+        name = node.get("metadata", {}).get("name", "unknown")
+        conditions = {
+            c.get("type"): c for c in node.get("status", {}).get("conditions", [])
+        }
+        ready_condition = conditions.get("Ready", {})
+        is_ready = ready_condition.get("status") == "True"
+        key = _event_key("node", name)
+        if not persistent_workload_condition(key, not is_ready):
+            continue
+        active_event_keys.add(key)
+        reason = ready_condition.get("reason", "Unknown")
+        message = (
+            f"Node {name} has been NotReady ({reason}) for at least "
+            f"{WORKLOAD_CONFIRMATION_SECONDS / 60:.0f} minutes. Pods scheduled "
+            "here won't be rescheduled onto a remaining Ready node until "
+            "Kubernetes's own eviction timeout elapses."
+        )
+        queue_operations_alert({
+            "source": "k3s-watcher",
+            "eventKey": key,
+            "eventType": "nodeNotReady",
+            "severity": "critical",
+            "namespace": "cluster",
+            "workload": name,
+            "pod": None,
+            "message": message,
+            "occurredAt": _utc_now(),
+        })
+        if cooldown_ok(key):
+            send_discord_alert(f"🚨 Node {name} NotReady", message)
+        _active_workload_alerts.setdefault(key, {
+            "namespace": "cluster",
+            "workload": name,
+            "pod": None,
+            "recovery_message": f"Node {name} is Ready again.",
+        })
+    return True, active_event_keys
 
 
 def check_log_errors():
@@ -779,9 +834,11 @@ def run_checks_once():
     """Collect, deliver, and reconcile one pass without partial resolution."""
     restart_complete = False
     workload_complete = False
+    node_complete = False
     log_complete = False
     restart_keys = set()
     workload_keys = set()
+    node_keys = set()
     log_keys = set()
     try:
         restart_complete, restart_keys = check_restart_loops()
@@ -792,15 +849,25 @@ def run_checks_once():
     except Exception as exc:
         print(f"[k3s-watcher] Workload health check error: {exc}")
     try:
+        node_complete, node_keys = check_node_health()
+    except Exception as exc:
+        print(f"[k3s-watcher] Node health check error: {exc}")
+    try:
         log_complete, log_keys = check_log_errors()
     except Exception as exc:
         print(f"[k3s-watcher] Log-error check error: {exc}")
+    # _active_workload_alerts is shared by check_workload_health and
+    # check_node_health, so the recovery sweep must see the union of both
+    # passes' keys -- sweeping with only one's keys would misread the
+    # other's still-active conditions as recovered.
+    if workload_complete and node_complete:
+        sweep_workload_recoveries(workload_keys | node_keys)
     try:
         flush_operations_alerts()
     except Exception as exc:
         print(f"[k3s-watcher] Unexpected Operations delivery error: {exc}")
-    if restart_complete and workload_complete and log_complete:
-        active_keys = restart_keys | workload_keys | log_keys
+    if restart_complete and workload_complete and node_complete and log_complete:
+        active_keys = restart_keys | workload_keys | node_keys | log_keys
         finish_operations_lifecycle(active_keys)
         if time.time() - _reconciliation_started_at < _reconciliation_warmup_seconds:
             return
@@ -820,7 +887,9 @@ if __name__ == "__main__":
         "✅ Watcher online",
         f"Monitoring namespaces: {', '.join(WATCH_NAMESPACES)}\n"
         f"Restart-loop: >= {RESTART_THRESHOLD} restarts / {RESTART_WINDOW_SECONDS}s. "
-        f"Log errors: pattern `{ERROR_PATTERNS}` (cooldown: {COOLDOWN_SECONDS}s).",
+        f"Log errors: pattern `{ERROR_PATTERNS}` (cooldown: {COOLDOWN_SECONDS}s).\n"
+        f"Node health: all cluster nodes (NotReady for "
+        f"{WORKLOAD_CONFIRMATION_SECONDS / 60:.0f}+ min alerts, primary recipient only).",
         color=0x2ECC71,
     )
     while True:
