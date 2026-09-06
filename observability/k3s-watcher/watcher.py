@@ -5,6 +5,7 @@ check never suppresses an alert.  Secrets and the systemd unit remain host
 configuration; this module is the tracked source deployed by that unit.
 """
 
+import base64
 import fcntl
 import hashlib
 import json
@@ -75,6 +76,9 @@ OPERATIONS_RECONCILE_URL = os.environ.get(
     ),
 ).strip()
 OPERATIONS_ALERT_INGEST_KEY = os.environ.get("OPERATIONS_ALERT_INGEST_KEY", "")
+OPERATIONS_ALERT_INGEST_SECRET_NAME = os.environ.get(
+    "OPERATIONS_ALERT_INGEST_SECRET_NAME", "operations-alert-ingest"
+)
 OPERATIONS_CF_ACCESS_CLIENT_ID = os.environ.get("OPERATIONS_CF_ACCESS_CLIENT_ID", "")
 OPERATIONS_CF_ACCESS_CLIENT_SECRET = os.environ.get(
     "OPERATIONS_CF_ACCESS_CLIENT_SECRET", ""
@@ -132,6 +136,30 @@ _reconciliation_started_at = time.time()
 _reconciliation_warmup_seconds = max(
     RESTART_WINDOW_SECONDS, ERROR_CONFIRMATION_SECONDS + ERROR_PENDING_GAP_SECONDS
 )
+_operations_ingest_key_cache = None
+
+
+def _operations_ingest_key():
+    """Read the ingest key from Kubernetes when systemd has no secret value."""
+    global _operations_ingest_key_cache
+    if OPERATIONS_ALERT_INGEST_KEY:
+        return OPERATIONS_ALERT_INGEST_KEY
+    if _operations_ingest_key_cache:
+        return _operations_ingest_key_cache
+    result = subprocess.run(
+        [
+            "kubectl", "get", "secret", OPERATIONS_ALERT_INGEST_SECRET_NAME,
+            "-n", "operations", "-o", "jsonpath={.data.key}",
+        ],
+        capture_output=True, text=True, timeout=5,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return ""
+    try:
+        _operations_ingest_key_cache = base64.b64decode(result.stdout).decode()
+    except (ValueError, UnicodeDecodeError):
+        return ""
+    return _operations_ingest_key_cache
 
 
 def acquire_singleton_lock():
@@ -180,10 +208,11 @@ def send_discord_alert(title, description, color=0xE74C3C, extra_user_ids=()):
 
 
 def _operations_enabled():
+    ingest_key = _operations_ingest_key()
     required = (
         OPERATIONS_ALERT_URL,
         OPERATIONS_RECONCILE_URL,
-        OPERATIONS_ALERT_INGEST_KEY,
+        ingest_key,
         OPERATIONS_TIMEOUT_SECONDS,
         OPERATIONS_PENDING_LIMIT,
         OPERATIONS_RETRY_BASE_SECONDS,
@@ -203,7 +232,7 @@ def _operations_enabled():
 
 
 def _operations_headers():
-    headers = {"X-Operations-Ingest-Key": OPERATIONS_ALERT_INGEST_KEY}
+    headers = {"X-Operations-Ingest-Key": _operations_ingest_key()}
     if OPERATIONS_CF_ACCESS_CLIENT_ID and OPERATIONS_CF_ACCESS_CLIENT_SECRET:
         headers["CF-Access-Client-Id"] = OPERATIONS_CF_ACCESS_CLIENT_ID
         headers["CF-Access-Client-Secret"] = OPERATIONS_CF_ACCESS_CLIENT_SECRET
