@@ -63,14 +63,29 @@ spec:
   # coordination needed on this side. Until the Oracle node actually exists
   # and is Ready, the second replica sits Pending — expected, not a bug.
   replicas: 2
-  # RollingUpdate is safe here (no volume, no singleton constraint) and gives a
-  # brief overlap so tunnel connections drain rather than drop. Cloudflare
-  # explicitly supports multiple connectors for the same tunnel.
+  # maxSurge: 0 / maxUnavailable: 1, NOT the more common maxSurge: 1 /
+  # maxUnavailable: 0 -- deliberately, after hitting a real deadlock with the
+  # latter. The one-per-node anti-affinity rule below caps this cluster at 2
+  # scheduled cloudflared pods total (2 nodes), but maxSurge: 1 wants a 3rd
+  # pod to exist briefly during every rollout before removing the old one.
+  # With exactly 2 nodes and 2 replicas, that 3rd pod can never schedule --
+  # it sits Pending forever, and the old pod it was supposed to replace never
+  # gets removed either, since maxUnavailable: 0 refuses to remove it until
+  # the new one is Ready. Observed directly on the first real rollout after
+  # the Oracle node joined. maxSurge: 0 avoids the deadlock structurally: it
+  # never asks for more than 2 pods at once, which always fits.
+  #
+  # Trade-off knowingly accepted: a rollout now removes the old pod on a node
+  # before the new one is Ready there, so that node briefly has zero
+  # cloudflared coverage (a few seconds) instead of a clean handover. With 2
+  # replicas across 2 nodes, the *other* node's connector stays up throughout,
+  # so the tunnel as a whole never fully drops -- this is a gap in per-node
+  # coverage, not in overall availability.
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: cloudflared
