@@ -1,7 +1,7 @@
 {
   "uid": "homelab-pantry-bot",
   "title": "Pantry Bot — Health & Usage",
-  "description": "Health and usage of the pantry-bot Twitch bot. This dashboard is deliberately scoped to the bot container; the Cloudflare connector has its own dashboard. There is no application-level exporter for this app (no /health, no prom-client), so readiness/uptime/restarts are the only Kubernetes-visible health signals.",
+  "description": "Health and usage of the pantry-bot Twitch bot. This dashboard is deliberately scoped to the bot container; the Cloudflare connector has its own dashboard. The bot now exposes application-level counters at GET /metrics (see the pantry-bot job in prometheus-config.yaml and the 'Application Usage' row below); Kubernetes-visible restarts/uptime/readiness remain the only signals for container-level health.",
   "tags": ["homelab", "k3s", "pantry-bot"],
   "timezone": "browser",
   "editable": true,
@@ -473,6 +473,201 @@
         "sortOrder": "Descending"
       },
       "fieldConfig": { "defaults": {}, "overrides": [] }
+    },
+    {
+      "type": "row",
+      "title": "Application Usage — commands, boss fights, duels, Extension",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 38 },
+      "panels": []
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Chat Commands per Minute, by Command",
+      "description": "rate() of pantry_bot_commands_total{command}, from the bot's own /metrics endpoint. Only successfully-handled commands are counted (cooldown rejections and unknown commands are not).",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 39 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (command) (rate(pantry_bot_commands_total{job=\"pantry-bot\"}[5m]) * 60)",
+          "legendFormat": "{{command}}"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["sum", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Snacks Granted per Minute, by Snack",
+      "description": "rate() of pantry_bot_snacks_granted_total{snack_id,source}, summed across grant sources (chat catch, boss rewards, etc). Bounded cardinality: snack_id is drawn from the fixed catalog.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 39 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (snack_id) (rate(pantry_bot_snacks_granted_total{job=\"pantry-bot\"}[5m]) * 60)",
+          "legendFormat": "{{snack_id}}"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["sum", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Boss Fight Donations & Damage per Minute",
+      "description": "rate() of pantry_bot_boss_donations_total (left axis, count) and pantry_bot_boss_damage_total (right axis, damage points) -- combined across chat !donate and the Twitch Extension.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 48 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "rate(pantry_bot_boss_donations_total{job=\"pantry-bot\"}[5m]) * 60",
+          "legendFormat": "donations/min"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "rate(pantry_bot_boss_damage_total{job=\"pantry-bot\"}[5m]) * 60",
+          "legendFormat": "damage/min"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["sum", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "damage/min" },
+            "properties": [{ "id": "custom.axisPlacement", "value": "right" }]
+          }
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "type": "bargauge",
+      "title": "Boss Fight Outcomes (this range)",
+      "description": "increase() of pantry_bot_boss_outcomes_total{outcome} -- how many boss fights ended defeated vs expired (timed out with the boss still alive).",
+      "gridPos": { "h": 9, "w": 6, "x": 12, "y": 48 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (outcome) (increase(pantry_bot_boss_outcomes_total{job=\"pantry-bot\"}[$__range]))",
+          "queryType": "instant",
+          "instant": true,
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "top"
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 0, "min": 0, "noValue": "No fights in range", "color": { "mode": "palette-classic" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "defeated" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
+          { "matcher": { "id": "byName", "options": "expired" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#EAB839" } }] }
+        ]
+      }
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Duels Resolved per Minute",
+      "description": "rate() of pantry_bot_duels_total.",
+      "gridPos": { "h": 9, "w": 6, "x": 18, "y": 48 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "rate(pantry_bot_duels_total{job=\"pantry-bot\"}[5m]) * 60",
+          "legendFormat": "duels/min"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "none",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 2, "color": { "mode": "fixed", "fixedColor": "text" } },
+        "overrides": []
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Twitch Extension Requests per Minute, by Route",
+      "description": "rate() of pantry_bot_extension_requests_total{route}, one series per Extension API route (state, donate, duels-challenge, duels-accept).",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 57 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (route) (rate(pantry_bot_extension_requests_total{job=\"pantry-bot\"}[5m]) * 60)",
+          "legendFormat": "{{route}}"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["sum", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      }
     }
   ]
 }
