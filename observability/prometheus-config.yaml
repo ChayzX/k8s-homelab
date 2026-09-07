@@ -153,6 +153,15 @@ data:
         static_configs:
           - targets: ["kube-state-metrics.observability.svc.cluster.local:8080"]
 
+      # Pantry Bot application counters. The service is ClusterIP-only, so
+      # this stays inside the cluster and is not exposed through the public
+      # OAuth/tunnel hostname. Counters are intentionally process-local; use
+      # increase()/rate() in dashboards so a bot restart is handled safely.
+      - job_name: pantry-bot
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["pantry-bot.pantry-bot.svc.cluster.local:3000"]
+
       # ---------------------------------------------------------------
       # The observability stack scraping itself
       # ---------------------------------------------------------------

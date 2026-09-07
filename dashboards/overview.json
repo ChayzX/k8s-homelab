@@ -18,6 +18,7 @@
     { "type": "link", "title": "Minecraft", "dashboard": "homelab-minecraft", "targetBlank": true },
     { "type": "link", "title": "jmusicbot", "dashboard": "homelab-jmusicbot", "targetBlank": true },
     { "type": "link", "title": "Pantry Bot", "dashboard": "homelab-pantry-bot", "targetBlank": true },
+    { "type": "link", "title": "Pantry Bot Usage", "dashboard": "homelab-pantry-bot-usage", "targetBlank": true },
     { "type": "link", "title": "Cloudflare Tunnel", "dashboard": "homelab-cloudflared", "targetBlank": true }
   ],
   "templating": {

@@ -4,7 +4,7 @@ data:
     {
       "uid": "homelab-apps",
       "title": "Apps — Minecraft / jmusicbot / pantry-bot",
-      "description": "App-specific panels for the three bespoke workloads. Only Minecraft has a real application-level exporter (RCON-based); jmusicbot and pantry-bot have no scraped app metrics, so their sections are honestly limited to Kubernetes-visible signals (pod status, restarts, memory vs limit, readiness). See individual panel descriptions for exactly what each metric does and does not tell you.",
+      "description": "App-specific panels for the three bespoke workloads. Minecraft has a real application-level exporter (RCON-based), and pantry-bot exposes usage counters at /metrics. The shared app dashboard keeps Kubernetes health signals; detailed pantry-bot participation and outcome charts live on the separate Pantry Bot — Usage dashboard.",
       "tags": ["homelab", "k3s", "apps"],
       "timezone": "browser",
       "editable": true,
@@ -484,7 +484,7 @@ data:
         },
         {
           "type": "row",
-          "title": "pantry-bot — Twitch bot; no app metrics, readiness is the only 'is it healthy' signal",
+          "title": "pantry-bot — Twitch bot; usage is on the separate dashboard, readiness is the health signal here",
           "collapsed": false,
           "gridPos": { "h": 1, "w": 24, "x": 0, "y": 53 },
           "panels": []
@@ -496,7 +496,7 @@ data:
           "gridPos": { "h": 4, "w": 24, "x": 0, "y": 54 },
           "options": {
             "mode": "markdown",
-            "content": "pantry-bot has **no `/health` or `/healthz` endpoint** -- `GET /` returns a bare 404 (verified through the live tunnel). The k8s probes are `exec` checks (`node -e \"require('http').get(...)\"`) reproducing the old Compose healthcheck's \"any response, even a 404, proves the server is alive\" logic, specifically *because* an `httpGet` probe would treat that same 404 as a failure and crash-loop a healthy pod. That means there is no Prometheus series for HTTP health -- the panels below (readiness, restarts) are the only signal Kubernetes can give us, sourced from the exec probe's pass/fail via kube-state-metrics. **TODO for real HTTP health visibility:** add `app.get('/healthz', (_req, res) => res.status(200).send('ok'))` to the bot (noted as the preferred fix in `pantry-bot/40-deployment.yaml`), switch the probes to `httpGet`, and this dashboard could then plot actual request latency/status if the route is later instrumented with `prom-client`. Until then, do not invent a metric name for this."
+            "content": "pantry-bot now exposes application usage counters at `/metrics`; this dashboard keeps Kubernetes health context. It still has **no `/health` or `/healthz` endpoint** -- `GET /` returns a bare 404 (verified through the live tunnel). The k8s probes are `exec` checks (`node -e \"require('http').get(...)\"`) reproducing the old Compose healthcheck's \"any response, even a 404, proves the server is alive\" logic, specifically *because* an `httpGet` probe would treat that same 404 as a failure and crash-loop a healthy pod. That means there is no Prometheus series for HTTP health -- the panels below (readiness, restarts) are the only signal Kubernetes can give us, sourced from the exec probe's pass/fail via kube-state-metrics. **TODO for real HTTP health visibility:** add `app.get('/healthz', (_req, res) => res.status(200).send('ok'))` to the bot (noted as the preferred fix in `pantry-bot/40-deployment.yaml`), switch the probes to `httpGet`, and this dashboard could then plot actual request latency/status if the route is later instrumented with `prom-client`. Until then, do not invent a metric name for this."
           }
         },
         {
@@ -2502,6 +2502,7 @@ data:
         { "type": "link", "title": "Minecraft", "dashboard": "homelab-minecraft", "targetBlank": true },
         { "type": "link", "title": "jmusicbot", "dashboard": "homelab-jmusicbot", "targetBlank": true },
         { "type": "link", "title": "Pantry Bot", "dashboard": "homelab-pantry-bot", "targetBlank": true },
+        { "type": "link", "title": "Pantry Bot Usage", "dashboard": "homelab-pantry-bot-usage", "targetBlank": true },
         { "type": "link", "title": "Cloudflare Tunnel", "dashboard": "homelab-cloudflared", "targetBlank": true }
       ],
       "templating": {
@@ -3281,13 +3282,13 @@ data:
   pantry-bot.json: |
     {
       "uid": "homelab-pantry-bot",
-      "title": "Pantry Bot — Health & Usage",
-      "description": "Health and usage of the pantry-bot Twitch bot (namespace pantry-bot) at a glance: is it down (desired vs ready replicas, pod uptime), restarting (restart count), or erroring (always-error-scoped Loki panels)? Resource panels plot actual usage against the configured limits; log panels use promtail's extracted `level` label. There is no application-level exporter for this app (no /health, no prom-client), so readiness/uptime/restarts are the only Kubernetes-visible health signals — Twitch auth, SQLite and tunnel health only show up indirectly in the logs.",
+      "title": "Pantry Bot — Health",
+      "description": "Operational health of the pantry-bot Twitch bot (namespace pantry-bot): uptime, resources, restarts, readiness, and Loki error logs. Application usage counters are on the separate Pantry Bot Usage dashboard.",
       "tags": ["homelab", "k3s", "pantry-bot"],
       "timezone": "browser",
       "editable": true,
       "schemaVersion": 39,
-      "version": 1,
+      "version": 2,
       "refresh": "15s",
       "graphTooltip": 1,
       "time": { "from": "now-6h", "to": "now" },
@@ -3754,6 +3755,601 @@ data:
             "sortOrder": "Descending"
           },
           "fieldConfig": { "defaults": {}, "overrides": [] }
+        }
+      ]
+    }
+  pantry-bot-usage.json: |
+    {
+      "uid": "homelab-pantry-bot-usage",
+      "title": "Pantry Bot — Usage",
+      "description": "Application usage from Pantry Bot's /metrics endpoint: engagement actions, bot messages, commands, Extension requests, boss activity, and outcomes. Prometheus counters are process-local and reset on restart; increase() and rate() handle that reset. Distinct participant and first-time history remains in the bot's SQLite engagement tables.",
+      "tags": [
+        "homelab",
+        "twitch",
+        "pantry-bot",
+        "usage"
+      ],
+      "timezone": "browser",
+      "editable": true,
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "15s",
+      "graphTooltip": 1,
+      "time": {
+        "from": "now-24h",
+        "to": "now"
+      },
+      "templating": {
+        "list": [
+          {
+            "name": "DS_PROMETHEUS",
+            "label": "Prometheus",
+            "type": "datasource",
+            "query": "prometheus",
+            "current": {},
+            "hide": 0,
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false
+          }
+        ]
+      },
+      "panels": [
+        {
+          "type": "row",
+          "title": "At a glance — what the community is doing",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "panels": []
+        },
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Successful actions (1h)",
+          "description": "Committed engagement actions across chat, the Twitch Extension, and system events in the last hour. This is action volume, not a distinct participant count.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 1
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(increase(pantry_bot_engagement_actions_total[1h])) or vector(0)",
+              "legendFormat": "actions"
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "value_and_name",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Rejected actions (1h)",
+          "description": "Cooldown, expired, muted, or otherwise rejected engagement actions in the last hour.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 1
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(increase(pantry_bot_engagement_failures_total[1h])) or vector(0)",
+              "legendFormat": "rejected"
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "value_and_name",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 5
+                  },
+                  {
+                    "color": "red",
+                    "value": 20
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Boss damage (24h)",
+          "description": "Boss damage recorded by the legacy donation paths in the last 24 hours; community attack activity is shown in the engagement action chart.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 1
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(increase(pantry_bot_boss_damage_total[24h])) or vector(0)",
+              "legendFormat": "damage"
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "value_and_name",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Boss outcomes (7d)",
+          "description": "Resolved legacy boss outcomes in the last seven days. Community outcomes are persisted in SQLite; this counter currently reports the legacy defeated/expired paths.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 18,
+            "y": 1
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(increase(pantry_bot_boss_outcomes_total{outcome=\"defeated\"}[7d]))",
+              "legendFormat": "defeated"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(increase(pantry_bot_boss_outcomes_total{outcome=\"expired\"}[7d]))",
+              "legendFormat": "expired"
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "horizontal",
+            "textMode": "value_and_name",
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "row",
+          "title": "Participation flow",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 5
+          },
+          "panels": []
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Engagement actions by source (15m rate)",
+          "description": "Successful actions per second split between chat, the Twitch Extension, and system events. Query SQLite for distinct participants and first-time participation.",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum by (source) (rate(pantry_bot_engagement_actions_total[15m]))",
+              "legendFormat": "{{source}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "decimals": 3,
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 12,
+                "showPoints": "never",
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Actions by type (15m rate)",
+          "description": "Successful action mix: attacks, braces, rally support, duel actions, and other registered engagement events.",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum by (action) (rate(pantry_bot_engagement_actions_total[15m]))",
+              "legendFormat": "{{action}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "decimals": 3,
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 12,
+                "showPoints": "never",
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Bot messages by status (15m rate)",
+          "description": "Outbound bot messages per second split into sent and failed. Daily totals are also persisted in SQLite.",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 15
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum by (status) (rate(pantry_bot_messages_total[15m]))",
+              "legendFormat": "{{status}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "decimals": 3,
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 12,
+                "showPoints": "never",
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Extension requests by route (15m rate)",
+          "description": "Requests served by the Twitch Extension API, split by route. This includes state reads and action requests.",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 15
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum by (route) (rate(pantry_bot_extension_requests_total[15m]))",
+              "legendFormat": "{{route}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "decimals": 3,
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 12,
+                "showPoints": "never",
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "row",
+          "title": "Chat command activity",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 24
+          },
+          "panels": []
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Commands by name (15m rate)",
+          "description": "Successfully handled chat commands, split by command name. This measures command activity separately from free engagement actions.",
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 25
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum by (command) (rate(pantry_bot_commands_total[15m]))",
+              "legendFormat": "{{command}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "decimals": 3,
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 12,
+                "showPoints": "never",
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          }
         }
       ]
     }

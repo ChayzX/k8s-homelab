@@ -1,7 +1,7 @@
 {
   "uid": "homelab-apps",
   "title": "Apps — Minecraft / jmusicbot / pantry-bot",
-  "description": "App-specific panels for the three bespoke workloads. Only Minecraft has a real application-level exporter (RCON-based); jmusicbot and pantry-bot have no scraped app metrics, so their sections are honestly limited to Kubernetes-visible signals (pod status, restarts, memory vs limit, readiness). See individual panel descriptions for exactly what each metric does and does not tell you.",
+  "description": "App-specific panels for the three bespoke workloads. Minecraft has a real application-level exporter (RCON-based), and pantry-bot exposes usage counters at /metrics. The shared app dashboard keeps Kubernetes health signals; detailed pantry-bot participation and outcome charts live on the separate Pantry Bot — Usage dashboard.",
   "tags": ["homelab", "k3s", "apps"],
   "timezone": "browser",
   "editable": true,
@@ -481,7 +481,7 @@
     },
     {
       "type": "row",
-      "title": "pantry-bot — Twitch bot; no app metrics, readiness is the only 'is it healthy' signal",
+      "title": "pantry-bot — Twitch bot; usage is on the separate dashboard, readiness is the health signal here",
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 53 },
       "panels": []
@@ -493,7 +493,7 @@
       "gridPos": { "h": 4, "w": 24, "x": 0, "y": 54 },
       "options": {
         "mode": "markdown",
-        "content": "pantry-bot has **no `/health` or `/healthz` endpoint** -- `GET /` returns a bare 404 (verified through the live tunnel). The k8s probes are `exec` checks (`node -e \"require('http').get(...)\"`) reproducing the old Compose healthcheck's \"any response, even a 404, proves the server is alive\" logic, specifically *because* an `httpGet` probe would treat that same 404 as a failure and crash-loop a healthy pod. That means there is no Prometheus series for HTTP health -- the panels below (readiness, restarts) are the only signal Kubernetes can give us, sourced from the exec probe's pass/fail via kube-state-metrics. **TODO for real HTTP health visibility:** add `app.get('/healthz', (_req, res) => res.status(200).send('ok'))` to the bot (noted as the preferred fix in `pantry-bot/40-deployment.yaml`), switch the probes to `httpGet`, and this dashboard could then plot actual request latency/status if the route is later instrumented with `prom-client`. Until then, do not invent a metric name for this."
+        "content": "pantry-bot now exposes application usage counters at `/metrics`; this dashboard keeps Kubernetes health context. It still has **no `/health` or `/healthz` endpoint** -- `GET /` returns a bare 404 (verified through the live tunnel). The k8s probes are `exec` checks (`node -e \"require('http').get(...)\"`) reproducing the old Compose healthcheck's \"any response, even a 404, proves the server is alive\" logic, specifically *because* an `httpGet` probe would treat that same 404 as a failure and crash-loop a healthy pod. That means there is no Prometheus series for HTTP health -- the panels below (readiness, restarts) are the only signal Kubernetes can give us, sourced from the exec probe's pass/fail via kube-state-metrics. **TODO for real HTTP health visibility:** add `app.get('/healthz', (_req, res) => res.status(200).send('ok'))` to the bot (noted as the preferred fix in `pantry-bot/40-deployment.yaml`), switch the probes to `httpGet`, and this dashboard could then plot actual request latency/status if the route is later instrumented with `prom-client`. Until then, do not invent a metric name for this."
       }
     },
     {

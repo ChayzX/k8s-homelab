@@ -52,15 +52,15 @@ edit):
 ```sh
 cd /home/chase/k8s-homelab/dashboards
 kubectl create configmap grafana-dashboards -n observability \
+  --from-file=apps.json=apps.json \
   --from-file=cluster-overview.json=cluster-overview.json \
-  --from-file=pods-and-workloads.json=pods-and-workloads.json \
+  --from-file=host-pc.json=host-pc.json \
+  --from-file=jmusicbot.json=jmusicbot.json \
   --from-file=logs.json=logs.json \
   --from-file=overview.json=overview.json \
-  --from-file=minecraft.json=minecraft.json \
-  --from-file=jmusicbot.json=jmusicbot.json \
   --from-file=pantry-bot.json=pantry-bot.json \
-  --from-file=cloudflared.json=cloudflared.json \
-  --from-file=host-pc.json=host-pc.json \
+  --from-file=pantry-bot-usage.json=pantry-bot-usage.json \
+  --from-file=pods-and-workloads.json=pods-and-workloads.json \
   --dry-run=client -o yaml
 ```
 then paste the `data:` block back into `dashboards-configmap.yaml` under
@@ -85,6 +85,17 @@ what UID that instance happens to assign, as long as there's one
 Prometheus and one Loki source configured.
 
 ## The dashboards
+
+### `pantry-bot-usage.json` — Pantry Bot — Usage
+
+This standalone dashboard reads the bot's Prometheus `/metrics` endpoint. It
+shows successful and rejected engagement actions, damage and outcomes, action
+and source mix, bot message volume, and extension route volume. Counters are
+process-local and reset on a bot restart, so panels use `increase()`/`rate()`;
+participant history and first-time participation remain durable in SQLite.
+
+Open it at `/d/homelab-pantry-bot-usage/pantry-bot-usage` after Grafana loads the
+provisioned dashboard.
 
 ### `host-pc.json` — Main PC — Bare-Metal Health
 
@@ -242,10 +253,9 @@ one app, that app's logs don't disappear — they just stop carrying a
 `level` label and fall into the "unclassified" bucket above, which is
 exactly what panel 4 exists to catch.
 
-### App dashboards — `minecraft.json`, `jmusicbot.json`, `pantry-bot.json`, and `cloudflared.json`
+### App dashboards — `apps.json`, `jmusicbot.json`, and `pantry-bot.json`
 
-The former shared `apps.json` dashboard is retired. Each workload now has its
-own stable dashboard UID, and the Overview dashboard links to all four.
+The Overview dashboard links to the workload dashboards, with Pantry Bot health and usage split into separate views.
 
 App-specific panels, and deliberately not padded with invented metrics.
 
