@@ -2,7 +2,7 @@
 
 Kubernetes manifests for the `observability` namespace of the single-node
 k3s home-lab migration (loki, promtail, prometheus, grafana,
-kube-state-metrics, uptime-kuma). Ported from
+kube-state-metrics). Ported from
 `/home/chase/docker/observability/docker-compose.yml` per
 `~/.claude/plans/i-d-love-to-run-cuddly-flurry.md`.
 
@@ -21,13 +21,11 @@ Node LAN IP: `192.168.40.208`. StorageClass: `local-path`.
 | `grafana.yaml` | Grafana SA, PVC (2Gi), Deployment, primary `LoadBalancer` Service (3002). |
 | `grafana-provisioning.yaml` | ConfigMaps: `grafana-provisioning-datasources`, `grafana-provisioning-dashboards`, `grafana-provisioning-alerting`, and a placeholder `grafana-dashboards`. **See "Grafana dashboard ConfigMap" below before applying.** |
 | `grafana-verify-nodeport.yaml` | **Verification only.** NodePort 30002. |
-| `uptime-kuma.yaml` | uptime-kuma SA, PVC (2Gi), Deployment, primary `LoadBalancer` Service (3001). |
-| `uptime-kuma-verify-nodeport.yaml` | **Verification only.** NodePort 30001. |
 | `promtail.yaml` | promtail SA, ClusterRole/Binding (API access for pod discovery), DaemonSet, ClusterIP Service (9080, metrics only). |
 | `promtail-config.yaml` | ConfigMap: promtail's config, incl. severity-extraction `pipeline_stages`. |
 | `kube-state-metrics.yaml` | kube-state-metrics SA, ClusterRole/Binding, Deployment, headless Service (8080/8081). |
 
-Every stateful app (loki, prometheus, grafana, uptime-kuma) is a
+Every stateful app (loki, prometheus, grafana) is a
 `Deployment` with `strategy: Recreate` and a `ReadWriteOnce` PVC -- never
 a StatefulSet, never `RollingUpdate`. promtail is a DaemonSet (no PVC).
 kube-state-metrics is a stateless `Deployment` with ordinary
@@ -116,16 +114,14 @@ kubectl apply -f prometheus.yaml
 # is a required secretKeyRef. Without it the pod sits in
 # CreateContainerConfigError.
 kubectl apply -f grafana.yaml
-kubectl apply -f uptime-kuma.yaml
 
 # Cluster-facing collectors/exporters. No PVCs, no data migration.
 kubectl apply -f kube-state-metrics.yaml
 kubectl apply -f promtail.yaml
 ```
 
-`grafana.yaml` and `uptime-kuma.yaml` each contain a Deployment/PVC/SA
-block that is safe to apply any time, plus a **primary Service** on the
-real port (3002 / 3001) that will sit `EXTERNAL-IP <pending>` until the
+`grafana.yaml` contains the Grafana Deployment/PVC/SA block and a **primary
+Service** on port 3002 that will sit `EXTERNAL-IP <pending>` until the
 matching old Docker container is stopped -- see "Verification-only
 files" below for the actual cutover sequence for those two ports.
 
@@ -211,8 +207,8 @@ Facts that shape how you use this:
 
 ## Verification-only files -- when to apply, when to delete
 
-Docker Desktop's proxy holds host ports **3001** (uptime-kuma) and
-**3002** (grafana) until their old containers are stopped, so the real
+Docker Desktop's proxy holds host port **3002** (grafana) until its old
+container is stopped, so the real
 `LoadBalancer` Services for those two apps cannot bind until then. These
 two files exist to make "verify the new instance before you commit to
 it" possible in the meantime:
@@ -220,14 +216,13 @@ it" possible in the meantime:
 | File | NodePort | URL | Apply | Delete |
 |---|---|---|---|---|
 | `grafana-verify-nodeport.yaml` | 30002 | `http://192.168.40.208:30002` | Any time after `grafana.yaml` is applied and its pod is Ready. | Immediately after `kubectl -n observability get svc grafana` shows `EXTERNAL-IP 192.168.40.208`. |
-| `uptime-kuma-verify-nodeport.yaml` | 30001 | `http://192.168.40.208:30001` | Any time after `uptime-kuma.yaml` is applied and its pod is Ready. | Immediately after `kubectl -n observability get svc uptime-kuma` shows `EXTERNAL-IP 192.168.40.208`. |
 | `loki-external-nodeport.yaml` | 31100 | (internal, used by the old Docker promtail) | During Phase 1, once the new Loki is verified. | At Phase 5, once Docker Desktop (and its promtail) is retired. |
 
 Both 30001/30002 are inside k3s's default NodePort range
 (30000-32767) -- rev. 1 of this plan proposed an out-of-range port
 (25567) that would have been rejected at `kubectl apply` time.
 
-Cutover sequence for Grafana (uptime-kuma is identical, s/grafana/uptime-kuma/, s/3002/3001/):
+Cutover sequence for Grafana:
 
 ```bash
 # 1. Verify on the NodePort first.
@@ -284,22 +279,6 @@ GRAF_DIR=$(kubectl get pv "$GRAF_PV" -o jsonpath='{.spec.local.path}')
 sudo cp -a /home/chase/docker/observability/grafana-data/. "$GRAF_DIR"/
 sudo chown -R 472:472 "$GRAF_DIR"
 
-# uptime-kuma  (louislam/uptime-kuma:2 -- outer Node.js process runs as
-# root, 0:0, but embedded MariaDB's own mariadbd subprocess is spawned
-# with --user=node, i.e. it runs as UID 1000 regardless of the outer
-# container's UID. The app's own startup script does `fs.chownSync()`
-# on the mariadb/ directory itself to fix that -- but fs.chownSync is
-# NOT recursive, so it only fixes the top-level directory entry. If
-# the whole PVC is blanket-chowned to 0:0 first, everything INSIDE
-# mariadb/ (ibdata1, mysql/, sys/, etc.) stays root-owned and mariadbd
-# gets EACCES trying to write its own data files -- confirmed live
-# during this migration: "Permission denied" creating a lower-test
-# file, "Could not open mysql.plugin table". Fix is two chowns, not one.)
-KUMA_PV=$(kubectl -n observability get pvc uptime-kuma-data -o jsonpath='{.spec.volumeName}')
-KUMA_DIR=$(kubectl get pv "$KUMA_PV" -o jsonpath='{.spec.local.path}')
-sudo cp -a /home/chase/docker/observability/uptime-kuma-data/. "$KUMA_DIR"/
-sudo chown -R 0:0 "$KUMA_DIR"
-sudo chown -R 1000:1000 "$KUMA_DIR"/mariadb
 ```
 
 Notes:
@@ -310,9 +289,8 @@ Notes:
   first (the pod will crash-loop on the permission error -- that's
   expected), grab the path, do the copy+chown, then let the pod restart.
 - Do the copy with the OLD container stopped in every case. Loki's and
-  Prometheus' WAL and uptime-kuma's embedded MariaDB datadir are all
-  corrupted by a hot copy -- this is called out per-app in the relevant
-  manifest as well.
+  Prometheus' WAL can be corrupted by a hot copy -- this is called out per-app
+  in the relevant manifest as well.
 - `fsGroupChangePolicy: OnRootMismatch` is set on every stateful pod so
   that, after this one-time chown, subsequent pod restarts don't pay a
   full recursive `chgrp` walk across 20Gi of Loki chunks / Prometheus

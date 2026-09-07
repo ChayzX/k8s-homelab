@@ -49,7 +49,7 @@ Cross-check `kubectl get pods -A` / `kubectl get ns` against this document befor
 |---|---|---|
 | `jmusicbot` | `_bootstrap/00-namespaces.yaml` | Discord music bot + release notifier |
 | `pantry-bot` | `_bootstrap/00-namespaces.yaml` | Twitch bot + Cloudflare Tunnel |
-| `observability` | `observability/namespace.yaml` | Loki, Prometheus, Grafana, Uptime Kuma, promtail, kube-state-metrics |
+| `observability` | `observability/namespace.yaml` | Loki, Prometheus, Grafana, promtail, kube-state-metrics; monitoring alerts come from k3s-watcher and UptimeRobot |
 | `minecraft` | `minecraft/minecraft.yaml` (**not** in `_bootstrap`, see note below) | The Minecraft server — **applied and live** |
 | `opsbot` | `_bootstrap/00-namespaces.yaml` | Discord remote-control bot (deployment status/restart, Minecraft RCON console) — **applied and live** |
 | `kube-system` | k3s | CoreDNS, Traefik, local-path-provisioner, metrics-server |
@@ -70,7 +70,6 @@ Cross-check `kubectl get pods -A` / `kubectl get ns` against this document befor
 | Port | Protocol | Service | Reaches |
 |---|---|---|---|
 | `25565` | TCP | `minecraft.minecraft` (LoadBalancer) | Minecraft, via router port-forward |
-| `3001` | TCP | `uptime-kuma.observability` (LoadBalancer) | Uptime Kuma dashboard |
 | `3002` | TCP | `grafana.observability` (LoadBalancer) | Grafana dashboard |
 | (Cloudflare Tunnel, no port) | — | `pantry-bot.pantry-bot` (ClusterIP, via `cloudflared`) | pantry-bot's HTTP/WS API |
 
@@ -137,18 +136,24 @@ Every stateful app uses `Deployment` + `strategy: Recreate` + a `ReadWriteOnce` 
 
 ### `observability` namespace
 
-**Live status, as of this writing**: all six workloads — `loki`, `prometheus`, `grafana`, `uptime-kuma`, `promtail` (DaemonSet), `kube-state-metrics` — are `Running`/`1/1` and healthy. The old Docker promtail container is deliberately still running alongside the new one — it's still the one feeding Loki with Minecraft's host logs until Minecraft migrates; don't stop it early.
+**Live status, as of 2026-09-06**: the five remaining workloads — `loki`,
+`prometheus`, `grafana`, `promtail` (DaemonSet), and `kube-state-metrics` — are
+healthy. Uptime Kuma was decommissioned; k3s-watcher handles in-cluster
+alerting and UptimeRobot handles external reachability. The old Docker promtail
+container is deliberately still running alongside the new one until Minecraft
+migrates; don't stop it early.
 
 | Workload | Image (pinned) | Ports | Requests/Limits | UID | SA (API access?) | PVC |
 |---|---|---|---|---|---|---|
 | `loki` (Deployment, Recreate) | `grafana/loki:3.3.2` | 3100 (http), 9095 (grpc) | 50m/500m CPU, 128Mi/512Mi mem | `10001:10001` | `loki-sa`, no | `loki-data` (20Gi) |
 | `prometheus` (Deployment, Recreate) | `prom/prometheus:v3.1.0` | 9090 | 100m/1000m CPU, 512Mi/1Gi mem | `65534:65534` (nobody) | `prometheus-sa`, **yes** (`kubernetes_sd_configs`, scrapes kubelet/cAdvisor) | `prometheus-data` (20Gi) |
 | `grafana` (Deployment, Recreate) | `grafana/grafana:11.4.0` | 3000→3002 externally | 50m/500m CPU, 128Mi/512Mi mem | `472:472` | `grafana-sa`, no | `grafana-data` (2Gi) |
-| `uptime-kuma` (Deployment, Recreate) | `louislam/uptime-kuma:2` | 3001 | 50m/500m CPU, 192Mi/768Mi mem | `0:0` (root — upstream-mandated, drops privileges internally; forcing non-root breaks startup) | `uptime-kuma-sa`, no | `uptime-kuma-data` (2Gi, includes embedded MariaDB datadir) |
 | `promtail` (**DaemonSet**, not Deployment — log shipper needs one pod per node) | `grafana/promtail:3.3.2` | 9080 | 50m/200m CPU, 64Mi/256Mi mem | `0:0` (root, required — container logs under `/var/log/pods` are root-owned) | `promtail-sa`, **yes** (`kubernetes_sd_configs`, role: pod) | none (hostPath positions file at `/var/lib/promtail` instead) |
 | `kube-state-metrics` (Deployment, RollingUpdate — stateless) | `registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.13.0` | 8080, 8081 | 10m/100m CPU, 32Mi/128Mi mem | `65534:65534` | `kube-state-metrics-sa`, **yes** (lists/watches nearly every object type, read-only) | none |
 
-**`uptime-kuma` — resolved. Took three rounds to fully nail down, all stemming from the same root cause**: `capabilities.drop: ["ALL"]` genuinely strips a UID-0 process of nearly everything that makes it behave like unconfined root. Full chain, in the order each was found:
+**Historical note — Uptime Kuma (decommissioned 2026-09-06):** the following
+capability and storage notes document the retired migration and are retained as
+provenance only:
 1. `CAP_CHOWN`/`CAP_FOWNER`/`CAP_SETUID`/`CAP_SETGID` — needed for the outer Node.js process's own `chown`/`chmod` on the MariaDB datadir, and for `mariadbd`'s internal privilege-drop to UID 1000 (`--user=node`). Sourced from the actual uptime-kuma and MariaDB code, not guessed — see the manifest's own header comment for exact file/line citations.
 2. A stale root-owned `mysqld.pid` left over from an earlier crash attempt (before fix #1 landed) sat inside an otherwise-correctly-1000:1000-owned `/app/data/run/` — cleared via a temporary debug pod, not a manifest change (it was leftover live data, not a config problem).
 3. `CAP_DAC_OVERRIDE` — the piece the original analysis explicitly (and reasonably, for what it analyzed) left out. It correctly reasoned `mariadbd`'s own bootstrap never needs it, but missed that the *outer* Node.js process — which stays root throughout and never drops privilege, unlike `mariadbd` — separately connects to `/app/data/run/mariadb.sock` as a MySQL client. That socket is owned `1000:1000`, root isn't a member of group 1000 here, and "other" permissions are `r-x` (no write) — so a capability-stripped root process fails `connect()` with `EACCES` exactly like a normal non-root user would. Real/unconfined root only bypasses this via `CAP_DAC_OVERRIDE`.
@@ -252,7 +257,6 @@ kubectl get pv "$PV" -o jsonpath='{.spec.local.path}'
 | `loki-data` | `observability` | 20Gi | `10001:10001` |
 | `prometheus-data` | `observability` | 20Gi | `65534:65534` |
 | `grafana-data` | `observability` | 2Gi | `472:472` |
-| `uptime-kuma-data` | `observability` | 2Gi | `0:0` |
 | `minecraft-world` | `minecraft` | 10Gi | `1000:1000` |
 
 **Every one of these UID/GID pairs was verified against the actual running container** (`docker top <container> -o user,group` or equivalent) during manifest-writing, not assumed from the base image — this mattered because the pre-migration data on disk is uniformly owned `1000:1000` (Docker Desktop's virtiofs fakes ownership on bind mounts; bare-metal k3s enforces real UIDs), so several of these need an explicit `chown` after the data copy, or the pod crash-loops on `EACCES`. Each manifest carries the exact `chown` command in its own header comment.

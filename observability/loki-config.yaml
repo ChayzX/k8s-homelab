@@ -57,7 +57,7 @@ data:
     # and compaction_interval to 10m, both fine to leave at default here).
     # History: 168h (7d, ported from Docker) -> 720h (30d, for a longer
     # "what happened last month" lookback) -> back to 168h (2026-08-12,
-    # user decision) once uptime-kuma was confirmed to already cover the
+    # user decision) once external monitoring was confirmed to cover the
     # one thing that actually needed long retention (per-service uptime
     # history) independently, in its own database -- Loki/Prometheus data
     # beyond a week wasn't serving that need, just consuming disk on the
