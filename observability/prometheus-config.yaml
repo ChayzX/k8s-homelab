@@ -63,7 +63,7 @@ data:
       # already bare-metal-correct.
       - job_name: node
         static_configs:
-          - targets: ["192.168.40.208:9100"]
+          - targets: ["192.168.40.208:9100", "node-exporter-oracle.observability.svc.cluster.local:9100"]
 
       # >>> TO BE REMOVED AT PHASE 5 <<<
       # docker_desktop_exporter.py measures the Docker Desktop qemu VM's
