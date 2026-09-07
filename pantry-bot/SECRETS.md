@@ -4,8 +4,10 @@ No secret values live in this repo. Create these imperatively on the node,
 **before** applying the Deployments.
 
 Four Secrets are needed here (a fifth is optional). Deploy pipeline is GitHub Actions
-(`.github/workflows/publish.yml` + `deploy.yml` in the pantry-bot repo,
-manual-click `workflow_dispatch` for deploy) — GitHub Actions secrets
+(`.github/workflows/deploy.yml` in the pantry-bot repo — a single
+"PantryBot CI/CD" workflow that builds, applies, restarts, and verifies
+automatically on every merge to `main`; a merge is the approval, not a
+separate manual click) — GitHub Actions secrets
 (`CF_ACCESS_CLIENT_ID`/`SECRET`, `KUBE_CONFIG_PANTRYBOT`) live in the GitHub
 repo settings, not here; this file only covers Secrets applied to the
 cluster. Keel (previously the deploy mechanism, retired 2026-08-13) is gone

@@ -98,4 +98,4 @@ deployment (public package, or an image-pull Secret in the namespace).
 
 ## Previous Auto-Deploy System
 
-Keel (the old auto-deploy service) was retired after a credential failure went unnoticed for a full day. The manual-click model ensures you see the result immediately in GitHub's UI and know when something goes live.
+Keel (the old auto-deploy service) was retired after a credential failure went unnoticed for a full day. Its weakness wasn't automation itself — it was that the automation ran silently, so nobody saw when it broke. The current merge-triggered pipeline is also automatic, but the trigger is visible: opening the PR and merging it, not a background poller, so you see the run and its result in GitHub's UI in real time and know when something goes live.
