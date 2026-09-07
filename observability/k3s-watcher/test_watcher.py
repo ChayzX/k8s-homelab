@@ -168,6 +168,27 @@ assert list(watcher._operations_pending) == [
 ]
 watcher._operations_pending.clear()
 
+# CF Access client id/secret are optional: blank on both sides still enables
+# Operations delivery (current setup — Authentik's skip_path_regex already
+# exempts this path), and the headers omit CF-Access-* entirely rather than
+# sending empty values.
+watcher.OPERATIONS_CF_ACCESS_CLIENT_ID = ""
+watcher.OPERATIONS_CF_ACCESS_CLIENT_SECRET = ""
+assert watcher._operations_enabled() is True
+headers = watcher._operations_headers()
+assert "CF-Access-Client-Id" not in headers
+assert "CF-Access-Client-Secret" not in headers
+assert headers["X-Operations-Ingest-Key"] == "ingest"
+
+# One set and one blank is a real misconfiguration, not "unused" — delivery
+# stays disabled.
+watcher.OPERATIONS_CF_ACCESS_CLIENT_ID = "client"
+watcher.OPERATIONS_CF_ACCESS_CLIENT_SECRET = ""
+assert watcher._operations_enabled() is False
+watcher.OPERATIONS_CF_ACCESS_CLIENT_ID = "client"
+watcher.OPERATIONS_CF_ACCESS_CLIENT_SECRET = "secret"
+assert watcher._operations_enabled() is True
+
 # Reconciliation uses the same layered credentials and sorted active keys.
 reconcile_session = Mock()
 reconcile_session.post.return_value.raise_for_status.return_value = None

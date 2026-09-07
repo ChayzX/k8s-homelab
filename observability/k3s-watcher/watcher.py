@@ -173,27 +173,34 @@ def send_discord_alert(title, description, color=0xE74C3C, extra_user_ids=()):
 
 
 def _operations_enabled():
-    values = (
+    required = (
         OPERATIONS_ALERT_URL,
         OPERATIONS_RECONCILE_URL,
         OPERATIONS_ALERT_INGEST_KEY,
-        OPERATIONS_CF_ACCESS_CLIENT_ID,
-        OPERATIONS_CF_ACCESS_CLIENT_SECRET,
         OPERATIONS_TIMEOUT_SECONDS,
         OPERATIONS_PENDING_LIMIT,
         OPERATIONS_RETRY_BASE_SECONDS,
     )
-    if any(values) and not all(values):
+    # CF Access client id/secret are optional: either both set (Operations is
+    # still gated by a Cloudflare Access service token) or both blank (current
+    # setup — Authentik's skip_path_regex already exempts this ingest path).
+    # One set and one blank is a real misconfiguration, not "unused".
+    cf_access = (OPERATIONS_CF_ACCESS_CLIENT_ID, OPERATIONS_CF_ACCESS_CLIENT_SECRET)
+    incomplete = (any(required) and not all(required)) or (
+        any(cf_access) and not all(cf_access)
+    )
+    if incomplete:
         print("[k3s-watcher] Operations delivery is incomplete; check service environment")
-    return all(values)
+        return False
+    return all(required)
 
 
 def _operations_headers():
-    return {
-        "X-Operations-Ingest-Key": OPERATIONS_ALERT_INGEST_KEY,
-        "CF-Access-Client-Id": OPERATIONS_CF_ACCESS_CLIENT_ID,
-        "CF-Access-Client-Secret": OPERATIONS_CF_ACCESS_CLIENT_SECRET,
-    }
+    headers = {"X-Operations-Ingest-Key": OPERATIONS_ALERT_INGEST_KEY}
+    if OPERATIONS_CF_ACCESS_CLIENT_ID and OPERATIONS_CF_ACCESS_CLIENT_SECRET:
+        headers["CF-Access-Client-Id"] = OPERATIONS_CF_ACCESS_CLIENT_ID
+        headers["CF-Access-Client-Secret"] = OPERATIONS_CF_ACCESS_CLIENT_SECRET
+    return headers
 
 
 def queue_operations_alert(event):
