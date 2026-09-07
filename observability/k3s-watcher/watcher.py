@@ -11,11 +11,13 @@ import hashlib
 import json
 import os
 import re
+import select
 import subprocess
 import sys
 import time
 from collections import OrderedDict
 from datetime import datetime, timezone
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 
@@ -546,10 +548,53 @@ def check_restart_loops():
 
 def functional_health_check(namespace, url, session=requests):
     """Return whether an application's dependency-aware health endpoint passes."""
+    forwarder = None
+    request_url = url
+    parsed = urlsplit(url)
+    cluster_host = parsed.hostname or ""
+    cluster_suffix = ".svc.cluster.local"
+    if cluster_host.endswith(cluster_suffix):
+        # The watcher runs on the host, outside the cluster DNS and overlay
+        # network. Port-forward the named Service so the check actually runs
+        # against the in-cluster endpoint instead of failing DNS resolution.
+        service = cluster_host[: -len(cluster_suffix)].split(".")[0]
+        service_namespace = cluster_host[: -len(cluster_suffix)].split(".")[1]
+        try:
+            remote_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            forwarder = subprocess.Popen(
+                [
+                    "kubectl", "-n", service_namespace, "port-forward",
+                    "--address", "127.0.0.1", f"svc/{service}",
+                    f"0:{remote_port}",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            ready, _, _ = select.select([forwarder.stdout], [], [], 5)
+            line = forwarder.stdout.readline().strip() if ready else ""
+            match = re.search(r"127\.0\.0\.1:(\d+)", line)
+            if not match:
+                raise RuntimeError(line or "port-forward did not start")
+            request_url = urlunsplit((
+                parsed.scheme, f"127.0.0.1:{match.group(1)}", parsed.path,
+                parsed.query, parsed.fragment,
+            ))
+        except (OSError, RuntimeError, subprocess.SubprocessError, ValueError, IndexError) as exc:
+            if forwarder is not None:
+                forwarder.terminate()
+            return False, f"{namespace} functional health endpoint port-forward failed: {exc}"
     try:
-        response = session.get(url, timeout=OPERATIONS_TIMEOUT_SECONDS)
+        response = session.get(request_url, timeout=OPERATIONS_TIMEOUT_SECONDS)
     except requests.RequestException as exc:
         return False, f"{namespace} functional health endpoint is unreachable: {exc}"
+    finally:
+        if forwarder is not None:
+            forwarder.terminate()
+            try:
+                forwarder.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                forwarder.kill()
     if response.status_code != 200:
         return False, (
             f"{namespace} functional health endpoint returned HTTP "
