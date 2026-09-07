@@ -9,23 +9,26 @@
 # /home/chase/Downloads/pantry-bot/docker-compose.prod.yml
 #
 # -----------------------------------------------------------------------------
-# DEPLOY PIPELINE (k8s-homelab-oiv, cut over 2026-08-13)
+# DEPLOY PIPELINE (single consolidated workflow, see k8s-homelab-os2)
 # -----------------------------------------------------------------------------
-# CI pushes to main -> GitHub Actions publishes ghcr.io/chayzx/pantry-bot:latest
-# (publish.yml, automatic) -> a human clicks "Run workflow" on deploy.yml,
-# which reaches this cluster's private API through a dedicated Cloudflare
-# Tunnel + Access route (../k8s-homelab/ci-tunnel/) and runs `kubectl set
-# image` + `rollout restart` + `rollout status`, with `rollout undo` on
-# failure. Manual-click by design -- GitHub's paid-only "required reviewers"
-# environment protection isn't available on this private repo's free plan,
-# so a workflow_dispatch-only deploy workflow is the substitute: build
-# feedback stays automatic, nothing touches the cluster unattended.
+# A merge to `main` IS the production approval -- one "PantryBot CI/CD"
+# workflow (pantry-bot's .github/workflows/deploy.yml) builds+publishes
+# ghcr.io/chayzx/pantry-bot:latest, reaches this cluster's private API
+# through a dedicated Cloudflare Tunnel + Access route
+# (../k8s-homelab/ci-tunnel/), and runs `kubectl apply` on this manifest +
+# `kubectl set image` + `rollout restart` + `rollout status`, with
+# `rollout undo` on failure -- all in the same run, on every push to main
+# (docs-only changes excepted via paths-ignore). No second click:
+# see k8s-homelab/DEPLOYING.md's trigger matrix. (This superseded an
+# earlier two-stage design -- automatic publish.yml, then a manual
+# workflow_dispatch-only deploy.yml -- from k8s-homelab-oiv's 2026-08-13
+# cutover; that stage split is retired, not the current behavior.)
 #
 # Previously Keel (poll-based, fully automatic, `keel.sh/*` annotations here)
 # filled this role -- retired after a real incident (k8s-homelab-9nb: Keel's
 # separate registry credential silently expired, deploys stopped for a full
 # day with zero alerting) exposed its main weakness: a background process
-# whose failure nobody watches. Manual-click means whoever deploys directly
+# whose failure nobody watches. The current pipeline means whoever merges
 # sees the GitHub Actions result in real time. `keel` namespace/manifests
 # removed from this repo; see k8s-homelab-oiv.6.
 #
@@ -45,9 +48,14 @@ metadata:
     app.kubernetes.io/component: bot
 spec:
   replicas: 1
-  # Recreate: RWO PVC holding a live SQLite database in WAL mode. A rolling
-  # update would overlap two writers on one DB file — the exact corruption
-  # hazard the migration plan calls out.
+  # Recreate: still only one writer allowed on the SQLite WAL file at a time.
+  # Originally this guarded against two pods sharing one RWO PVC; as of STEP B
+  # (data now lives on an emptyDir restored from R2 on every start, not a
+  # PVC -- see the restore-db initContainer and k8s-homelab-0br's follow-up)
+  # the hazard is the same but the storage underneath it changed: Recreate is
+  # what guarantees the old pod's litestream sidecar has fully stopped
+  # writing before the new pod's restore reads the replica, not just what
+  # prevents two pods mounting the same volume.
   strategy:
     type: Recreate
   selector:
@@ -65,6 +73,59 @@ spec:
       automountServiceAccountToken: false
       imagePullSecrets:
         - name: ghcr-pull-secret
+      # ===================================================================
+      # STEP B: restore-on-start (k8s-homelab-0br follow-up, see #177)
+      # ===================================================================
+      # Runs before the `bot` container starts. `data` below is an emptyDir,
+      # not a PVC -- it starts empty every time this pod is scheduled,
+      # whether that's the same node as last time or a different one after a
+      # node failure. This restore is what actually makes cross-node
+      # failover work; without it, a rescheduled pod would just start with
+      # an empty database.
+      #
+      # Verified against the real replica before this went in (not assumed
+      # from replication looking healthy): a manual `litestream restore` into
+      # a scratch file reproduced the exact same `users` row count as the
+      # live database. Restoring is fundamentally different from replicating
+      # and either can be broken independently -- see #177's discussion.
+      initContainers:
+        - name: restore-db
+          image: litestream/litestream:0.3.13
+          # -if-db-not-exists: makes this a no-op if /data/pantry.db is
+          # already present. emptyDir survives a plain container restart
+          # within the same pod (only a full pod reschedule wipes it), so
+          # without this flag a crash-loop on the bot container would
+          # re-run this restore every time and clobber whatever the running
+          # instance had already written locally with an older snapshot.
+          command:
+            - litestream
+            - restore
+            - -config
+            - /etc/litestream.yml
+            - -if-db-not-exists
+            - /data/pantry.db
+          env:
+            - name: LITESTREAM_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: pantry-bot-litestream
+                  key: LITESTREAM_ACCESS_KEY_ID
+            - name: LITESTREAM_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pantry-bot-litestream
+                  key: LITESTREAM_SECRET_ACCESS_KEY
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: litestream-config
+              mountPath: /etc/litestream.yml
+              subPath: litestream.yml
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
       # 60s (not the 30s default): give the process time to close SQLite
       # cleanly and checkpoint the WAL back into pantry.db on SIGTERM.
       terminationGracePeriodSeconds: 60
@@ -95,7 +156,7 @@ spec:
           envFrom:
             - configMapRef:
                 name: pantry-bot-config
-            # TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET — see SECRETS.md.
+            # TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET / OAUTH_ADMIN_PASSWORD.
             - secretRef:
                 name: pantry-bot-twitch
             # DISCORD_ALERT_WEBHOOK_URL — optional (bot degrades gracefully
@@ -104,6 +165,17 @@ spec:
             # Twitch connections) posted to a Discord channel. See SECRETS.md.
             - secretRef:
                 name: pantry-bot-discord-alerts
+                optional: true
+            # AUTHENTIK_ENROLLMENT_WEBHOOK_SECRET — optional (src/enrollment/webhook.ts
+            # returns 503 and ignores the request until this is set, see #92).
+            # Shared secret Authentik's NotificationTransport sends as the
+            # `x-webhook-secret` header on POST /internal/authentik-enrollment.
+            # Create the Secret in the pantry-bot namespace with a single key
+            # named AUTHENTIK_ENROLLMENT_WEBHOOK_SECRET before this does
+            # anything; see SECRETS.md for how the sibling secrets above are
+            # provisioned.
+            - secretRef:
+                name: pantry-bot-authentik-webhook
                 optional: true
 
           # ===================================================================
@@ -115,32 +187,12 @@ spec:
           # and its own comment says a response "even a 404" proves the server
           # is alive. That is not a stylistic note — it is load-bearing.
           #
-          # VERIFIED: GET / on this app returns **404**. Checked through the
-          # live tunnel; the response carries `x-powered-by: Express`, so the
-          # 404 is generated by this Express app, not by Cloudflare. There is
-          # no /health or /healthz either (both 404); /oauth/callback returns
-          # 400, confirming the origin is what is answering.
-          #
-          # Kubernetes httpGet probes succeed ONLY on HTTP 200-399. A
-          # `httpGet: path: /, port: 3000` probe would therefore fail on every
-          # single check: readiness would pin the pod NotReady forever, and
-          # liveness would restart it every ~30s into permanent
-          # CrashLoopBackOff. On a healthy app. This is the single most
-          # dangerous line in the whole pantry-bot migration.
-          #
-          # So the probe below replicates the proven Compose check exactly —
-          # same one-liner, same image, same semantics ("any response = alive").
-          # `node` is guaranteed present (this is a Node app) and the image has
-          # no curl or wget, which is why the original used node in the first
-          # place.
-          #
-          # PREFERRED FIX (do this in the app, then switch the probes):
-          # add a route returning 200:
-          #     app.get('/healthz', (_req, res) => res.status(200).send('ok'))
-          # then replace both probes with the far cheaper:
-          #     httpGet: {path: /healthz, port: http}
-          # Until that route exists and has been verified to return 200, keep
-          # the exec probes.
+          # Startup and liveness intentionally remain shallow process checks:
+          # any HTTP response proves Express is accepting connections, and
+          # missing Twitch credentials should not cause a restart loop.
+          # Readiness uses /ready so the OAuth recovery routes remain reachable
+          # even when Twitch credentials are absent. /health separately reports
+          # missing integrations as degraded for monitoring and alerting.
           # ===================================================================
 
           # Replaces Compose's `start_period: 15s`. Until this succeeds the
@@ -157,15 +209,11 @@ spec:
             failureThreshold: 10
 
           readinessProbe:
-            exec:
-              command:
-                - node
-                - -e
-                - "require('http').get('http://127.0.0.1:3000/', r => process.exit(0)).on('error', () => process.exit(1))"
-            # k8s-homelab-5gt: this only proves "HTTP server responds," not
-            # "Twitch chat/EventSub actually connected" -- eventSub.connect()
-            # in bot/index.ts is fire-and-forget, not awaited, so the HTTP
-            # server can be up well before the bot is functionally ready.
+            httpGet:
+              path: /ready
+              port: http
+              scheme: HTTP
+            # The stabilization delay gives the HTTP/SQLite service time to settle.
             # initialDelaySeconds forces a stabilization window post-startup
             # before the Service marks this pod Ready and Recreate's old pod
             # (already gone) gets replaced with traffic flowing here -- cheap,
@@ -205,7 +253,55 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+
+        # ===================================================================
+        # litestream — continuous SQLite backup to R2 (STEP A, see
+        # 25-configmap-litestream.yaml header comment for the full context).
+        # Reads the same /data the bot writes to (now an emptyDir restored by
+        # the initContainer above, as of STEP B), ships changes to R2.
+        # ===================================================================
+        - name: litestream
+          image: litestream/litestream:0.3.13
+          args: ["replicate", "-config", "/etc/litestream.yml"]
+          env:
+            - name: LITESTREAM_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: pantry-bot-litestream
+                  key: LITESTREAM_ACCESS_KEY_ID
+            - name: LITESTREAM_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pantry-bot-litestream
+                  key: LITESTREAM_SECRET_ACCESS_KEY
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: litestream-config
+              mountPath: /etc/litestream.yml
+              subPath: litestream.yml
+              readOnly: true
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
       volumes:
+        # emptyDir, not a PVC (as of STEP B, #177) -- node-local and
+        # disposable by design. The restore-db initContainer above populates
+        # it from the R2 replica on every pod start; the litestream sidecar
+        # keeps shipping changes back out continuously. This is what lets the
+        # pod actually reschedule onto a different node (a PVC using
+        # `local-path` storage is pinned to whichever node created it and
+        # would leave a rescheduled pod stuck Pending forever).
         - name: data
-          persistentVolumeClaim:
-            claimName: pantry-bot-data
+          emptyDir: {}
+        - name: litestream-config
+          configMap:
+            name: pantry-bot-litestream-config

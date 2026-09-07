@@ -5,16 +5,19 @@ check never suppresses an alert.  Secrets and the systemd unit remain host
 configuration; this module is the tracked source deployed by that unit.
 """
 
+import base64
 import fcntl
 import hashlib
 import json
 import os
 import re
+import select
 import subprocess
 import sys
 import time
 from collections import OrderedDict
 from datetime import datetime, timezone
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 
@@ -38,6 +41,13 @@ WATCH_NAMESPACES = [
     for ns in os.environ.get("WATCH_NAMESPACES", "jmusicbot,pantry-bot").split(",")
     if ns.strip()
 ]
+FUNCTIONAL_HEALTH_URLS = {}
+for entry in os.environ.get("FUNCTIONAL_HEALTH_URLS", "").split(","):
+    entry = entry.strip()
+    if entry:
+        namespace, url = entry.split("=", 1)
+        if namespace.strip() and url.strip():
+            FUNCTIONAL_HEALTH_URLS[namespace.strip()] = url.strip()
 POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "30"))
 RESTART_THRESHOLD = int(os.environ.get("RESTART_THRESHOLD", "3"))
 RESTART_WINDOW_SECONDS = int(os.environ.get("RESTART_WINDOW_SECONDS", "600"))
@@ -68,6 +78,9 @@ OPERATIONS_RECONCILE_URL = os.environ.get(
     ),
 ).strip()
 OPERATIONS_ALERT_INGEST_KEY = os.environ.get("OPERATIONS_ALERT_INGEST_KEY", "")
+OPERATIONS_ALERT_INGEST_SECRET_NAME = os.environ.get(
+    "OPERATIONS_ALERT_INGEST_SECRET_NAME", "operations-alert-ingest"
+)
 OPERATIONS_CF_ACCESS_CLIENT_ID = os.environ.get("OPERATIONS_CF_ACCESS_CLIENT_ID", "")
 OPERATIONS_CF_ACCESS_CLIENT_SECRET = os.environ.get(
     "OPERATIONS_CF_ACCESS_CLIENT_SECRET", ""
@@ -125,6 +138,30 @@ _reconciliation_started_at = time.time()
 _reconciliation_warmup_seconds = max(
     RESTART_WINDOW_SECONDS, ERROR_CONFIRMATION_SECONDS + ERROR_PENDING_GAP_SECONDS
 )
+_operations_ingest_key_cache = None
+
+
+def _operations_ingest_key():
+    """Read the ingest key from Kubernetes when systemd has no secret value."""
+    global _operations_ingest_key_cache
+    if OPERATIONS_ALERT_INGEST_KEY:
+        return OPERATIONS_ALERT_INGEST_KEY
+    if _operations_ingest_key_cache:
+        return _operations_ingest_key_cache
+    result = subprocess.run(
+        [
+            "kubectl", "get", "secret", OPERATIONS_ALERT_INGEST_SECRET_NAME,
+            "-n", "operations", "-o", "jsonpath={.data.key}",
+        ],
+        capture_output=True, text=True, timeout=5,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return ""
+    try:
+        _operations_ingest_key_cache = base64.b64decode(result.stdout).decode()
+    except (ValueError, UnicodeDecodeError):
+        return ""
+    return _operations_ingest_key_cache
 
 
 def acquire_singleton_lock():
@@ -173,10 +210,11 @@ def send_discord_alert(title, description, color=0xE74C3C, extra_user_ids=()):
 
 
 def _operations_enabled():
+    ingest_key = _operations_ingest_key()
     required = (
         OPERATIONS_ALERT_URL,
         OPERATIONS_RECONCILE_URL,
-        OPERATIONS_ALERT_INGEST_KEY,
+        ingest_key,
         OPERATIONS_TIMEOUT_SECONDS,
         OPERATIONS_PENDING_LIMIT,
         OPERATIONS_RETRY_BASE_SECONDS,
@@ -196,7 +234,7 @@ def _operations_enabled():
 
 
 def _operations_headers():
-    headers = {"X-Operations-Ingest-Key": OPERATIONS_ALERT_INGEST_KEY}
+    headers = {"X-Operations-Ingest-Key": _operations_ingest_key()}
     if OPERATIONS_CF_ACCESS_CLIENT_ID and OPERATIONS_CF_ACCESS_CLIENT_SECRET:
         headers["CF-Access-Client-Id"] = OPERATIONS_CF_ACCESS_CLIENT_ID
         headers["CF-Access-Client-Secret"] = OPERATIONS_CF_ACCESS_CLIENT_SECRET
@@ -508,6 +546,63 @@ def check_restart_loops():
     return collection_complete, active_event_keys
 
 
+def functional_health_check(namespace, url, session=requests):
+    """Return whether an application's dependency-aware health endpoint passes."""
+    forwarder = None
+    request_url = url
+    parsed = urlsplit(url)
+    cluster_host = parsed.hostname or ""
+    cluster_suffix = ".svc.cluster.local"
+    if cluster_host.endswith(cluster_suffix):
+        # The watcher runs on the host, outside the cluster DNS and overlay
+        # network. Port-forward the named Service so the check actually runs
+        # against the in-cluster endpoint instead of failing DNS resolution.
+        service = cluster_host[: -len(cluster_suffix)].split(".")[0]
+        service_namespace = cluster_host[: -len(cluster_suffix)].split(".")[1]
+        try:
+            remote_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            forwarder = subprocess.Popen(
+                [
+                    "kubectl", "-n", service_namespace, "port-forward",
+                    "--address", "127.0.0.1", f"svc/{service}",
+                    f"0:{remote_port}",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            ready, _, _ = select.select([forwarder.stdout], [], [], 5)
+            line = forwarder.stdout.readline().strip() if ready else ""
+            match = re.search(r"127\.0\.0\.1:(\d+)", line)
+            if not match:
+                raise RuntimeError(line or "port-forward did not start")
+            request_url = urlunsplit((
+                parsed.scheme, f"127.0.0.1:{match.group(1)}", parsed.path,
+                parsed.query, parsed.fragment,
+            ))
+        except (OSError, RuntimeError, subprocess.SubprocessError, ValueError, IndexError) as exc:
+            if forwarder is not None:
+                forwarder.terminate()
+            return False, f"{namespace} functional health endpoint port-forward failed: {exc}"
+    try:
+        response = session.get(request_url, timeout=OPERATIONS_TIMEOUT_SECONDS)
+    except requests.RequestException as exc:
+        return False, f"{namespace} functional health endpoint is unreachable: {exc}"
+    finally:
+        if forwarder is not None:
+            forwarder.terminate()
+            try:
+                forwarder.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                forwarder.kill()
+    if response.status_code != 200:
+        return False, (
+            f"{namespace} functional health endpoint returned HTTP "
+            f"{response.status_code}."
+        )
+    return True, ""
+
+
 def check_workload_health():
     """Alert on pull/config failures and unavailable Deployments.
 
@@ -634,9 +729,98 @@ def check_workload_health():
                     f"Deployment {namespace}/{name} is back up (was unavailable)."
                 ),
             })
-    if collection_complete:
-        sweep_workload_recoveries(active_event_keys)
+
+        health_url = FUNCTIONAL_HEALTH_URLS.get(namespace)
+        if health_url:
+            healthy, health_message = functional_health_check(namespace, health_url)
+            key = _event_key("functional", namespace)
+            if not persistent_workload_condition(key, not healthy):
+                continue
+            if healthy:
+                active_event_keys.discard(key)
+                continue
+            active_event_keys.add(key)
+            queue_operations_alert({
+                "source": "k3s-watcher",
+                "eventKey": key,
+                "eventType": "functionalHealth",
+                "severity": "critical",
+                "namespace": namespace,
+                "workload": namespace,
+                "pod": None,
+                "message": health_message,
+                "occurredAt": _utc_now(),
+            })
+            if cooldown_ok(key):
+                send_discord_alert(
+                    f"🚨 {namespace} functional health check failed",
+                    health_message,
+                    extra_user_ids=extra_recipients_for(namespace),
+                )
+            _active_workload_alerts.setdefault(key, {
+                "namespace": namespace,
+                "workload": namespace,
+                "pod": None,
+                "recovery_message": f"{namespace} functional health check is passing again.",
+            })
     return collection_complete, active_event_keys
+
+
+def check_node_health():
+    """Alert when a cluster node (e.g. the Oracle failover node) goes NotReady.
+
+    Pod/Deployment checks above are node-agnostic -- they catch a workload
+    failing wherever it's scheduled, but say nothing if a whole node drops
+    off the cluster before its pods are evicted. This closes that gap:
+    infra-level, so it always goes to the primary recipient only, not the
+    per-namespace EXTRA_ALERT_RECIPIENTS list.
+    """
+    result = subprocess.run(
+        ["kubectl", "get", "nodes", "-o", "json"],
+        capture_output=True, text=True, timeout=15,
+    )
+    if result.returncode != 0:
+        print(f"[k3s-watcher] kubectl get nodes failed: {result.stderr.strip()}")
+        return False, set()
+    active_event_keys = set()
+    for node in json.loads(result.stdout).get("items", []):
+        name = node.get("metadata", {}).get("name", "unknown")
+        conditions = {
+            c.get("type"): c for c in node.get("status", {}).get("conditions", [])
+        }
+        ready_condition = conditions.get("Ready", {})
+        is_ready = ready_condition.get("status") == "True"
+        key = _event_key("node", name)
+        if not persistent_workload_condition(key, not is_ready):
+            continue
+        active_event_keys.add(key)
+        reason = ready_condition.get("reason", "Unknown")
+        message = (
+            f"Node {name} has been NotReady ({reason}) for at least "
+            f"{WORKLOAD_CONFIRMATION_SECONDS / 60:.0f} minutes. Pods scheduled "
+            "here won't be rescheduled onto a remaining Ready node until "
+            "Kubernetes's own eviction timeout elapses."
+        )
+        queue_operations_alert({
+            "source": "k3s-watcher",
+            "eventKey": key,
+            "eventType": "nodeNotReady",
+            "severity": "critical",
+            "namespace": "cluster",
+            "workload": name,
+            "pod": None,
+            "message": message,
+            "occurredAt": _utc_now(),
+        })
+        if cooldown_ok(key):
+            send_discord_alert(f"🚨 Node {name} NotReady", message)
+        _active_workload_alerts.setdefault(key, {
+            "namespace": "cluster",
+            "workload": name,
+            "pod": None,
+            "recovery_message": f"Node {name} is Ready again.",
+        })
+    return True, active_event_keys
 
 
 def check_log_errors():
@@ -724,9 +908,11 @@ def run_checks_once():
     """Collect, deliver, and reconcile one pass without partial resolution."""
     restart_complete = False
     workload_complete = False
+    node_complete = False
     log_complete = False
     restart_keys = set()
     workload_keys = set()
+    node_keys = set()
     log_keys = set()
     try:
         restart_complete, restart_keys = check_restart_loops()
@@ -737,15 +923,25 @@ def run_checks_once():
     except Exception as exc:
         print(f"[k3s-watcher] Workload health check error: {exc}")
     try:
+        node_complete, node_keys = check_node_health()
+    except Exception as exc:
+        print(f"[k3s-watcher] Node health check error: {exc}")
+    try:
         log_complete, log_keys = check_log_errors()
     except Exception as exc:
         print(f"[k3s-watcher] Log-error check error: {exc}")
+    # _active_workload_alerts is shared by check_workload_health and
+    # check_node_health, so the recovery sweep must see the union of both
+    # passes' keys -- sweeping with only one's keys would misread the
+    # other's still-active conditions as recovered.
+    if workload_complete and node_complete:
+        sweep_workload_recoveries(workload_keys | node_keys)
     try:
         flush_operations_alerts()
     except Exception as exc:
         print(f"[k3s-watcher] Unexpected Operations delivery error: {exc}")
-    if restart_complete and workload_complete and log_complete:
-        active_keys = restart_keys | workload_keys | log_keys
+    if restart_complete and workload_complete and node_complete and log_complete:
+        active_keys = restart_keys | workload_keys | node_keys | log_keys
         finish_operations_lifecycle(active_keys)
         if time.time() - _reconciliation_started_at < _reconciliation_warmup_seconds:
             return
@@ -765,7 +961,9 @@ if __name__ == "__main__":
         "✅ Watcher online",
         f"Monitoring namespaces: {', '.join(WATCH_NAMESPACES)}\n"
         f"Restart-loop: >= {RESTART_THRESHOLD} restarts / {RESTART_WINDOW_SECONDS}s. "
-        f"Log errors: pattern `{ERROR_PATTERNS}` (cooldown: {COOLDOWN_SECONDS}s).",
+        f"Log errors: pattern `{ERROR_PATTERNS}` (cooldown: {COOLDOWN_SECONDS}s).\n"
+        f"Node health: all cluster nodes (NotReady for "
+        f"{WORKLOAD_CONFIRMATION_SECONDS / 60:.0f}+ min alerts, primary recipient only).",
         color=0x2ECC71,
     )
     while True:

@@ -9,48 +9,24 @@ serial cutover.
 | `auto-update.sh` | `~/docker/jmusicbot/auto-update.sh` | user crontab, daily 04:17 |
 | `minecraft_backup.py` | `~/docker/observability/monitoring/minecraft-exporter/minecraft_backup.py` | `minecraft-backup.timer` (user), daily 04:00 |
 | `minecraft_exporter.py` | `~/docker/observability/monitoring/minecraft-exporter/minecraft_exporter.py` | `minecraft-exporter.service` (user), always on |
-| `kuma-host-heartbeat.sh` | new | user crontab, every minute |
 
-**Retired:** `beads-dolt-pull.sh` (5-minute Dolt pull for the beads boards,
-removed with the beads migration — issue tracking now lives in GitHub Issues
-+ Projects v2, see `../AGENTS.md`). Its cron line is gone; `bd`, scotty, and
-the `.beads/` databases are retired.
+**Retired:** the former local tracker sync script. Its
+cron line is gone; issue tracking now lives in the owning GitHub repository and
+the appropriate GitHub Project board (see `../AGENTS.md`).
 
 The workload scripts below are runbooks and are installed manually as part of
 the migration.
 
 ---
 
-## Host uptime heartbeat for Uptime Kuma
+## Monitoring
 
-`kuma-host-heartbeat.sh` is the host-side half of bead `k8s-homelab-8nc`'s
-long-term uptime scope. It does **not** collect CPU or memory trends; it only
-pushes a minute-by-minute "host is alive" signal into Uptime Kuma so Kuma can
-keep host uptime history beyond Grafana's 7-day Prometheus retention window.
+Uptime Kuma has been decommissioned. In-cluster workload, node readiness,
+Cloudflare connector, and functional-health alerting is handled by
+`observability/k3s-watcher/` and Prometheus. External reachability is handled
+by UptimeRobot: use per-node Ping/Port monitors, not a shared Cloudflare
+hostname, when distinguishing the home and Oracle hosts.
 
-Pods and services should continue to use ordinary Kuma HTTP/TCP monitors. This
-script is specifically for the bare host, because a push delivered from the
-host proves the machine itself is up.
-
-### One-time setup
-
-1. In the Uptime Kuma UI at `https://status.greeniespantry.uk`, add a new
-   **Push** monitor for the host. Set its heartbeat interval to `60` seconds.
-2. Copy only the generated token into a local env file:
-
-   ```sh
-   echo 'KUMA_PUSH_TOKEN=<token>' > ~/.config/kuma-heartbeat.env
-   chmod 600 ~/.config/kuma-heartbeat.env
-   ```
-
-3. Add the host cron entry:
-
-   ```cron
-   * * * * * /home/chase/k8s-homelab/scripts/kuma-host-heartbeat.sh >> /home/chase/k8s-homelab/scripts/kuma-heartbeat.log 2>&1
-   ```
-
-4. In Kuma, set the monitor interval to **2 minutes** so two missed pushes mark
-   the host down.
 
 ---
 

@@ -47,6 +47,24 @@ for line in (
     assert watcher.ERROR_RE.search(line)
 assert not watcher.ERROR_RE.search("Overlay server listening on port 8080")
 
+health_session = Mock()
+health_session.get.return_value = Mock(status_code=200)
+assert watcher.functional_health_check(
+    "pantry-bot", "http://10.43.170.195/health", health_session
+) == (True, "")
+health_session.get.return_value = Mock(status_code=503)
+healthy, message = watcher.functional_health_check(
+    "pantry-bot", "http://10.43.170.195/health", health_session
+)
+assert healthy is False
+assert "HTTP 503" in message
+health_session.get.side_effect = watcher.requests.Timeout("timed out")
+healthy, message = watcher.functional_health_check(
+    "pantry-bot", "http://10.43.170.195/health", health_session
+)
+assert healthy is False
+assert "unreachable" in message
+
 teardown = 'failed to run the datagram handler error="context canceled" connIndex=2'
 assert watcher.CLOUDFLARED_BENIGN_RE.search(teardown)
 assert watcher.cloudflared_teardown_suppressed(teardown, True)
@@ -389,6 +407,73 @@ finally:
     watcher.queue_operations_alert = original_queue
     watcher.send_discord_alert = original_discord
     watcher.cooldown_ok = original_cooldown_ok
+    watcher._active_workload_alerts.clear()
+
+# A node whose Ready condition is false for the confirmation window alerts
+# to the primary recipient only (never EXTRA_ALERT_RECIPIENTS, since a node
+# outage isn't namespace-scoped); a Ready node produces no alert.
+original_subprocess_run = watcher.subprocess.run
+original_discord = watcher.send_discord_alert
+original_cooldown_ok = watcher.cooldown_ok
+watcher._pending_workload_conditions.clear()
+watcher._active_workload_alerts.clear()
+try:
+    watcher.WORKLOAD_CONFIRMATION_SECONDS = 300
+    node_response = Mock(returncode=0, stderr="")
+    node_response.stdout = watcher.json.dumps({
+        "items": [{
+            "metadata": {"name": "pantry-bot-oracle"},
+            "status": {"conditions": [
+                {"type": "Ready", "status": "False", "reason": "NodeStatusUnknown"}
+            ]},
+        }]
+    })
+    watcher.subprocess.run = Mock(return_value=node_response)
+    watcher.send_discord_alert = Mock()
+    watcher.cooldown_ok = Mock(return_value=True)
+
+    complete, active = watcher.check_node_health()
+    assert complete is True
+    assert active == set()
+    assert watcher.send_discord_alert.call_count == 0  # not yet confirmed
+
+    complete, active = watcher.check_node_health()
+    assert active == set()
+    assert watcher.send_discord_alert.call_count == 0  # still within gap window
+
+    watcher._pending_workload_conditions[
+        watcher._event_key("node", "pantry-bot-oracle")
+    ]["first_seen"] -= 300
+    complete, active = watcher.check_node_health()
+    assert complete is True
+    assert len(active) == 1
+    watcher.send_discord_alert.assert_called_once()
+    call = watcher.send_discord_alert.call_args
+    assert call.args[0] == "🚨 Node pantry-bot-oracle NotReady"
+    assert call.kwargs.get("extra_user_ids", ()) == ()
+    assert len(watcher._active_workload_alerts) == 1
+
+    # Node recovers: Ready again, sweep produces a recovery DM.
+    node_response.stdout = watcher.json.dumps({
+        "items": [{
+            "metadata": {"name": "pantry-bot-oracle"},
+            "status": {"conditions": [{"type": "Ready", "status": "True"}]},
+        }]
+    })
+    watcher.send_discord_alert.reset_mock()
+    complete, active = watcher.check_node_health()
+    assert complete is True
+    assert active == set()
+    watcher.sweep_workload_recoveries(active)
+    watcher.send_discord_alert.assert_called_once()
+    recovery_call = watcher.send_discord_alert.call_args
+    assert recovery_call.args[1] == "Node pantry-bot-oracle is Ready again."
+    assert watcher._active_workload_alerts == {}
+finally:
+    watcher.subprocess.run = original_subprocess_run
+    watcher.send_discord_alert = original_discord
+    watcher.cooldown_ok = original_cooldown_ok
+    watcher._pending_workload_conditions.clear()
     watcher._active_workload_alerts.clear()
 
 print("test_watcher: all assertions passed")

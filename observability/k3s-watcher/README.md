@@ -26,6 +26,16 @@ this keeps normal merge deploys quiet while still reporting a replacement pod
 that cannot start. The JMusicBot dashboard's Pod Status and Ready Containers
 panels expose the same Kubernetes state in Grafana.
 
+Node health is checked cluster-wide (not per-namespace): if any node's
+`Ready` condition is false for `WORKLOAD_CONFIRMATION_SECONDS` (default 5
+minutes, shared with the workload checks above), it alerts. This is separate
+from and complementary to the pod/Deployment checks — those catch a
+workload failing wherever it's scheduled, but say nothing if the node itself
+(e.g. the Oracle failover node, `chayzx/pantry-bot-infra`) drops off the
+cluster before its pods are evicted. Node alerts always go to the primary
+`DISCORD_USER_ID` only, never `EXTRA_ALERT_RECIPIENTS` — a node outage isn't
+namespace-scoped the way a workload failure is.
+
 The Discord token, user ID, Loki URL, kubeconfig, and systemd unit remain
 host-local secrets/configuration. Install this directory on the host and
 point `k3s-watcher.service` at `watcher.py`; do not commit `.env` files.

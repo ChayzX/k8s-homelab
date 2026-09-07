@@ -49,7 +49,7 @@ Cross-check `kubectl get pods -A` / `kubectl get ns` against this document befor
 |---|---|---|
 | `jmusicbot` | `_bootstrap/00-namespaces.yaml` | Discord music bot + release notifier |
 | `pantry-bot` | `_bootstrap/00-namespaces.yaml` | Twitch bot + Cloudflare Tunnel |
-| `observability` | `observability/namespace.yaml` | Loki, Prometheus, Grafana, Uptime Kuma, promtail, kube-state-metrics |
+| `observability` | `observability/namespace.yaml` | Loki, Prometheus, Grafana, promtail, kube-state-metrics; monitoring alerts come from k3s-watcher and UptimeRobot |
 | `minecraft` | `minecraft/minecraft.yaml` (**not** in `_bootstrap`, see note below) | The Minecraft server — **applied and live** |
 | `opsbot` | `_bootstrap/00-namespaces.yaml` | Discord remote-control bot (deployment status/restart, Minecraft RCON console) — **applied and live** |
 | `kube-system` | k3s | CoreDNS, Traefik, local-path-provisioner, metrics-server |
@@ -70,7 +70,6 @@ Cross-check `kubectl get pods -A` / `kubectl get ns` against this document befor
 | Port | Protocol | Service | Reaches |
 |---|---|---|---|
 | `25565` | TCP | `minecraft.minecraft` (LoadBalancer) | Minecraft, via router port-forward |
-| `3001` | TCP | `uptime-kuma.observability` (LoadBalancer) | Uptime Kuma dashboard |
 | `3002` | TCP | `grafana.observability` (LoadBalancer) | Grafana dashboard |
 | (Cloudflare Tunnel, no port) | — | `pantry-bot.pantry-bot` (ClusterIP, via `cloudflared`) | pantry-bot's HTTP/WS API |
 
@@ -109,6 +108,8 @@ Docker Desktop holds `3001`/`3002`/`25565` on the host until each old container 
 
 Every stateful app uses `Deployment` + `strategy: Recreate` + a `ReadWriteOnce` PVC — never `StatefulSet`, never `RollingUpdate` on a stateful app. This is the core safety pattern of the whole design: `Recreate` guarantees the old pod is fully terminated and its volume released *before* the replacement pod mounts the same PVC, which is what prevents two processes from ever opening the same SQLite file, Loki WAL, Prometheus TSDB, or embedded MariaDB datadir at once.
 
+**One deliberate exception as of #177/#180**: `pantry-bot` no longer uses a PVC at all — its storage is now an `emptyDir`, restored from a Litestream/R2 replica by an `initContainer` on every start. This happened specifically because the cluster grew a second node (`pantry-bot-oracle`, arm64, `chayzx/pantry-bot-infra`) and a `local-path` PVC pins a pod to whichever node created it, which would have made cross-node failover impossible. `Recreate` is still used, for the same single-writer reason as always — it now protects the Litestream sidecar's stop/restore handoff instead of a shared PVC mount. See the `pantry-bot` namespace section below and `40-deployment.yaml`'s own comments for the full detail. This pattern (emptyDir + external-replica restore instead of a PVC) is worth considering for any other stateful app that might someday need to run across both nodes — it isn't pantry-bot-specific in principle, just the only one that's needed it so far.
+
 ### `jmusicbot` namespace
 
 **Live status: fully migrated and verified, as of this writing.** Both Deployments `1/1 Running`. `jmusicbot`'s logs confirm `serversettings.json loaded`, `YouTube access token refreshed successfully`, `Login Successful!`, `Finished Loading!` — the PVC data migration and the OAuth token both survived, no Discord re-auth was needed. `jmusicbot-release-notifier`'s log shows `Last seen release: v0.7.0`, matching `last_release.json` on the pre-migration host path — its state survived too. Old Docker containers for this stack are stopped and no longer present in `docker ps`.
@@ -122,31 +123,37 @@ Every stateful app uses `Deployment` + `strategy: Recreate` + a `ReadWriteOnce` 
 
 ### `pantry-bot` namespace
 
-**Live status: applied and live, cut over 2026-08-11.** All 6 manifests applied, both Deployments `1/1 Running`, real production data migrated (zero-downtime `better-sqlite3` backup from the live Docker container), Cloudflare Tunnel fully repointed at the k8s Service — see the top status section for the full incident/fix narrative. Old Docker containers `pantry-bot-bot-1` and `pantry-bot-watchtower-1` are still running but should **not** stay up as a "safe fallback" — see the top status section: pantry-bot is a Twitch bot with its own outbound connection, not gated by inbound tunnel routing like the HTTP-only oauth/overlay servers, so both old and new instances have been live and connected simultaneously (a real bug, user asked to stop them). `pantry-bot-cloudflared-1` has been stopped (no longer needed once the k8s `cloudflared` connector was verified serving all four tunnel hostnames).
+**Live status: applied and live, cut over 2026-08-11; storage migrated PVC→emptyDir 2026-09-06 (#177/#180).** All manifests applied, `pantry-bot` and one `cloudflared` replica per node `Running`, real production data migrated originally (zero-downtime `better-sqlite3` backup from the live Docker container) and again onto the new storage model, verified with a real cross-node failover test onto `pantry-bot-oracle` (row counts matched exactly). Cloudflare Tunnel fully repointed at the k8s Service. Old Docker containers referenced below (`pantry-bot-bot-1` etc.) are long gone — that paragraph is left for historical record of the original migration, not current state.
 
-| Workload | Image | Ports | Requests/Limits | UID | SA (API access?) | PVC |
+| Workload | Image | Ports | Requests/Limits | UID | SA (API access?) | Storage |
 |---|---|---|---|---|---|---|
-| `pantry-bot` (Deployment, Recreate) | `ghcr.io/chayzx/pantry-bot:latest` (**private**, needs `imagePullSecrets: ghcr-pull-secret`) | 3000 (http), 8080 (ws) | 100m/250m CPU, 128Mi/256Mi mem | `1000:1000` (verified) | `pantry-bot-sa`, no API access | `pantry-bot-data` (1Gi, holds `pantry.db` SQLite + WAL) |
-| `cloudflared` (Deployment, RollingUpdate — safe here, stateless) | `cloudflare/cloudflared:latest` | 2000 (metrics/`/ready`) | 50m/200m CPU, 64Mi/128Mi mem | `65532:65532` (nonroot, verified) | `cloudflared-sa`, no API access | none |
+| `pantry-bot` (Deployment, Recreate) | `ghcr.io/chayzx/pantry-bot:latest` (**private**, needs `imagePullSecrets: ghcr-pull-secret`; multi-arch amd64+arm64 as of `pantry-bot#128` — see #127 for why this matters) | 3000 (http), 8080 (ws) | 100m/250m CPU, 128Mi/256Mi mem | `1000:1000` (verified) | `pantry-bot-sa`, no API access | `emptyDir`, restored from R2/Litestream by `restore-db` initContainer on every start — **not** a PVC as of #177/#180. `pantry-bot-data` PVC still exists, orphaned, kept as a fallback — see `30-pvc.yaml.retired`. |
+| `cloudflared` (Deployment, RollingUpdate — safe here, stateless) | `cloudflare/cloudflared:latest` | 2000 (metrics/`/ready`) | 50m/200m CPU, 64Mi/128Mi mem | `65532:65532` (nonroot, verified) | `cloudflared-sa`, no API access | none. 2 replicas, pod anti-affinity (one per node) as of #178/#179 — was 1 replica when this table was first written. |
 
-**`pantry-bot` carries Keel annotations** (`keel.sh/policy: force`, `keel.sh/trigger: poll`, `keel.sh/pollSchedule: "@every 5m"`) reproducing the exact Watchtower behavior it replaces: poll GHCR every 5 minutes, redeploy on digest change even though the tag (`:latest`) never changes. **Two separate credentials are involved and both are required**: `imagePullSecrets` (kubelet pulls the image) and Keel's own registry credentials (Keel queries the GHCR API for the current digest) — missing the latter fails *silently*, the pod runs fine and Keel just never updates it.
+**Keel annotations are gone — this paragraph is historical.** `pantry-bot` originally carried `keel.sh/*` annotations reproducing Watchtower's poll-and-redeploy behavior. Keel itself was retired repo-wide (see `DEPLOYING.md`'s "Previous Auto-Deploy System" note); deploys now run automatically on every merge to `main` through `pantry-bot`'s own consolidated `deploy.yml` (`kubectl set image` + `rollout restart` + `rollout status`) — a merge is the approval step, not a second manual click. See `DEPLOYING.md`'s trigger matrix.
 
-**Known probe hazard, already fixed in the manifest — don't "simplify" it**: pantry-bot's `/` returns HTTP 404 (verified live through the tunnel), which a plain `httpGet` probe would treat as failure on every check, permanently CrashLooping a healthy app. The probes use the same `node -e "require('http').get(...)"` exec-based check the original Compose healthcheck used (any response = alive), not `httpGet`. If a `/healthz` route returning 200 is ever added to the app, switch to `httpGet` then — not before.
+**Probes**: readiness now uses `httpGet: /ready` (the app grew a real `/ready` route since this was first written), not the original exec-based `node -e "require('http').get(...)"` check. Startup and liveness still use the exec form deliberately — see `40-deployment.yaml`'s own probe comments for exactly why each one is shaped the way it is; don't consolidate them to `httpGet` without reading that first.
 
 ### `observability` namespace
 
-**Live status, as of this writing**: all six workloads — `loki`, `prometheus`, `grafana`, `uptime-kuma`, `promtail` (DaemonSet), `kube-state-metrics` — are `Running`/`1/1` and healthy. The old Docker promtail container is deliberately still running alongside the new one — it's still the one feeding Loki with Minecraft's host logs until Minecraft migrates; don't stop it early.
+**Live status, as of 2026-09-06**: the five remaining workloads — `loki`,
+`prometheus`, `grafana`, `promtail` (DaemonSet), and `kube-state-metrics` — are
+healthy. Uptime Kuma was decommissioned; k3s-watcher handles in-cluster
+alerting and UptimeRobot handles external reachability. The old Docker promtail
+container is deliberately still running alongside the new one until Minecraft
+migrates; don't stop it early.
 
 | Workload | Image (pinned) | Ports | Requests/Limits | UID | SA (API access?) | PVC |
 |---|---|---|---|---|---|---|
 | `loki` (Deployment, Recreate) | `grafana/loki:3.3.2` | 3100 (http), 9095 (grpc) | 50m/500m CPU, 128Mi/512Mi mem | `10001:10001` | `loki-sa`, no | `loki-data` (20Gi) |
 | `prometheus` (Deployment, Recreate) | `prom/prometheus:v3.1.0` | 9090 | 100m/1000m CPU, 512Mi/1Gi mem | `65534:65534` (nobody) | `prometheus-sa`, **yes** (`kubernetes_sd_configs`, scrapes kubelet/cAdvisor) | `prometheus-data` (20Gi) |
 | `grafana` (Deployment, Recreate) | `grafana/grafana:11.4.0` | 3000→3002 externally | 50m/500m CPU, 128Mi/512Mi mem | `472:472` | `grafana-sa`, no | `grafana-data` (2Gi) |
-| `uptime-kuma` (Deployment, Recreate) | `louislam/uptime-kuma:2` | 3001 | 50m/500m CPU, 192Mi/768Mi mem | `0:0` (root — upstream-mandated, drops privileges internally; forcing non-root breaks startup) | `uptime-kuma-sa`, no | `uptime-kuma-data` (2Gi, includes embedded MariaDB datadir) |
 | `promtail` (**DaemonSet**, not Deployment — log shipper needs one pod per node) | `grafana/promtail:3.3.2` | 9080 | 50m/200m CPU, 64Mi/256Mi mem | `0:0` (root, required — container logs under `/var/log/pods` are root-owned) | `promtail-sa`, **yes** (`kubernetes_sd_configs`, role: pod) | none (hostPath positions file at `/var/lib/promtail` instead) |
 | `kube-state-metrics` (Deployment, RollingUpdate — stateless) | `registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.13.0` | 8080, 8081 | 10m/100m CPU, 32Mi/128Mi mem | `65534:65534` | `kube-state-metrics-sa`, **yes** (lists/watches nearly every object type, read-only) | none |
 
-**`uptime-kuma` — resolved. Took three rounds to fully nail down, all stemming from the same root cause**: `capabilities.drop: ["ALL"]` genuinely strips a UID-0 process of nearly everything that makes it behave like unconfined root. Full chain, in the order each was found:
+**Historical note — Uptime Kuma (decommissioned 2026-09-06):** the following
+capability and storage notes document the retired migration and are retained as
+provenance only:
 1. `CAP_CHOWN`/`CAP_FOWNER`/`CAP_SETUID`/`CAP_SETGID` — needed for the outer Node.js process's own `chown`/`chmod` on the MariaDB datadir, and for `mariadbd`'s internal privilege-drop to UID 1000 (`--user=node`). Sourced from the actual uptime-kuma and MariaDB code, not guessed — see the manifest's own header comment for exact file/line citations.
 2. A stale root-owned `mysqld.pid` left over from an earlier crash attempt (before fix #1 landed) sat inside an otherwise-correctly-1000:1000-owned `/app/data/run/` — cleared via a temporary debug pod, not a manifest change (it was leftover live data, not a config problem).
 3. `CAP_DAC_OVERRIDE` — the piece the original analysis explicitly (and reasonably, for what it analyzed) left out. It correctly reasoned `mariadbd`'s own bootstrap never needs it, but missed that the *outer* Node.js process — which stays root throughout and never drops privilege, unlike `mariadbd` — separately connects to `/app/data/run/mariadb.sock` as a MySQL client. That socket is owned `1000:1000`, root isn't a member of group 1000 here, and "other" permissions are `r-x` (no write) — so a capability-stripped root process fails `connect()` with `EACCES` exactly like a normal non-root user would. Real/unconfined root only bypasses this via `CAP_DAC_OVERRIDE`.
@@ -193,7 +200,7 @@ Final capability set: `add: ["CHOWN", "FOWNER", "SETUID", "SETGID", "DAC_OVERRID
 
 ### `keel` namespace (REMOVED 2026-08-13)
 
-**Retired.** Live/applied 2026-08-11 through 2026-08-13; decommissioned as part of `k8s-homelab-oiv` (migrate CI/CD to GitHub Actions). Real incident (`k8s-homelab-9nb`, closed as superseded): Keel's separate registry credential silently expired 2026-08-11, deploys stopped for a full day with zero alerting — the exact failure mode a background auto-updater with its own credential path is prone to. Replaced by `publish.yml` (automatic build) + `deploy.yml` (manual-click `workflow_dispatch`, see `pantry-bot/40-deployment.yaml`'s header) reaching the cluster through `ci-tunnel/`. Namespace deleted, `keel/` manifests removed from this repo, `_bootstrap/00-namespaces.yaml` no longer creates it. The paragraphs below are kept as historical record of the design (digest-pinning a floating tag, the two-credential failure mode) — none of it is live anymore.
+**Retired.** Live/applied 2026-08-11 through 2026-08-13; decommissioned as part of `k8s-homelab-oiv` (migrate CI/CD to GitHub Actions). Real incident (`k8s-homelab-9nb`, closed as superseded): Keel's separate registry credential silently expired 2026-08-11, deploys stopped for a full day with zero alerting — the exact failure mode a background auto-updater with its own credential path is prone to. Replaced at the time by `publish.yml` (automatic build) + `deploy.yml` (manual-click `workflow_dispatch`) reaching the cluster through `ci-tunnel/` — **that two-stage split is itself since retired**; `deploy.yml` is now one consolidated workflow that builds, applies, restarts, and verifies automatically on every merge to `main` (no second click — see `DEPLOYING.md`'s trigger matrix and `pantry-bot/40-deployment.yaml`'s header). Namespace deleted, `keel/` manifests removed from this repo, `_bootstrap/00-namespaces.yaml` no longer creates it. The paragraphs below are kept as historical record of the design (digest-pinning a floating tag, the two-credential failure mode) — none of it is live anymore.
 
 <details>
 <summary>Historical design notes (Keel, retired)</summary>
@@ -246,11 +253,10 @@ kubectl get pv "$PV" -o jsonpath='{.spec.local.path}'
 |---|---|---|---|
 | `jmusicbot-config` | `jmusicbot` | 1Gi | `10001:10001` |
 | `jmusicbot-notifier-data` | `jmusicbot` | 256Mi | `0:0` (root, image default) |
-| `pantry-bot-data` | `pantry-bot` | 1Gi | `1000:1000` |
+| `pantry-bot-data` (**retired, not mounted by any pod as of #177/#180** — orphaned on purpose, kept as a fallback, not live storage) | `pantry-bot` | 1Gi | `1000:1000` |
 | `loki-data` | `observability` | 20Gi | `10001:10001` |
 | `prometheus-data` | `observability` | 20Gi | `65534:65534` |
 | `grafana-data` | `observability` | 2Gi | `472:472` |
-| `uptime-kuma-data` | `observability` | 2Gi | `0:0` |
 | `minecraft-world` | `minecraft` | 10Gi | `1000:1000` |
 
 **Every one of these UID/GID pairs was verified against the actual running container** (`docker top <container> -o user,group` or equivalent) during manifest-writing, not assumed from the base image — this mattered because the pre-migration data on disk is uniformly owned `1000:1000` (Docker Desktop's virtiofs fakes ownership on bind mounts; bare-metal k3s enforces real UIDs), so several of these need an explicit `chown` after the data copy, or the pod crash-loops on `EACCES`. Each manifest carries the exact `chown` command in its own header comment.

@@ -1,0 +1,85 @@
+# Host-level metrics for the arm64 Oracle failover node. The primary host
+# already runs a native exporter; this workload is scoped to Oracle only.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter-oracle
+  namespace: observability
+  labels:
+    app: node-exporter-oracle
+    app.kubernetes.io/name: node-exporter
+    app.kubernetes.io/part-of: observability
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter-oracle
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: node-exporter-oracle
+        app.kubernetes.io/name: node-exporter
+        app.kubernetes.io/part-of: observability
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: pantry-bot-oracle
+      hostNetwork: true
+      hostPID: true
+      tolerations:
+        - operator: Exists
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: node-exporter
+          image: prom/node-exporter:v1.9.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - --path.rootfs=/host
+          ports:
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: root
+              mountPath: /host
+              readOnly: true
+      volumes:
+        - name: root
+          hostPath:
+            path: /
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-exporter-oracle
+  namespace: observability
+  labels:
+    app: node-exporter-oracle
+    app.kubernetes.io/name: node-exporter
+    app.kubernetes.io/part-of: observability
+spec:
+  selector:
+    app: node-exporter-oracle
+  ports:
+    - name: metrics
+      port: 9100
+      targetPort: metrics
+      protocol: TCP

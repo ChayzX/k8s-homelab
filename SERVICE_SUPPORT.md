@@ -9,14 +9,14 @@ secrets, SQLite databases, world data, or kubeconfigs into Git.
 
 | Service | Source of truth | Runtime | Safe access and maintenance |
 |---|---|---|---|
-| PantryBot | [ChayzX/pantry-bot](https://github.com/ChayzX/pantry-bot), local checkout `/home/chase/Downloads/pantry-bot`; k8s manifests in `pantry-bot/` | `pantry-bot` namespace; Cloudflare Tunnel routes OAuth/overlay traffic | Build runs from the PantryBot repo; deploy only through its manual GitHub Actions workflow. Secrets and the production SQLite PVC are documented in `pantry-bot/SECRETS.md`. Do not restart or apply this service casually. |
+| PantryBot | [ChayzX/pantry-bot](https://github.com/ChayzX/pantry-bot), local checkout `/home/chase/Downloads/pantry-bot`; k8s manifests in `pantry-bot/` | `pantry-bot` namespace; Cloudflare Tunnel routes OAuth/overlay traffic | Merging to the PantryBot repo's `main` builds, applies, restarts, and verifies automatically (see `DEPLOYING.md`'s trigger matrix) — a merge is the deploy approval, not a separate manual click. Secrets and the production SQLite PVC are documented in `pantry-bot/SECRETS.md`. Do not merge to `main` casually. |
 | JMusicBot | Host checkout `/home/chase/docker/jmusicbot` (no Git remote currently); deployment manifests in `jmusicbot/` | `jmusicbot` namespace; local image `jmusicbot-custom:<tag>` side-loaded into k3s | Use `scripts/auto-update.sh` or the runbook in `jmusicbot/README.md`. Preserve `imagePullPolicy: IfNotPresent`; k3s cannot pull the local-only image. State is on the `jmusicbot-config` PVC. |
 | Minecraft | `minecraft/` in this repo; Paper image build and updater in `minecraft/Dockerfile` and `scripts/minecraft-auto-update.sh` | `minecraft` namespace; `minecraft-world` PVC; RCON is ClusterIP-only | Use `minecraft/MIGRATION.md`, `minecraft/secrets.md`, and `minecraft/BEDROCK.md`. Back up before upgrades. Keep Recreate strategy, RCON preStop shutdown, 120-second grace period, and 8 GiB memory limit. Never edit the world PVC directly while the pod is running. |
-| Opsbot | `opsbot/bot/` in this repo; image published to GHCR | `opsbot` namespace; Discord outbound gateway only | Push source to trigger publish, then manually run the deploy workflow. RBAC is in `opsbot/20-rbac.yaml`; secrets are in `opsbot/SECRETS.md`. Use `/pods`, `/deploy`, `/mc`, and `/bug` through Discord for supported operations. |
-| Grafana | Dashboards in `dashboards/`; manifests/provisioning in `observability/` | `observability` namespace, Service port 3002, external hostname `grafana.greeniespantry.uk` | Dashboard changes use `grafana-deploy.yml` and require a manual workflow dispatch. Datasource and alert provisioning are in `observability/grafana-provisioning.yaml`; credentials are in `observability/SECRETS.md`. |
+| Opsbot | `opsbot/bot/` in this repo; image published to GHCR | `opsbot` namespace; Discord outbound gateway only | Merging changes under `opsbot/bot/**` builds, applies, restarts, and verifies automatically — no second click, merge is approval. RBAC is in `opsbot/20-rbac.yaml`; secrets are in `opsbot/SECRETS.md`. Use `/pods`, `/deploy`, `/mc`, and `/bug` through Discord for supported operations. |
+| Grafana | Dashboards in `dashboards/`; manifests/provisioning in `observability/` | `observability` namespace, Service port 3002, external hostname `grafana.greeniespantry.uk` | Pushing dashboard/config changes to `main` applies the ConfigMap, restarts, and verifies Grafana automatically via `grafana-deploy.yml` (a manual workflow dispatch also works, but isn't required). Datasource and alert provisioning are in `observability/grafana-provisioning.yaml`; credentials are in `observability/SECRETS.md`. |
 | Prometheus | `observability/prometheus*.yaml` | `observability` namespace, internal Service | Inspect targets and rules with `kubectl`; change scrape configuration in Git and apply through the observability workflow/runbook. Persistent data is on the Prometheus PVC. |
 | Loki / Promtail | `observability/loki*.yaml` and `observability/promtail*.yaml` | `observability` namespace | Loki stores logs; Promtail labels and parses them. Changes to labels affect dashboards and the host watcher, so update queries/tests together. |
-| Uptime Kuma | `observability/uptime-kuma.yaml` | `observability` namespace, Service port 3001, external hostname `status.greeniespantry.uk` | Manage monitors in the Kuma UI. Host heartbeat setup is documented in `scripts/README.md`; do not put push tokens in Git. |
+| Monitoring | `observability/k3s-watcher/`, Prometheus, and UptimeRobot | k3s-watcher sends Discord/Operations alerts; UptimeRobot checks public reachability | Keep functional workload URLs in the host-local watcher environment. Use per-node UptimeRobot Ping/Port monitors for node identity; use existing public hostnames for HTTP checks. |
 | Cloudflare connectors | `pantry-bot/60-deployment-cloudflared.yaml` and `ci-tunnel/20-deployment.yaml` | `pantry-bot` and `ci-tunnel` namespaces | Check `/ready` on metrics port 2000 and connector logs. Dashboard-managed hostname routing lives in Cloudflare, not this repo. Keep DNS, dial, origin, and readiness failures alertable. |
 | k3s-watcher | Tracked source in `observability/k3s-watcher/`; host-installed copy consumed by `~/.config/systemd/user/k3s-watcher.service` | Host systemd user service; polls Loki and Kubernetes, sends Discord DMs | Copy/install from the tracked source, keep `.env` host-local, run `PYTHONPATH=. python3 test_watcher.py`, then restart the user unit. It health-gates only narrow Cloudflared QUIC teardown noise and deduplicates fingerprints. |
 
@@ -44,9 +44,11 @@ secrets, SQLite databases, world data, or kubeconfigs into Git.
   `src/overlay/public/` — WebSocket replay/broadcast server, persisted sound
   volume, theme, ticker, and OBS browser-source pages.
 - `test/*.test.ts` — Vitest coverage; run `npm test` and `npm run typecheck`.
-- `.github/workflows/publish.yml` and `deploy.yml` in the PantryBot repo —
-  image publish and manual deployment. Never commit `.env`, OAuth tokens, or
-  the production database.
+- `.github/workflows/deploy.yml` in the PantryBot repo — the single
+  consolidated "PantryBot CI/CD" workflow (build, apply, restart, verify,
+  automatically on every merge to `main`; `publish.yml` no longer exists as
+  a separate file). Never commit `.env`, OAuth tokens, or the production
+  database.
 
 ### JMusicBot (`/home/chase/docker/jmusicbot` plus this repo)
 
@@ -96,7 +98,6 @@ secrets, SQLite databases, world data, or kubeconfigs into Git.
   — Grafana Deployment, datasources, and alert provisioning.
 - `dashboards/*.json` and `dashboards/dashboards-configmap.yaml` — dashboard
   panels and their ConfigMap packaging.
-- `observability/uptime-kuma.yaml` — Kuma Deployment/PVC/Service.
 - `pantry-bot/60-deployment-cloudflared.yaml` and
   `ci-tunnel/20-deployment.yaml` — Cloudflare connector Deployments; hostname
   ingress rules are managed in Cloudflare, not source control.
