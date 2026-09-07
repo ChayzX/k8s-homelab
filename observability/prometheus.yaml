@@ -151,9 +151,9 @@ spec:
             - --config.file=/etc/prometheus/prometheus.yml
             - --storage.tsdb.path=/prometheus
             # Retention shortened from the 15d default, then again from
-            # 10d to 7d (2026-08-12) -- uptime-kuma already keeps its own
+            # 10d to 7d (2026-08-12) -- UptimeRobot and k3s-watcher provide
             # long-term per-service uptime history independently in its
-            # own database (uptime-kuma-data PVC), so Prometheus doesn't
+            # external/in-cluster uptime signals, so Prometheus doesn't
             # need to carry months of `up`/pod-readiness data just for
             # that. Less data on disk also means smaller compaction
             # passes on the 5900rpm HDD.

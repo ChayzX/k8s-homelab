@@ -220,7 +220,10 @@ spec:
         - name: minecraft-logs
           hostPath:
             path: /home/chase/minecraft/logs
-            type: Directory
+            # The Oracle node does not host Minecraft. DirectoryOrCreate lets
+            # the DaemonSet run there while presenting an empty mount; the
+            # home node already has the real log directory.
+            type: DirectoryOrCreate
         - name: host-journal
           hostPath:
             path: /var/log/journal

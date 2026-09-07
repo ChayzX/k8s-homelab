@@ -136,7 +136,7 @@ they run inside the single k3s process, so there's no `kube_pod_*`
 series for them; use the Node-Ready stat for that), scrape-target-down
 count, node-pressure-condition count, and hwmon temperatures.
 
-**Long-term uptime scope — Uptime Kuma + this dashboard.**
+**Monitoring scope — this dashboard, k3s-watcher, and UptimeRobot.**
 Prometheus is pinned to **7d / 15 GB retention**
 (`observability/prometheus.yaml`), deliberately — this host's `/` is a
 5900rpm HDD and huge TSDB blocks are hostile to it (HDD-tuning note in
@@ -145,24 +145,13 @@ Prometheus is pinned to **7d / 15 GB retention**
 - **Current host health / current host stats live here in Grafana.** This
   dashboard is the main-PC view for CPU, memory, disk, temperatures, network,
   load, and k3s control-plane health.
-- **Long-term uptime lives in Uptime Kuma.** The user clarified on
-  **August 13, 2026** that the goal is **uptime for hosts and pods**, not
-  long-term CPU/memory history. Kuma can do that because it stores
-  **up/down history per monitor**, but it still cannot store host
-  CPU/memory/disk trends — a real >7d trend store would need a separate TSDB
-  such as VictoriaMetrics or Mimir.
-
-For pods/services, keep using ordinary Kuma HTTP/TCP monitors. For the bare
-host itself, add a **push-type monitor** in Kuma (Uptime Kuma → Add Monitor →
-**Push**), which generates a token and listens at
-`https://status.greeniespantry.uk/api/push/<token>`. A host cron running
-`scripts/kuma-host-heartbeat.sh` pushes a heartbeat every minute, so a
-delivered push proves the host is up:
-`curl -fsS -m 10 "https://status.greeniespantry.uk/api/push/<token>?status=up&msg=host-alive"`.
-Set the monitor interval to **2 minutes** (one push/minute ⇒ 2 missed pushes =
-down). The long-term record is that monitor's history for the life of the
-`uptime-kuma-data` PVC. The token is generated in the Kuma UI and must never be
-committed.
+- **k3s-watcher owns workload and node alerting.** It sends Discord/Operations
+  alerts for node readiness, connector readiness, restart loops, log errors,
+  and the configured functional health URLs.
+- **UptimeRobot owns external reachability.** Keep Home and Oracle checks
+  pointed at node-specific IP/ports; public HTTP checks may use existing
+  Cloudflare hostnames, but must not be used to infer which tunnel replica is
+  alive. Prometheus/Grafana retain resource history.
 
 ### `pods-and-workloads.json` — Pods & Workloads — Usage vs Limits
 
