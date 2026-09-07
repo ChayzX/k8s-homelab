@@ -44,9 +44,11 @@ secrets, SQLite databases, world data, or kubeconfigs into Git.
   `src/overlay/public/` — WebSocket replay/broadcast server, persisted sound
   volume, theme, ticker, and OBS browser-source pages.
 - `test/*.test.ts` — Vitest coverage; run `npm test` and `npm run typecheck`.
-- `.github/workflows/publish.yml` and `deploy.yml` in the PantryBot repo —
-  image publish and manual deployment. Never commit `.env`, OAuth tokens, or
-  the production database.
+- `.github/workflows/deploy.yml` in the PantryBot repo — the single
+  consolidated "PantryBot CI/CD" workflow (build, apply, restart, verify,
+  automatically on every merge to `main`; `publish.yml` no longer exists as
+  a separate file). Never commit `.env`, OAuth tokens, or the production
+  database.
 
 ### JMusicBot (`/home/chase/docker/jmusicbot` plus this repo)
 

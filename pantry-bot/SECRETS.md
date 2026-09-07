@@ -164,8 +164,9 @@ Without `ghcr-pull-secret`: pod stuck in `ImagePullBackOff` -- loud and
 obvious, the kubelet needs it to pull the private image.
 
 Force a real end-to-end test rather than trusting it unattended: push to
-`main` (auto-builds via `publish.yml`), then manually trigger `deploy.yml`
-(Actions tab -> Run workflow) and confirm the pod's age resets:
+`main` — the consolidated `deploy.yml` builds, applies, restarts, and
+verifies automatically, no second click needed — and confirm the pod's age
+resets:
 
 ```bash
 kubectl -n pantry-bot get pods -w
