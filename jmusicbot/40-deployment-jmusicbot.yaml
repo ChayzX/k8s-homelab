@@ -82,6 +82,65 @@ spec:
         # mount, which fixes ownership for anything the migration copy missed.
         fsGroup: 10001
         fsGroupChangePolicy: OnRootMismatch
+      # ===================================================================
+      # R2 backup/restore for the `config` emptyDir (HA-EXPANSION.md, #191)
+      # ===================================================================
+      # `config` used to be the jmusicbot-config PVC. local-path PVCs pin a
+      # pod to whichever node created them, which blocks cross-node
+      # scheduling -- the same reason pantry-bot moved off a PVC (see its
+      # 40-deployment.yaml "STEP B"). This mirrors that pattern, but for
+      # plain files (serversettings.json, youtubetoken.txt, ...) instead of
+      # a SQLite db, so it uses rclone sync/copy against R2 instead of
+      # Litestream (which is SQLite-specific and doesn't apply here).
+      #
+      # Reuses pantry-bot's existing R2 account (same bucket,
+      # `pantry-bot-backups`, under a `jmusicbot/` prefix) rather than
+      # standing up new object storage -- approved 2026-09-08. Credentials
+      # are a copy of pantry-bot-litestream's, stored as the jmusicbot-r2
+      # Secret in this namespace.
+      #
+      # config.txt and its numbered .bak files are deliberately excluded
+      # from both directions: config.txt is delivered read-only from the
+      # jmusicbot-config-txt Secret (already durable, no PVC involvement),
+      # and the .bak files are JMusicBot's own internal churn with no
+      # standalone value.
+      initContainers:
+        - name: restore-state
+          image: rclone/rclone:1.69.1
+          # A first-ever deploy has nothing at this R2 prefix yet -- `rclone
+          # copy` against a path that doesn't exist on the remote just
+          # copies zero files and exits 0, so this is safe on a fresh
+          # namespace too, not just a real restore.
+          command:
+            - sh
+            - -c
+            - rclone copy r2:pantry-bot-backups/jmusicbot/ /musicbot/ --config=/dev/null
+          env: &r2-env
+            - name: RCLONE_CONFIG_R2_TYPE
+              value: s3
+            - name: RCLONE_CONFIG_R2_PROVIDER
+              value: Cloudflare
+            - name: RCLONE_CONFIG_R2_ENDPOINT
+              value: https://0d22ee71e5473142b1678cb7005f80f8.r2.cloudflarestorage.com
+            - name: RCLONE_CONFIG_R2_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: jmusicbot-r2
+                  key: R2_ACCESS_KEY_ID
+            - name: RCLONE_CONFIG_R2_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jmusicbot-r2
+                  key: R2_SECRET_ACCESS_KEY
+          volumeMounts:
+            - name: config
+              mountPath: /musicbot
+          securityContext:
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
       containers:
         - name: jmusicbot
           # Locally built, side-loaded image. Update this tag via
@@ -163,10 +222,48 @@ spec:
               mountPath: /musicbot/config.txt
               subPath: config.txt
               readOnly: true
+        - name: r2-sync
+          image: rclone/rclone:1.69.1
+          # Periodic, not continuous: unlike pantry-bot's SQLite (which
+          # Litestream streams change-by-change), these are plain files that
+          # change rarely (serversettings.json on a config change,
+          # youtubetoken.txt on OAuth refresh) -- a 5-minute sync loop is
+          # more than tight enough and far simpler than an inotify watcher.
+          command:
+            - sh
+            - -c
+            - |
+              while true; do
+                rclone sync /musicbot r2:pantry-bot-backups/jmusicbot/ \
+                  --exclude 'config.txt' --exclude 'config.txt.bak*' \
+                  --config=/dev/null --quiet
+                sleep 300
+              done
+          env: *r2-env
+          volumeMounts:
+            - name: config
+              mountPath: /musicbot
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
       volumes:
         - name: config
-          persistentVolumeClaim:
-            claimName: jmusicbot-config
+          # Was a PersistentVolumeClaim (jmusicbot-config, local-path) --
+          # switched to emptyDir + R2 restore/sync above so this pod isn't
+          # pinned to whichever node happens to hold the PVC. See the
+          # initContainers comment above for the full rationale.
+          emptyDir: {}
         - name: config-txt
           secret:
             secretName: jmusicbot-config-txt

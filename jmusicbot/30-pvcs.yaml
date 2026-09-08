@@ -10,25 +10,14 @@
 #
 # local-path provisions with `WaitForFirstConsumer`, so these PVCs will sit in
 # Pending until their Deployment schedules a pod. That is expected, not a fault.
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: jmusicbot-config
-  namespace: jmusicbot
-  labels:
-    app.kubernetes.io/name: jmusicbot
-    app.kubernetes.io/part-of: homelab
-spec:
-  accessModes: ["ReadWriteOnce"]
-  storageClassName: local-path
-  resources:
-    requests:
-      # Replaces the bind mount /home/chase/docker/jmusicbot -> /musicbot.
-      # Holds serversettings.json, youtubetoken.txt, .slashcommands.hash and
-      # JMusicBot's own runtime files. Currently a few hundred KB; 1Gi is
-      # generous headroom, and local-path does not pre-allocate.
-      storage: 1Gi
+#
+# `jmusicbot-config` (serversettings.json, youtubetoken.txt, etc.) was
+# removed from here 2026-09-08 -- a local-path PVC pins the pod to whichever
+# node created it, blocking cross-node scheduling. jmusicbot/
+# 40-deployment-jmusicbot.yaml now uses an emptyDir there instead, restored
+# from and synced to R2 on every start (see that file's comments). Any
+# PersistentVolume/PVC left over from the old `jmusicbot-config` claim can
+# be deleted once the new emptyDir path is verified working.
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
