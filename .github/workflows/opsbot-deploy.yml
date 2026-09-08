@@ -31,6 +31,17 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v5
+      # QEMU is what lets the amd64 GitHub Actions runner cross-compile an
+      # arm64 image -- without it, `platforms: linux/arm64` below fails
+      # outright rather than silently building amd64-only.
+      #
+      # Added 2026-09-08: opsbot's second replica on pantry-bot-oracle
+      # (arm64) sat in ImagePullBackOff for 10+ hours undetected --
+      # ghcr.io/chayzx/opsbot had only ever been built for amd64. Same
+      # failure mode pantry-bot hit on 2026-09-06 (see its deploy.yml),
+      # fixed here the same way.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v4
       - name: Login to GHCR
         uses: docker/login-action@v4
@@ -44,9 +55,21 @@ jobs:
         with:
           context: opsbot/bot
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/chayzx/opsbot:latest
             ghcr.io/chayzx/opsbot:${{ github.sha }}
+      - name: Verify multi-arch manifest
+        run: |
+          set -euo pipefail
+          OUTPUT="$(docker buildx imagetools inspect ghcr.io/chayzx/opsbot:${{ github.sha }})"
+          echo "$OUTPUT"
+          for plat in linux/amd64 linux/arm64; do
+            if ! echo "$OUTPUT" | grep -qE "Platform:\s*$plat"; then
+              echo "::error::Published image is missing platform $plat -- any pod scheduled onto a $plat node would hit ImagePullBackOff, exactly as happened here 2026-09-08 and to pantry-bot 2026-09-06." >&2
+              exit 1
+            fi
+          done
       - name: Publish stage summary
         if: always()
         run: |
