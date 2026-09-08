@@ -1,0 +1,89 @@
+# Host-level metrics for the mini PC (`chasebot`, joined the cluster
+# 2026-09-08 -- see HA-EXPANSION.md, #191). Same pattern as
+# node-exporter-oracle.yaml: minecraftmachine already runs a native
+# exporter, so each additional node gets its own DaemonSet scoped to it
+# rather than a cluster-wide one (avoids the node-exporter pods scheduling
+# onto minecraftmachine and colliding with the native one on port 9100).
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter-chasebot
+  namespace: observability
+  labels:
+    app: node-exporter-chasebot
+    app.kubernetes.io/name: node-exporter
+    app.kubernetes.io/part-of: observability
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter-chasebot
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: node-exporter-chasebot
+        app.kubernetes.io/name: node-exporter
+        app.kubernetes.io/part-of: observability
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: chasebot
+      hostNetwork: true
+      hostPID: true
+      tolerations:
+        - operator: Exists
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: node-exporter
+          image: prom/node-exporter:v1.9.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - --path.rootfs=/host
+          ports:
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: root
+              mountPath: /host
+              readOnly: true
+      volumes:
+        - name: root
+          hostPath:
+            path: /
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-exporter-chasebot
+  namespace: observability
+  labels:
+    app: node-exporter-chasebot
+    app.kubernetes.io/name: node-exporter
+    app.kubernetes.io/part-of: observability
+spec:
+  selector:
+    app: node-exporter-chasebot
+  ports:
+    - name: metrics
+      port: 9100
+      targetPort: metrics
+      protocol: TCP
