@@ -63,7 +63,7 @@ data:
       # already bare-metal-correct.
       - job_name: node
         static_configs:
-          - targets: ["192.168.40.208:9100", "node-exporter-oracle.observability.svc.cluster.local:9100"]
+          - targets: ["192.168.40.208:9100", "node-exporter-oracle.observability.svc.cluster.local:9100", "node-exporter-chasebot.observability.svc.cluster.local:9100"]
 
       # >>> TO BE REMOVED AT PHASE 5 <<<
       # docker_desktop_exporter.py measures the Docker Desktop qemu VM's
@@ -180,15 +180,6 @@ data:
       - job_name: promtail
         static_configs:
           - targets: ["promtail.observability.svc.cluster.local:9080"]
-
-      # ---------------------------------------------------------------
-      # Application-level usage metrics (not infra/pod health -- that
-      # already comes from kube-state-metrics/cadvisor above). Exposed by
-      # the bot itself at GET /metrics; see pantry-bot's src/metrics.ts.
-      # ---------------------------------------------------------------
-      - job_name: pantry-bot
-        static_configs:
-          - targets: ["pantry-bot.pantry-bot.svc.cluster.local:3000"]
 
       # ---------------------------------------------------------------
       # DROPPED FROM THE COMPOSE CONFIG, on purpose:
