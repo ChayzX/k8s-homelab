@@ -112,7 +112,15 @@ Every stateful app uses `Deployment` + `strategy: Recreate` + a `ReadWriteOnce` 
 
 ### `jmusicbot` namespace
 
-**Live status: fully migrated and verified, as of this writing.** Both Deployments `1/1 Running`. `jmusicbot`'s logs confirm `serversettings.json loaded`, `YouTube access token refreshed successfully`, `Login Successful!`, `Finished Loading!` — the PVC data migration and the OAuth token both survived, no Discord re-auth was needed. `jmusicbot-release-notifier`'s log shows `Last seen release: v0.7.0`, matching `last_release.json` on the pre-migration host path — its state survived too. Old Docker containers for this stack are stopped and no longer present in `docker ps`.
+**Re-platformed onto `pantry-bot-oracle` (arm64) after MinecraftMachine's
+failure** (see the `jmusicbot/README.md` "Recovering onto Oracle" section for
+the full runbook). Both Deployments now carry `nodeSelector:
+kubernetes.io/hostname: pantry-bot-oracle` and pull a multi-arch image from
+`ghcr.io/chayzx/jmusicbot` — the local-build/side-load path in the table
+below is retired along with the host it depended on. PVC data did not survive
+the host failure; treat this as a fresh deploy, not a like-for-like restore.
+
+**Live status (pre-failure history): fully migrated and verified, as of this writing.** Both Deployments `1/1 Running`. `jmusicbot`'s logs confirm `serversettings.json loaded`, `YouTube access token refreshed successfully`, `Login Successful!`, `Finished Loading!` — the PVC data migration and the OAuth token both survived, no Discord re-auth was needed. `jmusicbot-release-notifier`'s log shows `Last seen release: v0.7.0`, matching `last_release.json` on the pre-migration host path — its state survived too. Old Docker containers for this stack are stopped and no longer present in `docker ps`.
 
 | Workload | Image | Ports | Requests/Limits | UID | SA (API access?) | PVC |
 |---|---|---|---|---|---|---|

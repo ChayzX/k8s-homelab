@@ -51,6 +51,10 @@ spec:
         app.kubernetes.io/part-of: homelab
         app.kubernetes.io/component: notifier
     spec:
+      # Same node as jmusicbot (see 40-deployment-jmusicbot.yaml note 1) — the
+      # only node left in the cluster since MinecraftMachine's failure.
+      nodeSelector:
+        kubernetes.io/hostname: pantry-bot-oracle
       serviceAccountName: jmusicbot-release-notifier-sa
       # Zero Kubernetes API access required.
       automountServiceAccountToken: false

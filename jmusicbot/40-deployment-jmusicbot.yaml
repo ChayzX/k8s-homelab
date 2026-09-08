@@ -1,40 +1,51 @@
 # =============================================================================
 # jmusicbot — Discord music bot
 # =============================================================================
-# Replaces the `jmusicbot` service in /home/chase/docker/jmusicbot/docker-compose.yml
+# Runs on the `pantry-bot-oracle` node (arm64) — see the nodeSelector below.
+# The original host (MinecraftMachine, amd64) died; this namespace no longer
+# has a bare-metal box to side-load images into, so it moved onto the GHCR
+# pipeline `.github/workflows/jmusicbot-deploy.yml` already builds (that
+# workflow's `apply-release`/`restart`/`verify` jobs run `kubectl set
+# image`/`rollout restart` against whichever image tag it just published —
+# nothing here needs to change per-release). See k8s-homelab-jor for the
+# migration.
 #
-# THREE THINGS HERE ARE EASY TO GET WRONG. Read before editing:
+# THINGS HERE ARE EASY TO GET WRONG. Read before editing:
 #
-# 1. imagePullPolicy: IfNotPresent — MANDATORY, NOT A PREFERENCE.
-#    `jmusicbot-custom:yts1182` is built locally by auto-update.sh and
-#    side-loaded into k3s's containerd with
-#        docker save jmusicbot-custom:<tag> | sudo k3s ctr images import -
-#    It does NOT exist in any registry. With `Always` (which is also the
-#    implicit default for a `:latest` tag) the kubelet tries to pull from
-#    docker.io/library and the pod goes ErrImagePull forever.
+# 1. nodeSelector pins this pod to pantry-bot-oracle (arm64) — the only node
+#    left in the cluster after MinecraftMachine's failure. The image below
+#    MUST be a multi-arch (or arm64) manifest — see the workflow's
+#    `platforms:` build setting — or the pod sits in `ErrImagePull` /
+#    `exec format error` on this node.
 #
-# 2. runAsUser: 10001 — VERIFIED against the running container, not assumed.
-#    `docker top jmusicbot -o user,group` reports 10001:10001. The files under
-#    /home/chase/docker/jmusicbot are owned 1000:1000 ONLY because Docker
-#    Desktop's virtiofs fakes ownership on the bind mount. Bare-metal k3s
-#    enforces real UIDs, so the migrated PVC contents MUST be chowned to
-#    10001:10001 or the bot cannot write serversettings.json / youtubetoken.txt.
-#    See README.md, step "migrate the data".
+# 2. runAsUser: 10001 — carried over from the pre-migration verification
+#    (`docker top jmusicbot -o user,group` reported 10001:10001) and assumed
+#    unchanged since the upstream Dockerfile that CI now builds from is the
+#    same one the old custom image was built from. The `jmusicbot-config` PVC
+#    is a FRESH, EMPTY volume on this node (the old PVC's data lived on
+#    MinecraftMachine's now-dead disk and was not recovered) — local-path's
+#    `fsGroup`/`fsGroupChangePolicy` below handle ownership on first mount, no
+#    manual chown needed this time. Expect a one-time YouTube OAuth
+#    re-authorization (read the pod log for a device code) since
+#    `youtubetoken.txt` did not survive.
 #
 # 3. This Deployment is DELIBERATELY NOT MANAGED BY KEEL.
-#    It carries no keel.sh/* annotations, and it must not gain any. jmusicbot
-#    has its own rebuild pipeline (auto-update.sh, cron, daily) which builds a
-#    uniquely-tagged image each run. The k8s deploy step is therefore
-#        docker save <tag> | sudo k3s ctr images import -
-#        kubectl -n jmusicbot set image deployment/jmusicbot jmusicbot=<tag>
-#    NOT `kubectl rollout restart` — the image reference itself must change.
+#    It carries no keel.sh/* annotations, and it must not gain any. Its
+#    rebuild/deploy pipeline is now `.github/workflows/jmusicbot-deploy.yml`
+#    (merge to main = deploy, see DEPLOYING.md), which already does the
+#    correct `kubectl set image` (never `rollout restart` alone) since each
+#    build publishes a uniquely-tagged image.
 #
 # 4. The health probes below depend on the health-endpoint patch (bd
-#    k8s-homelab-aos, scripts/patches/jmusicbot-health-endpoint.patch). Only the
-#    patched image listens on port 9091; a stock ghcr.io image has no listener
-#    there and would sit NotReady forever. The image tag below is the expected
-#    post-rebuild tag — build it (README section "Health endpoint") BEFORE
-#    applying this manifest, or the pod will ErrImagePull.
+#    k8s-homelab-aos, scripts/patches/jmusicbot-health-endpoint.patch), applied
+#    automatically by the GitHub Actions build. Only that patched image
+#    listens on port 9091; a stock upstream image has no listener there and
+#    would sit NotReady forever.
+#
+# 5. The `ghcr.io/chayzx/jmusicbot` package must be pull-able from this
+#    cluster: either public (DEPLOYING.md says to make it so before the first
+#    deploy) or referenced with an `imagePullSecrets` entry + a
+#    `ghcr-pull-secret` created in this namespace (see SECRETS.md).
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -68,6 +79,11 @@ spec:
         # this value, or just `kubectl rollout restart`, to pick it up.
         homelab/config-revision: "1"
     spec:
+      # Pinned to the sole remaining cluster node post-MinecraftMachine
+      # failure — matches observability/node-exporter-oracle.yaml's pattern.
+      # Revisit if a second node ever joins and this no longer needs pinning.
+      nodeSelector:
+        kubernetes.io/hostname: pantry-bot-oracle
       serviceAccountName: jmusicbot-sa
       # Zero Kubernetes API access required. No token is projected.
       automountServiceAccountToken: false
@@ -84,14 +100,13 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: jmusicbot
-          # Locally built, side-loaded image. Update this tag via
-          # `kubectl set image` from auto-update.sh — see header note 3.
-          # The -health1 suffix marks the build that carries the health
-          # endpoint (bd k8s-homelab-aos); see header note 4.
-          # `potok` adds ytpotoken/ytvisitordata support (Web client poToken,
-          # see scripts/patches/jmusicbot-potoken.patch) — k8s-homelab#41.
-          image: jmusicbot-custom:potok
-          imagePullPolicy: IfNotPresent  # see header note 1 — do not change
+          # Multi-arch image published by .github/workflows/jmusicbot-deploy.yml
+          # (ghcr.io/chayzx/jmusicbot). CI overwrites this tag via
+          # `kubectl set image` on every merge to main — see header note 3.
+          # `:latest` here is only the value used on a from-scratch `kubectl
+          # apply`; it is never what a real deploy runs on afterwards.
+          image: ghcr.io/chayzx/jmusicbot:latest
+          imagePullPolicy: IfNotPresent  # each CI build is a unique tag
           # Health endpoint (bd k8s-homelab-aos): a JDK-built-in HttpServer on
           # 9091 in the patched image. /health returns 200 only after the bot
           # has logged into Discord; /live returns 200 whenever the JVM is

@@ -2,6 +2,67 @@
 
 Migrates `/home/chase/docker/jmusicbot/docker-compose.yml` (2 services) to k3s.
 
+**Re-platformed onto `pantry-bot-oracle` (arm64) after MinecraftMachine
+(the original amd64 host) failed.** Both Deployments now carry a
+`nodeSelector: kubernetes.io/hostname: pantry-bot-oracle` and pull a
+multi-arch image from `ghcr.io/chayzx/jmusicbot` (built by
+`.github/workflows/jmusicbot-deploy.yml`) instead of the old locally-built,
+side-loaded `jmusicbot-custom:*` image — there is no longer a bare-metal box
+to build/side-load into. Sections **A** and **B** below (image side-loading,
+data migration from the dead host) are historical: they describe the original
+MinecraftMachine cutover and no longer apply. See "Recovering onto Oracle"
+below for what actually needs to happen now.
+
+---
+
+## Recovering onto Oracle (after MinecraftMachine's failure)
+
+1. **Confirm the node.** `kubectl get nodes -o wide` — `pantry-bot-oracle`
+   should be `Ready`. If MinecraftMachine is still listed (`NotReady`/gone),
+   remove it: `kubectl delete node <minecraftmachine-node-name>`, or workload
+   scheduling for this namespace can still try to land there and hang.
+2. **Namespace + identity + config + storage** (nothing arch-specific):
+   ```bash
+   kubectl apply -f ../_bootstrap/00-namespaces.yaml
+   kubectl apply -f 10-serviceaccounts.yaml
+   kubectl apply -f 20-configmap.yaml
+   kubectl apply -f 30-pvcs.yaml
+   ```
+   These PVCs bind fresh and empty on `pantry-bot-oracle` — the old PVC data
+   lived on MinecraftMachine's disk and was not recoverable. Unless you have
+   an off-host backup of `serversettings.json` / `youtubetoken.txt` /
+   `last_release.json`, treat this as a clean start: per-guild settings (DJ
+   role, default channel, etc.) are gone, and JMusicBot will need a fresh
+   YouTube OAuth device-code authorization on first login (watch the pod log).
+3. **Secrets** (imperative, see `SECRETS.md`) — `jmusicbot-config-txt` (the
+   whole `config.txt`, including the Discord token) and
+   `jmusicbot-notifier-secrets` (`DISCORD_RELEASE_WEBHOOK_URL`). Recreate
+   these from your own records; they are not in git and were not backed up by
+   this migration.
+4. **Make `ghcr.io/chayzx/jmusicbot` pullable from the cluster** — either
+   flip the GHCR package to public (Packages → `jmusicbot` → Package settings
+   → Change visibility), matching how `jmusicbot-release-notifier` is already
+   public, or add `imagePullSecrets: [{name: ghcr-pull-secret}]` to
+   `40-deployment-jmusicbot.yaml` and create that Secret (see `SECRETS.md`
+   §3 for the exact command, same pattern).
+5. **Get a build published**, since a from-scratch cluster has never run the
+   CI pipeline against this repo state: push any no-op change under
+   `jmusicbot/**` to `main` (or use the workflow's `workflow_dispatch`) so
+   `.github/workflows/jmusicbot-deploy.yml` builds the multi-arch
+   (`linux/amd64,linux/arm64`) image and deploys it. `KUBE_CONFIG_JMUSICBOT`
+   must already point at a reachable cluster API — re-verify the
+   `ci-tunnel`/Cloudflare Access route in front of it still resolves now that
+   MinecraftMachine (which may have hosted the tunnel connector, depending on
+   where `ci-tunnel`'s pods landed) is gone.
+6. Apply the Deployments + health Service (or let CI do it):
+   ```bash
+   kubectl apply -f 50-deployment-release-notifier.yaml
+   kubectl apply -f 40-deployment-jmusicbot.yaml
+   kubectl apply -f 45-service-health.yaml
+   ```
+7. Follow "Verification" below — this time the per-guild-settings check in
+   step 4 there is expected to come back empty/default, not proof of a bug.
+
 | Compose service    | k8s object                              | State |
 |--------------------|-----------------------------------------|-------|
 | `jmusicbot`        | Deployment `jmusicbot`                  | PVC `jmusicbot-config` (1Gi) at `/musicbot` |
