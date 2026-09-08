@@ -1,0 +1,79 @@
+# LDAP outpost for centralized POSIX identity (issue #193).
+#
+# The base Authentik install (server/worker/postgres) is NOT tracked in this
+# repo -- it's a Helm install from /home/chase/authentik-values.yaml, outside
+# this repo's scope. This outpost is new work, deployed here so it's
+# reproducible from git going forward, unlike the base install.
+#
+# Provider/application/group/outpost objects were created via the Authentik
+# API (Provider pk=6 "Server LDAP", Application "server-ldap", group
+# "posix-admins", Outpost pk=97c72a3d-5f53-4af7-9290-4a756a342b85). Only
+# members of "posix-admins" can bind. AUTHENTIK_TOKEN is the outpost's own
+# service-account token, created out of band as the `ldap-outpost-token`
+# Secret -- never commit its value.
+#
+# Exposes standard LDAP (389->3389) and LDAPS (636->6636) via k3s's
+# ServiceLB so hosts outside the cluster (Oracle, GCP, the mini PC -- none
+# of which are k3s nodes yet) can reach it over the LAN/Tailscale IP.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ldap-outpost
+  namespace: auth
+  labels:
+    app.kubernetes.io/name: ldap-outpost
+    app.kubernetes.io/part-of: homelab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ldap-outpost
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ldap-outpost
+    spec:
+      containers:
+        - name: ldap-outpost
+          image: ghcr.io/goauthentik/ldap:2026.5.6
+          ports:
+            - name: ldap
+              containerPort: 3389
+            - name: ldaps
+              containerPort: 6636
+          env:
+            - name: AUTHENTIK_HOST
+              value: "https://auth.greeniespantry.uk"
+            - name: AUTHENTIK_INSECURE
+              value: "false"
+            - name: AUTHENTIK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ldap-outpost-token
+                  key: AUTHENTIK_TOKEN
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ldap-outpost
+  namespace: auth
+  labels:
+    app.kubernetes.io/name: ldap-outpost
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: ldap-outpost
+  ports:
+    - name: ldap
+      port: 389
+      targetPort: 3389
+    - name: ldaps
+      port: 636
+      targetPort: 6636
