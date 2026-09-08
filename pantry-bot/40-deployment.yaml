@@ -71,6 +71,27 @@ spec:
       serviceAccountName: pantry-bot-sa
       # Zero Kubernetes API access required.
       automountServiceAccountToken: false
+      # No node affinity/selector, deliberately: pinning to one node just
+      # relocates the single point of failure instead of removing it. Real
+      # cross-node continuity depends on the control plane having quorum
+      # somewhere other than the node that died (see HA-EXPANSION.md) --
+      # this pod is free to land wherever the scheduler puts it.
+      #
+      # Default NoExecute tolerations for not-ready/unreachable are 300s;
+      # shortened here so a real node loss reschedules in ~20s instead of
+      # 5 minutes once a live control plane can act on it. This has no
+      # effect on a home outage while minecraftmachine is the sole k3s
+      # server -- there's no API server left to reschedule anything until
+      # that changes.
+      tolerations:
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 20
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 20
       imagePullSecrets:
         - name: ghcr-pull-secret
       # ===================================================================
