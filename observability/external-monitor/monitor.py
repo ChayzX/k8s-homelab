@@ -61,6 +61,11 @@ def parse_expected_statuses(value: str) -> frozenset[int]:
     return frozenset(int(item.strip()) for item in value.split(",") if item.strip())
 
 
+def alert_identity(check_name: str) -> str:
+    """Return the stable identity for one external continuity check."""
+    return f"external-monitor:{check_name}"
+
+
 def check(item: Check) -> dict[str, object]:
     request = urllib.request.Request(item.url, headers={"User-Agent": "homelab-external-monitor/1"})
     started = time.monotonic()
@@ -245,16 +250,29 @@ def run_once() -> None:
     previous = load_state()
     failure_count = (int(previous.get("failure_count", 0)) + 1) if failed else 0
     overall = "degraded" if failure_count >= FAILURE_THRESHOLD else "healthy"
+    previous_active = previous.get("active_alerts", {})
+    if not isinstance(previous_active, dict):
+        previous_active = {}
+    active_alerts = (
+        {name: alert_identity(name) for name in failed}
+        if overall == "degraded"
+        else {}
+    )
     state = {
         "timestamp": int(time.time()),
         "overall": overall,
         "failure_count": failure_count,
+        "active_alerts": active_alerts,
         "checks": checks,
     }
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     STATE_FILE.write_text(json.dumps(state, indent=2) + "\n")
-    if previous.get("overall") and previous.get("overall") != overall:
-        notify(f"State changed: `{previous['overall']}` → `{overall}`; failed checks: {', '.join(failed) or 'none'}")
+    for name in sorted(set(active_alerts) - set(previous_active)):
+        notify(
+            f"Alert `{active_alerts[name]}` firing; failed checks: {','.join(failed)}"
+        )
+    for name in sorted(set(previous_active) - set(active_alerts)):
+        notify(f"Alert `{previous_active[name]}` recovered")
     if failed:
         print(f"CHECK_FAILURE count={failure_count}/{FAILURE_THRESHOLD} failed={','.join(failed)}", flush=True)
     else:

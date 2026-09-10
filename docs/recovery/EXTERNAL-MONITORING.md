@@ -39,7 +39,10 @@ The monitor's Discord webhook is not configured because no current
 `grafana-discord-webhooks` Kubernetes secret exists. The retired Healthchecks.io
 heartbeat is not configured; UptimeRobot is the intended external public
 monitoring service. Direct receipt by a human notification channel remains an
-open gate.
+open gate. The monitor persists an `active_alerts` map with stable
+`external-monitor:<check>` identities, so a repeated failure or process restart
+does not create a second notification for the same check; a newly failed check
+or a recovered check gets its own transition.
 
 On 2026-09-10, the monitor independently observed a short public-edge
 degradation: Grafana failed on three consecutive 60-second checks, with the
@@ -65,8 +68,11 @@ logged:
 ```text
 CHECK_FAILURE count=1/3 failed=authentik,grafana,oauth,status
 CHECK_FAILURE count=2/3 failed=authentik,grafana,oauth,status
-ALERT State changed: `healthy` → `degraded`; failed checks: authentik, grafana, oauth, status
 CHECK_FAILURE count=3/3 failed=authentik,grafana,oauth,status
+ALERT Alert `external-monitor:authentik` firing; failed checks: authentik,grafana,oauth,status
+ALERT Alert `external-monitor:grafana` firing; failed checks: authentik,grafana,oauth,status
+ALERT Alert `external-monitor:oauth` firing; failed checks: authentik,grafana,oauth,status
+ALERT Alert `external-monitor:status` firing; failed checks: authentik,grafana,oauth,status
 ```
 
 Both connector Deployments were restored to PantryBot=2 and CI=1, rollout
