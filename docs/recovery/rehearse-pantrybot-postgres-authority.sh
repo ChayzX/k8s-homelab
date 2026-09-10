@@ -25,6 +25,38 @@ case "$HOME_CONTEXT:$ORACLE_CONTEXT" in
 esac
 [[ -s "$FENCE_PROOF_FILE" ]] || { echo "fence proof file is empty or missing" >&2; exit 2; }
 
+validate_fence_proof() {
+  python3 - "$FENCE_PROOF_FILE" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as fh:
+        proof = json.load(fh)
+except (OSError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"invalid fence proof JSON: {exc}")
+
+required = {
+    "status": "passed",
+    "old_writer_write_rejected": True,
+    "replication_channel_blocked": True,
+}
+missing = [key for key in required if key not in proof]
+wrong = [key for key, value in required.items() if proof.get(key) != value]
+if missing or wrong:
+    raise SystemExit(
+        "fence proof must contain status=passed, "
+        "old_writer_write_rejected=true, and "
+        "replication_channel_blocked=true "
+        f"(missing={missing}, invalid={wrong})"
+    )
+if not isinstance(proof.get("fencing_epoch"), int) or proof["fencing_epoch"] < 1:
+    raise SystemExit("fence proof must contain a positive integer fencing_epoch")
+print(proof["fencing_epoch"])
+PY
+}
+
 cleanup() {
   kubectl --context "$ORACLE_CONTEXT" delete namespace "$ORACLE_NS" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl --context "$HOME_CONTEXT" delete namespace "$HOME_NS" --ignore-not-found --wait=false >/dev/null 2>&1 || true
@@ -61,7 +93,7 @@ wal_lag_bytes=$(kubectl --context "$HOME_CONTEXT" -n "$HOME_NS" exec "$home_pod"
 fence_started=$(date +%s)
 echo "Run the external fencing adapter now. It must make the old writer reject a test write."
 echo "Required proof file: $FENCE_PROOF_FILE"
-[[ -s "$FENCE_PROOF_FILE" ]] || exit 1
+fencing_epoch=$(validate_fence_proof)
 fence_finished=$(date +%s)
 
 kubectl --context "$ORACLE_CONTEXT" -n "$ORACLE_NS" exec "$oracle_pod" -- sh -ec \
@@ -76,13 +108,14 @@ kubectl --context "$ORACLE_CONTEXT" -n "$ORACLE_NS" exec "$oracle_pod" -- sh -ec
   "PGPASSWORD='$REHEARSAL_PASSWORD' psql -U pantry -d pantry -v ON_ERROR_STOP=1 -c \"INSERT INTO rehearsal_events(event_id,payload) VALUES ('promoted','oracle-promoted');\"" >/dev/null
 
 finished=$(date +%s)
-python3 - "$EVIDENCE_FILE" "$started" "$fence_started" "$fence_finished" "$finished" "$primary_lsn" "$replay_lsn" "$wal_lag_bytes" <<'PY'
+python3 - "$EVIDENCE_FILE" "$started" "$fence_started" "$fence_finished" "$finished" "$primary_lsn" "$replay_lsn" "$wal_lag_bytes" "$fencing_epoch" <<'PY'
 import json, sys
-out, started, fence_started, fence_finished, finished, primary_lsn, replay_lsn, wal_lag_bytes = sys.argv[1:]
+out, started, fence_started, fence_finished, finished, primary_lsn, replay_lsn, wal_lag_bytes, fencing_epoch = sys.argv[1:]
 evidence = {
     "candidate": "physical-postgres-streaming",
     "production_changed": False,
     "fence_proof_file": "operator-supplied",
+    "fencing_epoch": int(fencing_epoch),
     "primary_lsn_at_boundary": primary_lsn,
     "standby_replay_lsn_at_boundary": replay_lsn,
     "wal_lag_bytes_at_boundary": float(wal_lag_bytes),

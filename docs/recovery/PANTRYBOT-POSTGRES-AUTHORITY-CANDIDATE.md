@@ -128,8 +128,10 @@ contexts/namespaces. It performs:
 4. poll receive/replay LSN and record the lag;
 5. stop accepting traffic at the primary and run the configured **manual
    fencing command** supplied by the operator;
-6. require an explicit `FENCE_PROOF_FILE` containing the old-writer rejection
-   result;
+6. require an explicit JSON `FENCE_PROOF_FILE` containing
+   `status: "passed"`, `old_writer_write_rejected: true`,
+   `replication_channel_blocked: true`, and a positive integer
+   `fencing_epoch`;
 7. promote Oracle, verify recovery state and the synthetic row;
 8. write through the promoted endpoint and emit a JSON evidence record with
    RPO/RTO and cleanup instructions.
