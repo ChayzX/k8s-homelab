@@ -1,0 +1,27 @@
+[Unit]
+Description=Reverse SSH transport for the PantryBot home PostgreSQL authority
+After=network-online.target failover-witness-chasebot-tunnel.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# The private key stays on chasebot. GCP listens only on loopback; Oracle
+# reaches it through its own independent SSH local-forward.
+ExecStart=/usr/bin/ssh -NT \
+  -o BatchMode=yes \
+  -o ExitOnForwardFailure=yes \
+  -o ServerAliveInterval=30 \
+  -o ServerAliveCountMax=3 \
+  -o StrictHostKeyChecking=yes \
+  -i /home/cpederson/.ssh/gcp-witness-chasebot \
+  -R 127.0.0.1:25432:192.168.40.200:30432 \
+  sa_105559435168833655240@136.113.178.106
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

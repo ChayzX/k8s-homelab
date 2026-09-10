@@ -73,6 +73,21 @@ promotion remain separate gates.
 The service API is `GET /healthz`, `POST /v1/authority/acquire`, and
 `POST /v1/authority/renew`, authenticated with `Authorization: Bearer ...`.
 
+## PantryBot PostgreSQL transport
+
+The repository also contains a guarded transport pair for the home PantryBot
+authority:
+
+- `pantry-bot-postgres-home-tunnel.service` runs on `chasebot` and reverse-
+  forwards the ClusterIP authority to GCP loopback port `25432`.
+- `pantry-bot-postgres-oracle-forward.service` runs on Oracle and forwards its
+  node-local `100.78.181.15:25432` to that GCP loopback port.
+
+The two SSH identities remain site-local. This is encrypted transport for a
+standby rehearsal, not database replication, promotion, or writer fencing.
+Install and test these units independently before creating a replication role;
+do not expose port `25432` publicly or route application traffic through it.
+
 The repository also includes the home-side tunnel unit. Install it only on a
 site that has its own SSH identity authorized on GCP; never copy the home
 private key to Oracle:
