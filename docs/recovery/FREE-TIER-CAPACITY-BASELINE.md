@@ -1,6 +1,6 @@
 # Free-Tier Capacity Baseline
 
-**Measured:** 2026-09-10 CDT; Oracle and GCP host capacity refreshed during the active-active implementation pass
+**Measured:** 2026-09-10 CDT; Oracle and home capacity refreshed after the PantryBot state-copy and stateless Oracle rollout
 
 This is the initial capacity gate for the free active-active design. It is an observation record, not an authorization to deploy production failover.
 
@@ -31,10 +31,22 @@ use on that node. Its local-path RWO storage confirms that it adds compute
 capacity inside the home failure domain, not independent state redundancy.
 
 Oracle k3s is also currently a single Ready arm64 control-plane node with 2
-allocatable CPU and 11,932 MiB total memory. The live host check reports 101m
-CPU (5%) and `kubectl top` reports 1,946Mi memory (16%) while only k3s system
-pods are running and the PantryBot namespace is empty. This confirms available
-application capacity, not database replication or cross-site failover evidence.
+allocatable CPU and 11,932 MiB total memory. After deploying the stateless
+PantryBot public/private UI, API, and overlay capacity, the live host check
+reports 108m CPU (5%) and 1,722Mi memory (14%), with 40GiB free on the root
+filesystem. The eight stateless application pods are Ready with zero restarts.
+The side-effecting gateway, worker, and dispatcher deployments remain at zero
+replicas because Oracle still has an isolated rehearsal database. This confirms
+available free-tier application capacity, not database replication or
+cross-site failover evidence.
+
+The home cluster currently reports `chasebot` at 351m CPU and 1,509Mi memory
+(17% and 45%) and `minecraftmachine` at 976m CPU and 8,683Mi memory (6% and
+70%). The home PantryBot PostgreSQL authority is Ready on `chasebot`; its
+non-secret state copy contains 275 users and 1,700 inventory rows, while the
+legacy SQLite deployment remains the active writer. These readings are a
+point-in-time observation and do not authorize adding workloads to the
+Minecraft node or declaring the database redundant.
 
 ## GCP evidence boundary
 
