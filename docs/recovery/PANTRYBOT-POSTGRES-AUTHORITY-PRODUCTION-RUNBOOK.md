@@ -1,7 +1,8 @@
 # PantryBot production PostgreSQL authority bootstrap
 
-**Status:** bootstrap definition only. This commit does not deploy PostgreSQL,
-change the legacy PantryBot Deployment, move Minecraft, or claim HA promotion.
+**Status:** home authority bootstrap applied and verified on 2026-09-10. This
+does not change the legacy PantryBot Deployment, move Minecraft, or claim HA
+promotion.
 
 This path creates one PostgreSQL authority in the existing `pantry-bot`
 namespace. The pod is pinned to `chasebot`, uses the `local-path` StorageClass
@@ -15,6 +16,13 @@ postgres-authority.pantry-bot.svc.cluster.local:5432
 The resource budget follows the measured home cluster baseline: 500m CPU and
 768Mi memory requests, with a 1 CPU and 1Gi memory limit. `chasebot` is inside
 the home failure domain; this is not cross-site HA.
+
+The container runs the official PostgreSQL entrypoint as root only during
+initial volume ownership setup, with the narrow `CHOWN`, `DAC_OVERRIDE`,
+`FOWNER`, `SETGID`, and `SETUID` capabilities; the entrypoint drops to the
+`postgres` user before starting the server. No privilege escalation is
+allowed, and the database process is not granted a host namespace or host
+mount.
 
 ## Required external secret escrow
 
@@ -81,6 +89,15 @@ After applying, verify the StatefulSet, pod readiness, PVC binding, and Service
 endpoints. Do not point the legacy Deployment at this authority as part of
 this bootstrap. Application migration, data parity, and cutover are separate
 reviewed work.
+
+The initial live verification passed:
+
+- `postgres-authority-0` is Ready on `chasebot` using the pinned PostgreSQL
+  digest;
+- `data-postgres-authority-0` is Bound as an 8Gi local-path RWO PVC;
+- `postgres-authority` has a Ready endpoint; and
+- an in-pod `pg_isready` plus `SELECT current_database(), current_user,
+  pg_is_in_recovery()` returned `pantry`, `pantry`, and `f`.
 
 ## Explicit separation from replication and fencing
 

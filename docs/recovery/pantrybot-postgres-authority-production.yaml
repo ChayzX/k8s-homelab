@@ -1,5 +1,5 @@
-# PRODUCTION BOOTSTRAP PATH — do not apply until the external-secret and
-# migration gates in PANTRYBOT-POSTGRES-AUTHORITY-PRODUCTION-RUNBOOK.md pass.
+# PRODUCTION BOOTSTRAP PATH — applied only after the external-secret escrow
+# gate passed. Migration, replication, and promotion remain separate gates.
 #
 # This is a single home PostgreSQL authority only. It intentionally contains
 # no replication, promotion, or fencing resources. The legacy PantryBot
@@ -80,8 +80,15 @@ spec:
                   name: pantry-bot-postgres-authority
                   key: POSTGRES_PASSWORD
           securityContext:
+            # The official image entrypoint starts as root to fix ownership
+            # on a fresh local-path PVC, then drops to the postgres user via
+            # gosu before launching the server. Keep the pod non-privileged;
+            # grant only the ownership capabilities required during init.
+            runAsUser: 0
+            runAsGroup: 0
             allowPrivilegeEscalation: false
             capabilities:
+              add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
               drop: [ALL]
           resources:
             requests:
