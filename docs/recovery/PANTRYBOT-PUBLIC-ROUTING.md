@@ -48,6 +48,21 @@ The public commands hostname must not route to this OAuth hostname, and the
 static commands/private UI pods must not receive OAuth, Twitch, or database
 credentials.
 
+## OBS overlay delivery
+
+Hostname: `overlay.greeniespantry.uk`
+
+Route:
+
+```text
+overlay.greeniespantry.uk/* -> http://pantry-overlay.pantry-bot.svc:8080
+```
+
+This origin serves the static browser-source assets and WebSocket upgrade on
+the same hostname. It is backed by PostgreSQL reconnect snapshots and the
+fenced overlay outbox lane; the Cloudflare route must not be enabled until
+equivalent home and Oracle overlay capacity and WebSocket reconnect tests pass.
+
 ## Validation
 
 Before enabling the routes, verify:
@@ -59,4 +74,6 @@ Before enabling the routes, verify:
 - `mods.greeniespantry.uk/mod/api/commands` redirects/authenticates through the API origin.
 - `mods.greeniespantry.uk/login/mod` remains reachable through the API origin.
 - `oauth.greeniespantry.uk/login/broadcaster` and `/login/bot` remain reachable.
+- `overlay.greeniespantry.uk/` returns the overlay shell and WebSocket upgrade
+  remains reachable after reconnect.
 - Both home and Oracle origins expose equivalent routes before automatic failover is enabled.

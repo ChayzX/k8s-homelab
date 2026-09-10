@@ -15,7 +15,7 @@ Run monitoring outside `minecraftmachine`, preferably on Oracle or GCP. It must 
 
 GCP runs `homelab-external-monitor.service` as an unprivileged system user.
 The monitor checks `status.greeniespantry.uk`, `grafana.greeniespantry.uk`,
-`commands.greeniespantry.uk`, `mods.greeniespantry.uk`,
+`commands.greeniespantry.uk`, `mods.greeniespantry.uk`, `overlay.greeniespantry.uk`,
 `oauth.greeniespantry.uk`, and `auth.greeniespantry.uk`; the current observed
 responses include HTTP 200 for the split commands/moderator surfaces and the
 documented expected responses for the other routes. The service is active and

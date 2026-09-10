@@ -48,6 +48,7 @@ CHECKS = (
     Check("grafana", "https://grafana.greeniespantry.uk/", frozenset({200, 301, 302})),
     Check("commands", "https://commands.greeniespantry.uk/", frozenset({200, 301, 302})),
     Check("mods", "https://mods.greeniespantry.uk/", frozenset({200, 301, 302})),
+    Check("overlay", "https://overlay.greeniespantry.uk/", frozenset({200, 301, 302})),
     Check("oauth", "https://oauth.greeniespantry.uk/", frozenset({200, 301, 302, 404})),
     Check("authentik", "https://auth.greeniespantry.uk/", frozenset({200, 301, 302})),
 )
