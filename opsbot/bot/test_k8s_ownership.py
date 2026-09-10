@@ -4,7 +4,7 @@
 import unittest
 import sys
 import types
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 # Keep this contract test runnable without installing the production image's
 # Kubernetes dependency locally.
@@ -26,7 +26,7 @@ if "kubernetes" not in sys.modules:
     })
 
 import k8s_ops
-from ownership import OwnershipError
+from ownership import Lease, Ownership, OwnershipConfig, OwnershipError
 
 
 class K8sOwnershipTests(unittest.TestCase):
@@ -42,6 +42,35 @@ class K8sOwnershipTests(unittest.TestCase):
             with self.assertRaises(OwnershipError):
                 k8s_ops.restart_deployment("jmusicbot", "jmusicbot")
         api.assert_not_called()
+
+    def test_lease_loss_shuts_down_runtime_and_fences_restart(self):
+        ownership = Ownership(
+            OwnershipConfig("home", 30),
+            type(
+                "Witness",
+                (),
+                {
+                    "acquire": lambda self, site: Lease(
+                        site="home", epoch=1, expires_at=9999999999, token="t"
+                    ),
+                    "renew": lambda self, site, epoch, token: False,
+                },
+            )(),
+        )
+        ownership.acquire()
+        shutdown = Mock()
+        k8s_ops.set_authority_checker(ownership.require)
+
+        async def run():
+            ownership.start(shutdown)
+            await ownership.renew_task
+
+        import asyncio
+
+        asyncio.run(run())
+        shutdown.assert_called_once_with()
+        with self.assertRaises(OwnershipError):
+            k8s_ops.restart_deployment("jmusicbot", "jmusicbot")
 
 
 if __name__ == "__main__":

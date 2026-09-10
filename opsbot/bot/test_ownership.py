@@ -81,6 +81,21 @@ class OwnershipTests(unittest.TestCase):
 
         asyncio.run(run())
 
+    def test_expired_lease_is_not_renewed_with_the_stale_token(self):
+        witness = FakeWitness(
+            Lease(site="home", epoch=7, expires_at=9999999999, token="t")
+        )
+        ownership = Ownership(OwnershipConfig("home", 30), witness)
+        ownership.acquire()
+        ownership.lease = Lease(
+            site="home", epoch=7, expires_at=0, token="stale-token"
+        )
+
+        self.assertFalse(ownership.renew_once())
+        self.assertEqual(witness.renewals, [])
+        with self.assertRaises(OwnershipError):
+            ownership.require()
+
 
 if __name__ == "__main__":
     unittest.main()
