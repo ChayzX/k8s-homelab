@@ -9,7 +9,7 @@
 | k3s datastore | `minecraftmachine` is the only server; k3s service has no datastore flags and logs use `kine.sock`, confirming the default SQLite/Kine backend; path is root-only `server/db/state.db` | Encrypted backup and full isolated server restore passed | Maintain the encrypted artifact and repeat the isolated rehearsal after backup rotation |
 | k3s server token | Root-only `server/token`; required for datastore restoration | Encrypted with the datastore and verified in the full isolated restore | Keep the matching token with the encrypted artifact and test it only on an isolated destination |
 | Kubernetes manifests | Repository manifests exist, but some live images/configuration are workflow-mutated | Partial | Reconcile live images/configuration with checked-in sources |
-| Kubernetes Secrets | Names inventoried; values are not tracked | Partial | Prove reconstruction/restore of every live credential |
+| Kubernetes Secrets | Names inventoried; values are not tracked | Partial | Prove reconstruction/restore of every live credential; PantryBot HA additionally requires `pantry-bot-platform` and `pantry-bot-witness` in each site namespace |
 | PVC data | All listed PVCs use `local-path` and are tower-bound | Local-only | Per-application backup and isolated restore |
 
 ## Persistent data
