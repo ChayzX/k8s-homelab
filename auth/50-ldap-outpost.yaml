@@ -33,6 +33,9 @@ spec:
       labels:
         app.kubernetes.io/name: ldap-outpost
     spec:
+      # The outpost only needs its configured Authentik token; it does not
+      # call the Kubernetes API.
+      automountServiceAccountToken: false
       containers:
         - name: ldap-outpost
           image: ghcr.io/goauthentik/ldap:2026.5.6
