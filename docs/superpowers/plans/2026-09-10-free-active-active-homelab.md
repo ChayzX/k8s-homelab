@@ -251,3 +251,8 @@
 - [ ] Test PostgreSQL promotion and queue recovery.
 - [ ] Test Oracle failure and controlled return to home.
 - [ ] Enable automatic production failover only after all required evidence is attached to GitHub.
+
+The PantryBot candidate now includes a provider-neutral failover state machine
+that enforces witness authority, old-writer fencing, database promotion,
+database/application readiness, and routing order. It does not enable
+failover or replace the missing provider adapters.

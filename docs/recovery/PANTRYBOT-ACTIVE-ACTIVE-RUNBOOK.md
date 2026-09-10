@@ -156,6 +156,21 @@ Automatic routing or database promotion remains disabled until each test has
 an attached result containing the exact failure injection, detection time,
 fencing proof, RTO, RPO, and rollback result.
 
+The PantryBot branch also contains a provider-neutral failover controller
+contract. Its required order is: acquire a neutral witness authority token,
+fence the old database writer, promote the target database, verify database
+writability, verify application readiness, and only then route traffic. The
+controller deliberately has no built-in health detector, SSH, DNS, or
+PostgreSQL promotion command; those must be supplied by adapters that can
+prove fencing even when the old site is unreachable. This is an executable
+ordering guard, not evidence that a witness or provider adapter is configured.
+
+GCP remains the intended lightweight external observer/coordination candidate,
+but this operator session has no authenticated `gcloud` path and the VM is not
+currently a Tailscale peer. Do not enable automatic failover or place a
+coordination service there until authenticated capacity, network reachability,
+and fencing-adapter tests are recorded.
+
 ## Free-cost guardrails
 
 - Do not add a paid load balancer or cross-region database service.
