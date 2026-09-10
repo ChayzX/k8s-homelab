@@ -124,6 +124,12 @@ The disposable manifests and rehearsal script remain the reference for those
 non-production experiments. They must not be changed into a production
 promotion mechanism by editing this bootstrap path.
 
+The Oracle standby candidate is maintained separately in
+`pantrybot-postgres-standby-oracle.yaml`. It uses the encrypted Oracle forward
+on `100.78.181.15:25432` and the `pantry_oracle_standby` physical slot. The
+standby is a read-only recovery copy; it must not receive PantryBot writes or
+side-effect roles until the source-fencing gate passes.
+
 ## Scope guard
 
 This bootstrap does not modify:
