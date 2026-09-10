@@ -43,3 +43,8 @@ sudo install -o root -g root -m 0644 \
 sudo systemctl daemon-reload
 sudo systemctl enable --now failover-witness-home-tunnel.service
 ```
+
+Oracle uses the separate `failover-witness-oracle-tunnel.service` unit and
+the Oracle-generated `/home/ubuntu/.ssh/gcp-witness-oracle` key. Its GCP OS
+Login public key must be added for the service-account OS Login username shown
+by `gcloud beta compute os-login ssh-keys add`; do not reuse the home key.
