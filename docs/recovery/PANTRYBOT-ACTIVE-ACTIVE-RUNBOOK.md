@@ -27,6 +27,12 @@ embedded etcd over the WAN.
 
 ## Database authority
 
+The current free-tier database authority candidate is documented in
+`PANTRYBOT-POSTGRES-AUTHORITY-CANDIDATE.md`. Its disposable physical-streaming
+manifests and executable gate are the only approved next rehearsal. The older
+logical-replication manifests remain transport experiments and must not be
+treated as promotion or fencing evidence.
+
 The production authority must provide:
 
 1. durable PostgreSQL state for domain tables, event queue, outbox, leases, and
