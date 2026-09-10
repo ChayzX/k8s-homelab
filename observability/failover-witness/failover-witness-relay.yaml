@@ -120,10 +120,6 @@ spec:
               --upstream-host 127.0.0.1
               --upstream-port 18765
           env:
-            - name: LISTEN_HOST
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.hostIP
             - name: PYTHONDONTWRITEBYTECODE
               value: "1"
             - name: PYTHONUNBUFFERED
