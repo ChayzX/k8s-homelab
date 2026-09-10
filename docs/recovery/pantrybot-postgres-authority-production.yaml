@@ -1,0 +1,123 @@
+# PRODUCTION BOOTSTRAP PATH — do not apply until the external-secret and
+# migration gates in PANTRYBOT-POSTGRES-AUTHORITY-PRODUCTION-RUNBOOK.md pass.
+#
+# This is a single home PostgreSQL authority only. It intentionally contains
+# no replication, promotion, or fencing resources. The legacy PantryBot
+# Deployment and Minecraft placement are not part of this manifest.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-authority
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: pantry-postgres-authority
+    app.kubernetes.io/part-of: pantrybot
+    homelab/production: "true"
+    pantrybot.postgres/authority: home
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: pantry-postgres-authority
+    pantrybot.postgres/role: primary
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-authority
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: pantry-postgres-authority
+    app.kubernetes.io/part-of: pantrybot
+    homelab/production: "true"
+    pantrybot.postgres/authority: home
+spec:
+  serviceName: postgres-authority
+  replicas: 1
+  podManagementPolicy: OrderedReady
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pantry-postgres-authority
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pantry-postgres-authority
+        app.kubernetes.io/part-of: pantrybot
+        homelab/production: "true"
+        pantrybot.postgres/authority: home
+        pantrybot.postgres/role: primary
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: chasebot
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: pantry-bot-postgres-authority
+                  key: POSTGRES_USER
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: pantry-bot-postgres-authority
+                  key: POSTGRES_DB
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pantry-bot-postgres-authority
+                  key: POSTGRES_PASSWORD
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 500m
+              memory: 768Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -ec
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -ec
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 8Gi
