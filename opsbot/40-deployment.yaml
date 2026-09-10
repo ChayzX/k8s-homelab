@@ -105,6 +105,23 @@ spec:
             # to restrict to DISCORD_USER_ID.
             - name: REPORT_OPEN_ACCESS
               value: "true"
+            # Opsbot must hold the neutral witness lease before it starts the
+            # Discord gateway or receives Kubernetes/RCON authority.
+            - name: OPSBOT_SITE
+              valueFrom:
+                secretKeyRef:
+                  name: opsbot-witness
+                  key: OPSBOT_SITE
+            - name: OPSBOT_WITNESS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: opsbot-witness
+                  key: OPSBOT_WITNESS_URL
+            - name: OPSBOT_WITNESS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: opsbot-witness
+                  key: OPSBOT_WITNESS_SECRET
           ports:
             - name: health
               containerPort: 9091

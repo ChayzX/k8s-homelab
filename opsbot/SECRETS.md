@@ -39,6 +39,36 @@ before its Secret is created).
 
 ---
 
+## `opsbot-witness` — site-scoped ownership/fencing
+
+This Secret is mandatory for the ownership gate. Opsbot acquires a lease from
+the neutral failover witness before `bot.run()` starts the Discord gateway.
+The same lease is renewed while running; a rejected or failed renewal closes
+the gateway and all protected Kubernetes/RCON calls fail closed. The witness
+must be reachable from the pod and must be shared by the home and Oracle
+deployments. Never reuse the Discord or GitHub token here.
+
+| Key | Meaning |
+|---|---|
+| `OPSBOT_SITE` | Exactly `home` or `oracle`; identifies this deployment's site. |
+| `OPSBOT_WITNESS_URL` | Base URL for the witness, including scheme and port if needed. |
+| `OPSBOT_WITNESS_SECRET` | Shared Bearer secret accepted by the witness. |
+
+Example (replace every value; do not commit it):
+
+```bash
+kubectl -n opsbot create secret generic opsbot-witness \
+  --from-literal=OPSBOT_SITE='home' \
+  --from-literal=OPSBOT_WITNESS_URL='https://witness.example.invalid' \
+  --from-literal=OPSBOT_WITNESS_SECRET='REPLACE_WITH_SHARED_SECRET'
+```
+
+The witness contract is `POST /v1/authority/acquire` and
+`POST /v1/authority/renew`, authenticated with `Authorization: Bearer ...`.
+Acquire returns `{site, epoch, expires_at, token}`; a 409 or any renewal
+failure fences Opsbot. The bot accepts only a lease whose returned `site`
+matches `OPSBOT_SITE`.
+
 ## `ghcr-pull-secret` — private GHCR access
 
 `ghcr.io/chayzx/opsbot` is a **private** package, same as pantry-bot's. This
@@ -131,8 +161,8 @@ grained PAT above (`kubectl -n opsbot delete secret opsbot-github`).
 ## Checklist before applying `40-deployment.yaml`
 
 ```bash
-kubectl -n opsbot get secret opsbot-discord ghcr-pull-secret opsbot-github
+kubectl -n opsbot get secret opsbot-discord opsbot-witness ghcr-pull-secret opsbot-github
 ```
 
-All three must exist. Never commit them, never `kubectl get -o yaml` them into a
+All four must exist. Never commit them, never `kubectl get -o yaml` them into a
 paste.

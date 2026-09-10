@@ -22,11 +22,13 @@ from discord.ext import commands
 import gh_ops
 import health
 import k8s_ops
+from ownership import Ownership, OwnershipError
 import util
 from _operations_contract import HiddenNamespaceError, require_restart_target
 
 DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 ALLOWLIST = util.parse_user_allowlist(os.environ.get("DISCORD_USER_ID"))
+OWNERSHIP: Ownership | None = None
 
 
 def _audit(interaction: discord.Interaction, authorized: bool, result: str = "") -> None:
@@ -66,6 +68,12 @@ class OpsBotTree(app_commands.CommandTree):
     anonymity. The Kubernetes-touching commands stay allowlist-gated."""
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if OWNERSHIP is None or not OWNERSHIP.is_valid():
+            await interaction.response.send_message(
+                "Opsbot is fenced and temporarily unavailable.", ephemeral=True
+            )
+            _audit(interaction, False, result="rejected: no site lease")
+            return False
         command = interaction.command.qualified_name if interaction.command else ""
         open_bug = command == "bug" and util.REPORT_OPEN_ACCESS
         authorized = open_bug or util.is_authorized(interaction.user.id, ALLOWLIST)
@@ -398,6 +406,9 @@ async def bug(interaction: discord.Interaction, bot: str, what: str) -> None:
 
 @bot.event
 async def setup_hook() -> None:
+    assert OWNERSHIP is not None
+    k8s_ops.set_authority_checker(OWNERSHIP.require)
+    OWNERSHIP.start(bot.close)
     k8s_ops.init()
     bot.tree.add_command(pods_group)
     bot.tree.add_command(deploy_group)
@@ -415,9 +426,17 @@ async def on_ready() -> None:
 
 
 def main() -> None:
+    global OWNERSHIP
     if not DISCORD_BOT_TOKEN:
         print("[opsbot] FATAL: DISCORD_BOT_TOKEN is not set", file=sys.stderr)
         sys.exit(1)
+    try:
+        OWNERSHIP = Ownership.from_env()
+        lease = OWNERSHIP.acquire()
+    except OwnershipError as error:
+        print(f"[opsbot] FATAL: {error}", file=sys.stderr)
+        sys.exit(1)
+    print(f"[opsbot] site lease acquired: site={lease.site} epoch={lease.epoch}")
     if not ALLOWLIST:
         print(
             "[opsbot] WARNING: DISCORD_USER_ID is not set or empty -- "

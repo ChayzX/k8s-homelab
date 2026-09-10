@@ -30,6 +30,19 @@ MINECRAFT_CONTAINER = "minecraft"
 # to Running is what makes "the live pod" unambiguous.
 MINECRAFT_POD_LABEL_SELECTOR = "app.kubernetes.io/name=minecraft"
 
+_authority_checker = lambda: None
+
+
+def set_authority_checker(checker) -> None:
+    """Install the live site-lease check used by protected operations."""
+    global _authority_checker
+    _authority_checker = checker
+
+
+def require_authority() -> None:
+    """Fail closed unless Opsbot still owns the site-scoped lease."""
+    _authority_checker()
+
 
 class NotFoundError(Exception):
     """A namespace/deployment/pod the caller asked for doesn't exist (or isn't Running)."""
@@ -90,6 +103,7 @@ def list_pod_names(namespace: str) -> list[str]:
 
 def exec_pod(namespace: str, pod: str, container: str, argv: list[str]) -> str:
     """Run an allowlisted, non-shell command in a selected pod/container."""
+    require_authority()
     v1 = client.CoreV1Api()
     try:
         v1.read_namespaced_pod(pod, namespace)
@@ -136,6 +150,7 @@ def restart_deployment(namespace: str, name: str) -> None:
     restartedAt respectively); jmusicbot-release-notifier and minecraft have
     none at all -- both branches are real, not theoretical.
     """
+    require_authority()
     apps = client.AppsV1Api()
     try:
         current = apps.read_namespaced_deployment(name, namespace)
@@ -229,6 +244,7 @@ def exec_rcon(command: str) -> str:
     ../20-rbac.yaml's opsbot-rcon-exec Role (pods/exec, minecraft namespace
     only) was scoped for.
     """
+    require_authority()
     pod_name = get_running_minecraft_pod()
     v1 = client.CoreV1Api()
     exec_command = ["java", "-jar", RCON_JAR, *command.split()]

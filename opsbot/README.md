@@ -14,6 +14,13 @@ access — entirely through Discord's own mobile app. The bot makes only an
 OUTBOUND connection to Discord's gateway; there is no new inbound network
 exposure of any kind.
 
+Before opening that gateway, the process acquires a site-scoped lease from
+the neutral failover witness (`opsbot-witness`). It renews the lease while
+running; a rejected renewal closes the gateway and protected Kubernetes/RCON
+operations fail closed. See [OWNERSHIP-REHEARSAL.md](OWNERSHIP-REHEARSAL.md)
+for the external failover gate and [SECRETS.md](SECRETS.md) for the required
+contract/configuration.
+
 Standalone rather than bolted onto jmusicbot: jmusicbot is a Java bot with its
 own fragile OAuth/build pipeline, not a general plugin host — see the epic's
 option-B rationale for the full comparison against a web dashboard (rejected:
