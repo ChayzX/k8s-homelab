@@ -76,10 +76,9 @@ spec:
           type: RuntimeDefault
       containers:
         - name: opsbot
-          image: ghcr.io/chayzx/opsbot:latest
-          # Always: mutable `:latest` tag, so a real pull is needed each time
-          # rather than trusting a stale cached layer set -- same reasoning
-          # as pantry-bot's own imagePullPolicy.
+          image: ghcr.io/chayzx/opsbot:latest@sha256:f469930bffbef3fb4282906db642a140cc21e7fe3d53a268ac95d3c908c30063
+          # Keep the pull policy explicit while the manifest digest provides
+          # immutable content and multi-architecture resolution.
           imagePullPolicy: Always
           env:
             - name: DISCORD_BOT_TOKEN
