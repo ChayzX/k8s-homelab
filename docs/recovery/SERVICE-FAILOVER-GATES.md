@@ -55,14 +55,27 @@ home-primary, Oracle restore-capable standby.
   SQLite file, verify `/readyz`, and route only read-safe traffic until
   promotion is authorized.
 - State gate: retain versioned R2 backups, record generation freshness, restore
-  a local writable SQLite copy, and define audit/session portability. Never
-  share the SQLite file over the WAN.
+  a local writable SQLite copy, and define audit/session portability. The
+  isolated restore acceptance record must include the artifact checksum,
+  target boundary, image digest, SQLite `integrity_check`, expected table
+  count, `/livez`, and `/readyz`; it must also state that no production PVC,
+  Service, ingress, or scheduled writer was enabled. Never share the SQLite
+  file over the WAN.
+- Emergency-access gate: while Authentik and LDAP are unavailable in the
+  isolated recovery target, prove the owner recovery path can reach that
+  target without an Authentik/LDAP session. Record only the path type,
+  target boundary, authentication mechanism name, sanitized endpoint/status
+  output, and cleanup result; never record credential values. Health endpoints
+  alone do not pass this gate. If the path cannot perform an authorized
+  dashboard read or mutation, record the limitation and leave this gate open.
 - Side-effect gate: fence the home writer before enabling Oracle writes; verify
   browser/API mutations and audit writes are single-owner and idempotent.
 - Failure gate: simulate home loss, restore the selected generation, validate
-  emergency access without Authentik, route to Oracle, measure RTO/RPO, and
-  roll back to home. A shared transactional database is required before two
-  writable dashboard sites are called active-active.
+  the emergency-access gate without Authentik, route to Oracle, measure RTO/RPO,
+  and roll back to home. A shared transactional database is required before
+  two writable dashboard sites are called active-active. The existing
+  Operations rehearsal proves isolated restore/readiness only; it does not
+  prove emergency access, promotion, fencing, routing, or rollback.
 
 ## Authentik and its PostgreSQL
 

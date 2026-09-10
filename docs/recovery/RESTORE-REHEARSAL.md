@@ -24,14 +24,14 @@ uses emptyDir only and has no production PVC mount.
 |---|---|---|
 | k3s control plane | Datastore snapshot plus matching server token | API starts and expected namespaces/resources are present |
 | Authentik/Postgres | Versioned database dump and required secrets | Authentik starts and a non-production login works |
-| Operations | Operations backup plus Authentik-independent admin path | Dashboard starts and emergency access remains possible |
+| Operations | Operations backup plus Authentik-independent recovery path | Isolated SQLite restore evidence passes, and a separate emergency-access check is recorded |
 | Minecraft | Offsite world/config/plugin archive | Server starts on the recorded version and world loads |
 | PantryBot | Retained Litestream/R2 generation | Row counts and synthetic command processing match expectations |
 | JMusicBot | Retained R2 generation | Config/token files validate and bot starts without a second writer |
 
 ## Not yet proven
 
-- Full Operations application restore and emergency-access test.
+- Authentik-independent Operations emergency-access test; the isolated restore/readiness check below is complete, but it is not a promotion or access pass.
 - Secret reconstruction and controlled Minecraft promotion from the retained
   offsite archive.
 - Versioned R2 generations and writer fencing.
@@ -63,12 +63,15 @@ uses emptyDir only and has no production PVC mount.
   `/-/health/ready/` with HTTP 200. No ingress, production PVC, or production
   service was used. The temporary namespace was deleted after verification.
 
-- **Operations restore:** `operations-20260909T044548Z.db.gz` was restored by
-  an init container into an emptyDir-backed temporary deployment. The pinned
-  Operations image reached `/readyz` and `/livez` with HTTP 200, and SQLite's
-  `integrity_check` returned `ok` with five tables present. The temporary
-  namespace was deleted after verification. The rehearsal had to be pinned to
-  an AMD64 node because the current image has no ARM64 manifest; this is a
+- **Operations isolated SQLite restore:** `operations-20260909T044548Z.db.gz`
+  was restored by an init container into an emptyDir-backed temporary
+  deployment. The pinned Operations image reached `/readyz` and `/livez` with
+  HTTP 200, and SQLite's `integrity_check` returned `ok` with five tables
+  present. The destination was local to the temporary target; it did not use
+  the production PVC, production Service, or production ingress. The
+  temporary namespace was deleted after verification. This passes the
+  isolated restore/readiness check only. The rehearsal had to be pinned to an
+  AMD64 node because the current image has no ARM64 manifest; this is a
   required constraint for any Oracle migration until the image is rebuilt
   multi-architecture.
 
@@ -106,8 +109,40 @@ Restore procedure:
 
 Operations backups use SQLite's online backup API through
 `scripts/operations-db-backup.sh`, scheduled daily at 02:45. The current R2
-artifact is `recovery/operations/operations-20260909T044548Z.db.gz`. A full
-Operations application restore and emergency-access test remains outstanding.
+artifact is `recovery/operations/operations-20260909T044548Z.db.gz`.
+
+### Operations acceptance evidence
+
+Record the following as two separate checks in Issue #201. Neither check
+requires PostgreSQL promotion or fencing, and neither authorizes two writable
+SQLite sites.
+
+1. **Isolated SQLite restore:** record the selected R2 object name, generation
+   timestamp, byte size, SHA-256, restore target/namespace, image digest, and
+   node architecture. Restore to a new local path or `emptyDir`, never over
+   the source file or a production PVC. Capture `PRAGMA integrity_check`, the
+   expected table count, `/livez`, and `/readyz`; readiness must be checked
+   against the restored copy, not merely the image. Record that production
+   Services, ingress, scheduled writers, and external event consumers were not
+   enabled. This is a restore/readiness pass, not proof of emergency access,
+   writable promotion, routing, RTO/RPO, or rollback.
+2. **Authentik-independent emergency access:** in the same isolated target or
+   a separately controlled recovery target, make Authentik and LDAP
+   unavailable without changing production. From the pre-provisioned owner
+   recovery path (for example, direct host SSH plus a narrowly scoped
+   Kubernetes credential or local port-forward), prove that the operator can
+   reach the restored target and perform only the documented recovery action.
+   Record the path type, target boundary, authentication mechanism name (never
+   its value), Authentik/LDAP outage observation, endpoint/status or sanitized
+   command output, and cleanup result. A screenshot or HTTP 200 from
+   `/livez`/`/readyz` alone is not emergency-access evidence: it must show that
+   the recovery operator can reach the target without an Authentik/LDAP
+   session. If the path cannot perform an authorized dashboard read or
+   mutation, record that limitation and keep the emergency-access gate open.
+
+The current Operations evidence above passes check 1 only. Check 2, local
+writable promotion, single-writer fencing, routing, measured RTO/RPO, and
+rollback remain open in Issue #201.
 
 ## Minecraft offsite archive currently available
 
