@@ -1,5 +1,5 @@
-# ClusterIP Service exposing opsbot's health endpoint (bd k8s-homelab-aos
-# follow-up -- opsbot had the same gap jmusicbot did: Discord-only, no
+# ClusterIP Service exposing opsbot's health endpoint. Opsbot had the same
+# gap as JMusicBot: Discord-only, no
 # listener, nothing on the network could check it was alive).
 #
 # bot/health.py runs an aiohttp server on port 9091 inside the pod (aiohttp
@@ -11,7 +11,7 @@
 #     http://opsbot-health.opsbot.svc.cluster.local:9091/live
 #
 # Endpoints only exist while the pod is Ready (readiness probe -> /health),
-# so Uptime Kuma and any other in-cluster consumer see a real down signal
+# so the in-cluster watcher and any other in-cluster consumer see a real down signal
 # when the bot is NotReady or dead. Keep port, name, and selector in sync
 # with 40-deployment.yaml (containerPort 9091, named "health").
 #

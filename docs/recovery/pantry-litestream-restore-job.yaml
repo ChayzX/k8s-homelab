@@ -1,0 +1,67 @@
+# Apply manually for an isolated recovery rehearsal only. This is not part of
+# the production kustomize/apply set and must never mount the live PVC.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: pantry-litestream-restore-
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: pantry-litestream-restore
+    app.kubernetes.io/part-of: recovery-test
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pantry-litestream-restore
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: restore
+          image: litestream/litestream:0.3.13
+          command: ["sh", "-c"]
+          args:
+            - >-
+              set -eu;
+              rm -f /restore/pantry.db /restore/pantry.db.tmp;
+              litestream restore -config /etc/litestream.yml -replica s3
+              -parallelism 1 -o /restore/pantry.db /data/pantry.db;
+              ls -l /restore/pantry.db;
+              sha256sum /restore/pantry.db
+          env:
+            - name: LITESTREAM_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: pantry-bot-litestream
+                  key: LITESTREAM_ACCESS_KEY_ID
+            - name: LITESTREAM_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pantry-bot-litestream
+                  key: LITESTREAM_SECRET_ACCESS_KEY
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/litestream.yml
+              subPath: litestream.yml
+              readOnly: true
+            - name: restore
+              mountPath: /restore
+            - name: source
+              mountPath: /data
+      volumes:
+        - name: config
+          configMap:
+            name: pantry-bot-litestream-config
+        - name: restore
+          emptyDir: {}
+        - name: source
+          emptyDir: {}

@@ -6,35 +6,25 @@
 # THREE THINGS HERE ARE EASY TO GET WRONG. Read before editing:
 #
 # 1. imagePullPolicy: IfNotPresent — MANDATORY, NOT A PREFERENCE.
-#    `jmusicbot-custom:yts1182` is built locally by auto-update.sh and
-#    side-loaded into k3s's containerd with
-#        docker save jmusicbot-custom:<tag> | sudo k3s ctr images import -
-#    It does NOT exist in any registry. With `Always` (which is also the
-#    implicit default for a `:latest` tag) the kubelet tries to pull from
-#    docker.io/library and the pod goes ErrImagePull forever.
+#    The checked-in image is a published GHCR image with an immutable release
+#    tag. IfNotPresent lets each environment pull it when absent without
+#    unexpectedly changing a running pod to a mutable `latest` image.
 #
 # 2. runAsUser: 10001 — VERIFIED against the running container, not assumed.
 #    `docker top jmusicbot -o user,group` reports 10001:10001. The files under
 #    /home/chase/docker/jmusicbot are owned 1000:1000 ONLY because Docker
 #    Desktop's virtiofs fakes ownership on the bind mount. Bare-metal k3s
-#    enforces real UIDs, so the migrated PVC contents MUST be chowned to
-#    10001:10001 or the bot cannot write serversettings.json / youtubetoken.txt.
-#    See README.md, step "migrate the data".
+#    enforces real UIDs. The R2-backed emptyDir is prepared with fsGroup
+#    10001, so the bot can write serversettings.json / youtubetoken.txt without
+#    a host-path ownership migration.
 #
-# 3. This Deployment is DELIBERATELY NOT MANAGED BY KEEL.
-#    It carries no keel.sh/* annotations, and it must not gain any. jmusicbot
-#    has its own rebuild pipeline (auto-update.sh, cron, daily) which builds a
-#    uniquely-tagged image each run. The k8s deploy step is therefore
-#        docker save <tag> | sudo k3s ctr images import -
-#        kubectl -n jmusicbot set image deployment/jmusicbot jmusicbot=<tag>
-#    NOT `kubectl rollout restart` — the image reference itself must change.
+# 3. This Deployment is managed by the GitHub Actions JMusicBot pipeline.
+#    The pipeline publishes a multi-arch GHCR image and changes the image
+#    reference. Do not reintroduce Keel or a local-only image authority.
 #
-# 4. The health probes below depend on the health-endpoint patch (bd
-#    k8s-homelab-aos, scripts/patches/jmusicbot-health-endpoint.patch). Only the
-#    patched image listens on port 9091; a stock ghcr.io image has no listener
-#    there and would sit NotReady forever. The image tag below is the expected
-#    post-rebuild tag — build it (README section "Health endpoint") BEFORE
-#    applying this manifest, or the pod will ErrImagePull.
+# 4. The health probes below depend on the health-endpoint patch in
+#    scripts/patches/jmusicbot-health-endpoint.patch. The published image below
+#    is produced by the workflow with that patch applied.
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -47,9 +37,9 @@ metadata:
     app.kubernetes.io/component: bot
 spec:
   replicas: 1
-  # Recreate: the config PVC is RWO and JMusicBot writes serversettings.json /
-  # youtubetoken.txt in place. RollingUpdate would briefly run two pods against
-  # the same files (and the second would fail to mount the RWO volume anyway).
+  # Recreate: JMusicBot writes serversettings.json / youtubetoken.txt in place
+  # and the R2 sync sidecar mirrors that mutable state. RollingUpdate could
+  # briefly create two Discord writers and two competing R2 sync loops.
   strategy:
     type: Recreate
   selector:
@@ -78,8 +68,8 @@ spec:
       securityContext:
         runAsUser: 10001
         runAsGroup: 10001
-        # fsGroup makes the kubelet chgrp+setgid the PVC contents to 10001 on
-        # mount, which fixes ownership for anything the migration copy missed.
+        # fsGroup makes the kubelet chgrp+setgid the restored state directory to
+        # 10001 on mount, ensuring the bot can write its mutable state.
         fsGroup: 10001
         fsGroupChangePolicy: OnRootMismatch
       # ===================================================================
@@ -143,15 +133,13 @@ spec:
               drop: ["ALL"]
       containers:
         - name: jmusicbot
-          # Locally built, side-loaded image. Update this tag via
-          # `kubectl set image` from auto-update.sh — see header note 3.
-          # The -health1 suffix marks the build that carries the health
-          # endpoint (bd k8s-homelab-aos); see header note 4.
+          # Published multi-arch image. GitHub Actions updates this immutable
+          # tag on each approved release; keep this value usable for restore.
           # `potok` adds ytpotoken/ytvisitordata support (Web client poToken,
           # see scripts/patches/jmusicbot-potoken.patch) — k8s-homelab#41.
-          image: jmusicbot-custom:potok
+          image: ghcr.io/chayzx/jmusicbot:upstream-0.7.0-3e3116039c64
           imagePullPolicy: IfNotPresent  # see header note 1 — do not change
-          # Health endpoint (bd k8s-homelab-aos): a JDK-built-in HttpServer on
+          # Health endpoint: a JDK-built-in HttpServer on
           # 9091 in the patched image. /health returns 200 only after the bot
           # has logged into Discord; /live returns 200 whenever the JVM is
           # alive. Named port so the probes and the Service can reference it.
@@ -211,11 +199,11 @@ spec:
             - name: config
               mountPath: /musicbot
             # config.txt is delivered from a Secret and mounted as a single
-            # file INTO the PVC-backed directory. Two consequences to know:
+            # file INTO the R2-restored state directory. Two consequences to know:
             #  * subPath mounts do not receive Secret updates — the file is
             #    snapshotted at pod start. Restart the pod to apply changes.
             #  * the file is read-only. JMusicBot reads config.txt and writes
-            #    its mutable state to serversettings.json (on the PVC), so this
+            #    its mutable state to serversettings.json (synchronized to R2), so this
             #    is fine. If a future version needs to rewrite config.txt, see
             #    the initContainer alternative documented in README.md.
             - name: config-txt

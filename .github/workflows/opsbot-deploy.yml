@@ -21,6 +21,11 @@ on:
 permissions:
   contents: read
 
+# Serialize production deploys so an older rollout cannot finish after a newer one.
+concurrency:
+  group: opsbot-production
+  cancel-in-progress: false
+
 jobs:
   publish-image:
     name: 1 - Build and publish (merge deploy)
@@ -176,3 +181,26 @@ jobs:
             exit 1
           fi
           { echo '## Opsbot deployment pipeline'; echo ''; echo '### Manifest apply: ✅ passed'; echo '### Pod restart: ✅ passed'; echo "- Previous pod: \`${PREVIOUS_POD:-none}\`"; echo "- Current pod: \`$POD\`"; echo '### Pod health: ✅ passed'; echo "- Ready: \`$READY\`"; echo "- Image ID: \`$IMAGE_ID\`"; } >> "$GITHUB_STEP_SUMMARY"
+
+  rollback-on-failure:
+    name: Roll back failed release
+    needs: [apply-manifest, restart-opsbot, verify-opsbot]
+    if: ${{ always() && needs.verify-opsbot.result == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Roll back to previous ReplicaSet
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_OPSBOT }}
+        run: |
+          set -euo pipefail
+          test -n "$KUBE_CONFIG_B64"
+          curl -sSL -o cloudflared "https://github.com/cloudflare/cloudflared/releases/download/2026.7.3/cloudflared-linux-amd64"
+          echo "9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared" | sha256sum -c -
+          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
+          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
+          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/opsbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/opsbot.kubeconfig"
+          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl rollout undo deployment/opsbot -n opsbot
+          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl rollout status deployment/opsbot -n opsbot --timeout=180s
+          echo '### Automatic rollback: ✅ completed' >> "$GITHUB_STEP_SUMMARY"

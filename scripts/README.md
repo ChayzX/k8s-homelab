@@ -6,7 +6,7 @@ serial cutover.
 
 | New file | Replaces | Runs |
 |---|---|---|
-| `auto-update.sh` | `~/docker/jmusicbot/auto-update.sh` | user crontab, daily 04:17 |
+| `auto-update.sh` | retained for manual/local-build reference only | **retired from cron 2026-09-09**; JMusicBot releases now use the published GitHub Actions workflow |
 | `minecraft_backup.py` | `~/docker/observability/monitoring/minecraft-exporter/minecraft_backup.py` | `minecraft-backup.timer` (user), daily 04:00 |
 | `minecraft_exporter.py` | `~/docker/observability/monitoring/minecraft-exporter/minecraft_exporter.py` | `minecraft-exporter.service` (user), always on |
 
@@ -16,6 +16,37 @@ the appropriate GitHub Project board (see `../AGENTS.md`).
 
 The workload scripts below are runbooks and are installed manually as part of
 the migration.
+
+`k3s-control-plane-backup.sh` creates the encrypted k3s datastore/server-token
+recovery artifact. It must be run as root from a terminal so the operator can
+enter and separately retain the symmetric passphrase; it never writes a
+plaintext archive to the recovery destination.
+
+`k3s-control-plane-restore-check.sh` performs the non-destructive rehearsal for
+that artifact. It decrypts into a temporary directory, checks the SQLite/Kine
+contents, and removes the temporary plaintext files; it never replaces the
+live k3s datastore.
+
+`k3s-control-plane-isolated-restore.sh` performs the stronger disposable
+rehearsal. It decrypts the artifact into a temporary root-only directory,
+starts the matching K3s image in a disposable Docker bridge network on localhost port
+`16443`, verifies the restored API and expected namespaces, and removes the
+temporary container, network, and plaintext data on exit. It never mounts the
+live K3s directory. Run it with `sudo` and enter the paper-held passphrase at
+the local terminal.
+
+## Network validation
+
+Run `network-validation.sh` from a node host network namespace to record
+management, kubelet, cluster-DNS, service/pod, and home NodePort paths:
+
+```bash
+SOURCE_LABEL=chasebot scripts/network-validation.sh
+```
+
+The script is read-only and exits non-zero when a required path fails. Expected
+failures for a source without Tailscale or without a route to the home LAN
+remain visible in the evidence rather than being hidden by changing targets.
 
 ---
 
@@ -31,6 +62,13 @@ hostname, when distinguishing the home and Oracle hosts.
 ---
 
 ## 1. `auto-update.sh`
+
+> **Retired production path (2026-09-09).** This section is historical
+> reference only. Its cron entry was removed and it must not be used as the
+> JMusicBot deployment authority. Production releases now come from
+> `.github/workflows/jmusicbot-deploy.yml`, which publishes the patched
+> multi-arch image to GHCR and verifies the rollout. Keep this script only for
+> manual recovery/reference until its local-build implementation is removed.
 
 Same three-branch logic as before (upstream-fixed → revert; new release →
 rebuild; nothing new → exit). Only the deploy step changed.
@@ -70,33 +108,14 @@ rebuild; nothing new → exit). Only the deploy step changed.
   `k3s` live in `/usr/local/bin`, and k3s is installed with
   `--write-kubeconfig-mode 644` so `/etc/rancher/k3s/k3s.yaml` is readable.
 
-**The self-terminating "upstream fixed it" path**
+**Historical local-updater design — do not execute.**
 
-The original flipped `com.centurylinklabs.watchtower.enable` back to `true`,
-because Watchtower was the host-wide auto-updater and the *only* reason
-jmusicbot was excluded from it was that a local-only tag cannot be polled.
-
-Watchtower is gone. Keel is the equivalent, and jmusicbot is off it for exactly
-the same reason. So the faithful port is: **when we go back to
-`ghcr.io/arif-banai/musicbot:latest`, annotate the Deployment for Keel** —
-`keel.sh/policy: force`, `keel.sh/trigger: poll`,
-`keel.sh/pollSchedule: "@every 5m"`, matching pantry-bot — then `kubectl apply`,
-verify the rollout, and self-uninstall the cron job. This preserves the
-original's posture (unreviewed auto-deploys of upstream releases: what the bot
-had before the patch, and what it is supposed to get back).
-
-The Keel annotations are inserted into the manifest with a small `awk` pass
-rather than `yq` or `kubectl patch --local`, because both of those reformat the
-file and drop every comment — and that manifest's comments are the only
-explanation of why the custom build existed. The edit is validated with
-`kubectl apply --dry-run=server`; if validation fails, the manifest is restored
-untouched, the change is applied to the live object with
-`kubectl set image` + `kubectl annotate`, and the notification says plainly that
-the manifest is now out of sync and needs a hand edit. Fail-loud, never
-fail-silent.
-
-`ghcr.io/arif-banai/musicbot` is a public package, so Keel needs no extra
-registry credentials for it (unlike pantry-bot's private one).
+The former Watchtower/Keel and local-build path is retained below only as
+provenance for why this file exists. Watchtower and Keel are retired, the
+JMusicBot updater is no longer a production authority, and no Keel annotations
+or local auto-deploy path should be restored. Production releases use the
+published GHCR image and `.github/workflows/jmusicbot-deploy.yml`, with a
+serialized rollout and rollback gate.
 
 ### Required: scoped sudoers entry for `k3s ctr`
 
@@ -147,9 +166,10 @@ Failing after a multi-minute maven build would be a waste.
 
 ```cron
 # old
-17 4 * * * /home/chase/docker/jmusicbot/auto-update.sh >> /home/chase/docker/jmusicbot/auto-update.log 2>&1
+# Retired: the local JMusicBot updater must not compete with the GHCR/GitHub
+# Actions deployment authority.
 # new
-17 4 * * * /home/chase/k8s-homelab/scripts/auto-update.sh >> /home/chase/docker/jmusicbot/auto-update.log 2>&1
+# Retired 2026-09-09; see the deployment authority note above.
 ```
 
 The self-uninstall greps for `auto-update.sh`, so it still finds the line after
@@ -187,7 +207,7 @@ exists. All paths are env-overridable (`JMUSICBOT_DIR`, `JMUSICBOT_MANIFEST`,
   `spec.hostPath.path` or `spec.local.path` (local-path-provisioner emits either
   depending on version). Hardcoding `pvc-<uuid>_minecraft_minecraft-world` would
   work until the first PVC recreate and then silently back up nothing.
-- **Hibernation branching removed** (msh retired; always-on at Xmx6G). Replaced
+- **Hibernation branching removed** (msh retired; always-on at Xmx3G). Replaced
   by a **readiness** check: if `deployment/minecraft` has no Ready replica
   (mid-rollout, crash-loop, image pull), the RCON save is skipped with a clear
   log line and **the on-disk data is still archived**. A pod that is down is not

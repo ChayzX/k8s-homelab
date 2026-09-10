@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jmusicbot
+  labels:
+    app.kubernetes.io/name: jmusicbot
+    app.kubernetes.io/part-of: homelab

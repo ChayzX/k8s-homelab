@@ -405,8 +405,8 @@ keep it as the very last cleanup action, in case something about the router
 forward's target needs playit as a fallback path you haven't accounted for.
 
 **Done (2026-08-12)**: stopped and disabled, confirmed inactive + disabled
-— `bd show k8s-homelab-dsg` (closed). This was the last open item from this
-runbook; nothing outstanding remains here.
+— tracked in the historical migration record. This was the last open item
+from this runbook; nothing outstanding remains here.
 
 ## Step 9 — Confirm publicly, then soak
 

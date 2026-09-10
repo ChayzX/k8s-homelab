@@ -5,11 +5,8 @@ Slash commands only, gated by an explicit Discord user-ID allowlist
 the Kubernetes API (k8s_ops.py). This process makes only an OUTBOUND
 connection to Discord's gateway -- zero new inbound network exposure.
 
-Full design: `bd show k8s-homelab-bi6` (epic), `k8s-homelab-bi6.3` (this
-command surface), `.4` (RCON bridge), `.5` (authorization + audit logging).
-RBAC this code relies on: ../20-rbac.yaml. Issue tracking lives in GitHub
-Issues (see AGENTS.md); /bug files via gh_ops.py (the beads/Dolt backend
-was retired -- the old `bd show k8s-homelab-bi6` design refs are historical).
+Full design and current work live in GitHub Issues (see AGENTS.md). RBAC this
+code relies on: ../20-rbac.yaml. `/bug` files issues through `gh_ops.py`.
 """
 from __future__ import annotations
 

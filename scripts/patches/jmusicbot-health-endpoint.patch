@@ -6,7 +6,7 @@ index 76616ea..a0d43ab 100644
  #   java.security.jgss - Kerberos/GSS-API security
  #   java.sql          - JDBC (used by some dependencies)
  #   jdk.crypto.ec     - Elliptic curve crypto for TLS/SSL (Discord API) - runtime loaded
-+#   jdk.httpserver    - com.sun.net.httpserver.HttpServer (health endpoint, bd k8s-homelab-aos)
++#   jdk.httpserver    - com.sun.net.httpserver.HttpServer (health endpoint)
  #   jdk.management    - JMX management extensions
  #   jdk.unsupported   - Native library access (jdave, udpqueue)
  RUN $JAVA_HOME/bin/jlink \
@@ -81,7 +81,7 @@ index 0000000..af51c74
 +
 +/**
 + * Minimal HTTP health endpoint for the container so the kubelet probes and
-+ * Uptime Kuma have something to check (bd k8s-homelab-aos).
++ * the in-cluster watcher has something to check.
 + *
 + * <p>Deliberately dependency-free: it uses the JDK's built-in
 + * {@code com.sun.net.httpserver.HttpServer} rather than pulling in an HTTP
@@ -178,7 +178,7 @@ index 105f4a6..0e3ce9b 100644
          SettingsManager settings = new SettingsManager();
          Bot bot = new Bot(waiter, config, settings, userInteraction);
  
-+        // Health HTTP endpoint (bd k8s-homelab-aos): bind /live + /health on a
++        // Health HTTP endpoint: bind /live + /health on a
 +        // dedicated port so the kubelet probes and Uptime Kuma have something to
 +        // check. /live is up as soon as the server binds; /health only returns 200
 +        // once StartupLifecycleListener sees the Discord ReadyEvent. Deliberately
@@ -207,7 +207,7 @@ index a0630e8..63e5fb0 100644
      @Override
      public void onReady(ReadyEvent event) {
 +        // Mark the health endpoint ready only once Discord has actually logged in
-+        // (bd k8s-homelab-aos). Guarded because tests construct this listener with
++        // Guarded because tests construct this listener with
 +        // a mocked Bot that has no HealthServer attached.
 +        if (bot.getHealthServer() != null) {
 +            bot.getHealthServer().setReady(true);

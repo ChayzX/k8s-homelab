@@ -1,0 +1,23 @@
+[Unit]
+Description=Independent homelab public-service monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=homelab-monitor
+Group=homelab-monitor
+EnvironmentFile=-/etc/homelab-monitor/monitor.env
+ExecStart=/usr/bin/python3 /usr/local/lib/homelab-monitor/monitor.py
+StateDirectory=homelab-monitor
+Restart=on-failure
+RestartSec=10s
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/homelab-monitor
+RestrictAddressFamilies=AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
