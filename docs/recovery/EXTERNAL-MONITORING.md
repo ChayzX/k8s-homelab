@@ -15,9 +15,11 @@ Run monitoring outside `minecraftmachine`, preferably on Oracle or GCP. It must 
 
 GCP runs `homelab-external-monitor.service` as an unprivileged system user.
 The monitor checks `status.greeniespantry.uk`, `grafana.greeniespantry.uk`,
-`oauth.greeniespantry.uk`, and `auth.greeniespantry.uk`; the expected current
-responses are 404, 302, 404, and 302 respectively. The service was active and
-logged repeated `HEALTHY` results during the 2026-09-09 validation. Earlier
+`commands.greeniespantry.uk`, `mods.greeniespantry.uk`,
+`oauth.greeniespantry.uk`, and `auth.greeniespantry.uk`; the current observed
+responses include HTTP 200 for the split commands/moderator surfaces and the
+documented expected responses for the other routes. The service is active and
+logged a healthy persisted state on 2026-09-10. Earlier
 `HEARTBEAT_OK` entries came from the now-retired Healthchecks.io integration;
 the public checks use no Kubernetes or Authentik credentials.
 
@@ -27,6 +29,11 @@ monitor can record this protected route as healthy with
 `MONITOR_API_EXPECTED_STATUS=403`. This proves the external Access edge and
 tunnel route are reachable, but not authenticated Kubernetes API health; the
 GitHub Actions service token is intentionally not installed on the monitor VM.
+
+The same GCP VM hosts the private failover witness on localhost. It is not
+part of the monitor's health decision and is reached by the home site through
+an outbound SSH tunnel, keeping coordination private without opening another
+public application port.
 
 The monitor's Discord webhook is not configured because no current
 `grafana-discord-webhooks` Kubernetes secret exists. The retired Healthchecks.io
