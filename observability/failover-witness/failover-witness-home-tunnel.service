@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/ssh -NT -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=yes -i /home/chase/.ssh/gcp-discordmusicbot -L 192.168.40.208:18765:127.0.0.1:8765 chasepdrsn_gmail_com@136.113.178.106
+ExecStart=/usr/bin/ssh -NT -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=yes -i /home/chase/.ssh/gcp-discordmusicbot -L 127.0.0.1:18765:127.0.0.1:8765 chasepdrsn_gmail_com@136.113.178.106
 Restart=always
 RestartSec=5
 NoNewPrivileges=true

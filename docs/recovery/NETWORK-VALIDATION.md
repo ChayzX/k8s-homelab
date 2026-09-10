@@ -79,6 +79,43 @@ After separation, the home cluster contains only `minecraftmachine` and
 `chasebot`; Oracle's independent server is reachable over its Tailscale address
 and does not participate in home API, kubelet, or consensus traffic.
 
+## Workload-level witness path
+
+The host-level SSH forwards are intentionally node-local. The home units bind
+their GCP forwards to `127.0.0.1:18765`, and
+`observability/failover-witness/failover-witness-relay.yaml` runs one
+host-networked relay on each home node. The relay exposes port 18766 on its
+Kubernetes internal node address and forwards only to that node's loopback tunnel. The
+`failover-witness-relay` ClusterIP Service maps port 18765 to the relay and
+sets `internalTrafficPolicy: Local`, so a workload using
+`failover-witness-relay.observability.svc.cluster.local:18765` stays on the
+node-local relay.
+
+This closes the previous host-only evidence gap without stretching the k3s
+control plane or exposing the witness publicly. It is deliberately fail-closed:
+if a node-local relay is unavailable, a workload does not fall back to the
+other home node's witness tunnel. The relay does not hold the witness secret;
+callers remain responsible for Bearer authentication. The path still needs a
+live home tunnel unit on each node and must be validated from an actual
+workload after installation; this repository change does not apply or restart
+live services.
+
+Validation after installation (the second command creates and removes a
+temporary probe pod):
+
+```sh
+kubectl -n observability get ds/failover-witness-relay \
+  svc/failover-witness-relay pods -o wide
+kubectl -n observability run witness-path-check --rm -i --restart=Never \
+  --image=busybox:1.36 -- wget -qO- \
+  http://failover-witness-relay.observability.svc.cluster.local:18765/healthz
+```
+
+Repeat the check with a pod pinned to each home node before treating workload
+reachability as proven. Do not use the fixed tower address as a replacement:
+that would reintroduce the single-node dependency this relay is intended to
+remove.
+
 ## Required matrix
 
 | Source | Destination | Test | Required result |
