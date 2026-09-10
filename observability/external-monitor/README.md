@@ -32,6 +32,13 @@ The monitor code is deployed on GCP, but R2 checks remain disabled until a
 read-only monitoring credential is provisioned. Do not reuse a workload
 credential with write/delete access for this purpose.
 
+The default public checks include the split PantryBot surfaces:
+`commands.greeniespantry.uk` and `mods.greeniespantry.uk`. These validate that
+the OAuth-free viewer command guide and private moderator UI routes are
+reachable independently of the operator OAuth hostname. HTTP success and
+redirect responses are accepted because the monitor tests origin availability,
+not authenticated browser state.
+
 Do not commit this file or put its values in Kubernetes manifests. The monitor
 logs state transitions and writes the latest result to
 `/var/lib/homelab-monitor/state.json`. UptimeRobot is the external monitor for
