@@ -77,3 +77,70 @@ Before enabling the routes, verify:
 - `overlay.greeniespantry.uk/` returns the overlay shell and WebSocket upgrade
   remains reachable after reconnect.
 - Both home and Oracle origins expose equivalent routes before automatic failover is enabled.
+
+## Free routing proof harness
+
+The repository includes a read-only proof harness at
+`observability/external-monitor/routing_proof.py`. It is intended to run from
+an external observer or from a maintenance workstation; it does not use
+Kubernetes credentials and does not change DNS, Cloudflare, tunnels, or live
+services.
+
+Run it with direct, independently reachable origin URLs and the friendly
+hostname:
+
+```bash
+python3 observability/external-monitor/routing_proof.py \
+  --home-origin https://<home-origin> \
+  --oracle-origin https://<oracle-origin> \
+  --public-url https://commands.greeniespantry.uk \
+  --output /tmp/pantrybot-routing-proof.json \
+  --detection-assumption-seconds 60 \
+  --convergence-assumption-seconds 90
+```
+
+The harness probes `/` and `/api/public/commands` separately for home, Oracle,
+and the public hostname. Each probe records its URL, status, content type,
+UTC start/end timestamps, and elapsed time. The report also records the
+detection and route-convergence assumptions; these are planning assumptions,
+not measured failover times. A failed direct origin is reported under its own
+origin and is not hidden by a healthy other origin.
+
+An optional origin marker can verify which site the currently observed public
+route reaches, if the externally exposed response includes a deliberate
+non-secret marker header:
+
+```bash
+python3 observability/external-monitor/routing_proof.py \
+  --home-origin https://<home-origin> \
+  --oracle-origin https://<oracle-origin> \
+  --public-url https://commands.greeniespantry.uk \
+  --public-origin-header X-PantryBot-Origin \
+  --expected-public-origin home
+```
+
+This verifies only the observed current target. A healthy public response or a
+single target marker must never be described as Cloudflare failover. The
+report therefore emits `cloudflare_failover.status=not_verified` unless an
+external before/after route artifact is explicitly supplied with both targets:
+
+```json
+{
+  "public_hostname": "commands.greeniespantry.uk",
+  "observations": [
+    {"observed_at": "2026-09-10T20:00:00Z", "target": "home", "externally_observed": true},
+    {"observed_at": "2026-09-10T20:05:00Z", "target": "oracle", "externally_observed": true}
+  ]
+}
+```
+
+Pass that artifact with `--transition-evidence <file>` only after the route
+target was observed externally. The harness validates that the hostname
+matches, both `home` and `oracle` were observed, timestamps are parseable, and
+each observation is explicitly external. Even with this artifact, the direct
+origin health results remain separate from the route-transition evidence.
+
+The proof output is evidence for issue tracking, not a Cloudflare control
+plane change. It must not be used to claim automatic failover until an
+externally observed before/after transition and measured convergence result
+are attached.
