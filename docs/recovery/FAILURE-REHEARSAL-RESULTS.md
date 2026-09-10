@@ -1,7 +1,25 @@
 # Failure rehearsal results
 
-This record contains only disposable or read-only evidence. No production
-route, deployment, Minecraft workload, or persistent database was changed.
+This record contains disposable or read-only failure evidence. No production
+route, PantryBot side-effect role, or Minecraft workload was changed. The
+home authority has separately been prepared with explicit WAL settings, a
+dedicated replication role, and an encrypted standby transport.
+
+## 2026-09-10 — physical PostgreSQL transport and promotion
+
+- Scope: the live home authority on `chasebot` to a disposable Oracle ARM64
+  PostgreSQL standby over `chasebot -> GCP loopback -> Oracle`; no application
+  traffic used the standby.
+- Result: passed. Authenticated Oracle reads returned 275 users and 1,700
+  inventory rows; `pg_stat_wal_receiver` reported `streaming`; a sentinel
+  insert/delete round-trip was observed; the disposable Oracle database
+  promoted in 4 seconds and accepted a write.
+- Interpretation: physical WAL transport and PostgreSQL promotion are now
+  proven on the actual topology. This is not automatic failover evidence:
+  the home writer was not fenced, the witness was not involved in promotion,
+  and no route or side-effect role was enabled.
+- Cleanup: disposable Oracle standby namespace removed; encrypted transport
+  units and the home replication prerequisite remain installed.
 
 ## 2026-09-10 — application ownership handoff
 

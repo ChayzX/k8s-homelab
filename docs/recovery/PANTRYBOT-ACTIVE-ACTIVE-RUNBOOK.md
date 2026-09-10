@@ -108,6 +108,16 @@ guarantee. The allowed RPO for this design therefore remains the replication
 lag at the failure boundary until a promotion controller and fencing test are
 proven.
 
+The physical PostgreSQL transport has now also been exercised against the live
+home authority. A dedicated replication role is admitted only from chasebot's
+NodePort path; the home service reverse-forwards that NodePort through GCP
+loopback, and Oracle's independent GCP tunnel exposes a node-local standby
+endpoint. A disposable Oracle standby streamed the live state, replayed a
+sentinel round-trip, and promoted in 4 seconds. The standby was deleted after
+the check. This proves transport and database promotion mechanics, but the
+home writer was not fenced and no automatic or application failover is
+enabled.
+
 The application-side promotion check is reproducible from the PantryBot
 worktree with `npm run rehearsal:promotion`. Set
 `PANTRY_HOME_DATABASE_URL`, `PANTRY_ORACLE_DATABASE_URL`,
