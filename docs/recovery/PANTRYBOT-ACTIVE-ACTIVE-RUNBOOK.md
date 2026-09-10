@@ -119,6 +119,14 @@ namespaces were removed. The command reported PostgreSQL promotion and old
 database-writer fencing as deliberately unproven; those remain controller
 gates.
 
+The split UI capacity has also been validated on Oracle ARM64 using candidate
+images from PantryBot commit `46fc4f3`: the public commands site and private UI
+each reached 2/2 Ready replicas. Direct checks of `/ready` and the public
+commands API passed, as did `/mod/` on the private UI. The UI Deployments are
+stateless and may remain available on Oracle, but the API/gateway/worker/
+dispatcher roles remain gated on shared database, Twitch credentials, and
+promotion authority bootstrap.
+
 ## Return from Oracle to home
 
 1. Verify home database recovery is current and has caught up to the promoted

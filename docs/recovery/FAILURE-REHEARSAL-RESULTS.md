@@ -46,3 +46,18 @@ route, deployment, Minecraft workload, or persistent database was changed.
   rehearsal explicitly left PostgreSQL promotion and old database-writer
   fencing as operator/controller responsibilities.
 - Cleanup: replication slot and both disposable namespaces removed.
+
+## 2026-09-10 — Oracle split-UI runtime validation
+
+- Scope: PantryBot candidate images from commit `46fc4f3`, deployed only to the
+  standalone Oracle ARM64 k3s namespace; no home production workload changed.
+- Result: passed. `pantry-commands-site` reached 2/2 Ready replicas and its
+  `/ready` and `/api/public/commands` endpoints returned successfully.
+  `pantry-private-site` reached 2/2 Ready replicas and its `/ready` and `/mod/`
+  endpoints returned successfully. All four pods were running with zero
+  restarts during the check.
+- Interpretation: proves multi-architecture packaging, Oracle scheduling, and
+  split stateless UI readiness. It does not prove private API/database,
+  Twitch ownership, external routing, or PostgreSQL promotion.
+- Cleanup: port-forwards were stopped; the two UI Deployments remain as the
+  Oracle candidate capacity for the next bootstrap gate.
