@@ -3,6 +3,9 @@
 This is a deliberately small, private witness for PantryBot's fenced
 failover controller. It stores a monotonically increasing fencing epoch and
 grants one short-lived authority lease to either `home` or `oracle`.
+Multiple replicas from the current site receive the same epoch/token, so a
+site can scale its worker role horizontally without granting authority to the
+other site.
 
 It is not a database, a health detector, or a source-fencing mechanism. A
 caller must still prove that the old PostgreSQL writer is stopped or rejects

@@ -9,6 +9,8 @@ with tempfile.TemporaryDirectory() as directory:
     state = WitnessState(Path(directory) / "state.json", "test-secret", lease_seconds=60)
     home = state.acquire("home")
     assert home and home["epoch"] == 1
+    same_site = state.acquire("home")
+    assert same_site and same_site["epoch"] == home["epoch"] and same_site["token"] == home["token"]
     assert state.acquire("oracle") is None
     assert state.renew("home", home["epoch"], home["token"])
     assert not state.renew("oracle", home["epoch"], home["token"])

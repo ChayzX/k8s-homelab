@@ -33,7 +33,7 @@ class WitnessState:
                 raise ValueError("state must be an object")
             return loaded
         except FileNotFoundError:
-            return {"epoch": 0, "holder": None, "expires_at": 0, "token_hash": None}
+            return {"epoch": 0, "holder": None, "expires_at": 0, "token": None, "token_hash": None}
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -57,12 +57,15 @@ class WitnessState:
         now = time.time()
         with self.lock:
             if self.data["holder"] and self.data["expires_at"] > now:
-                return None
+                if self.data["holder"] != site or not self.data.get("token"):
+                    return None
+                return {"site": site, "epoch": self.data["epoch"], "expires_at": self.data["expires_at"], "token": self.data["token"]}
             self.data["epoch"] = int(self.data["epoch"]) + 1
             token = secrets.token_urlsafe(32)
             self.data.update(
                 holder=site,
                 expires_at=now + self.lease_seconds,
+                token=token,
                 token_hash=hashlib.sha256(token.encode()).hexdigest(),
             )
             self._save()
