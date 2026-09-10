@@ -1,6 +1,6 @@
 # Free-Tier Capacity Baseline
 
-**Measured:** 2026-09-10 CDT; live host and k3s capacity refreshed at 11:21 CDT during the active-active implementation pass
+**Measured:** 2026-09-10 CDT; Oracle and GCP host capacity refreshed during the active-active implementation pass
 
 This is the initial capacity gate for the free active-active design. It is an observation record, not an authorization to deploy production failover.
 
@@ -9,8 +9,8 @@ This is the initial capacity gate for the free active-active design. It is an ob
 | Host | CPU | Memory | Disk | Current observation | Gate |
 |---|---:|---:|---:|---|---|
 | `minecraftmachine` | 16 logical CPUs | 15 GiB total, 8 GiB available | Root 3.4 TiB free; `/mnt/nvme` 188 GiB free | Home control plane and Minecraft host; Minecraft excluded from this project | Do not alter Minecraft placement |
-| `pantry-bot-oracle` | 2 vCPU; 2 allocatable k3s CPU | 11,932 MiB total, 10,672 MiB available; k3s currently 11% memory | 41 GiB free | Independent arm64 Oracle k3s Ready; 2% CPU / 11% memory at refresh, only system pods plus the empty PantryBot namespace | Keep resource limits explicit; recheck with PantryBot workloads and egress |
-| `discordmusicbot` | 2 vCPU | 969 MiB total, 593 MiB available at check | 3.4 GiB free | External monitor; no swap; OS Login SSH and passwordless sudo verified | Observer is deployed; any coordination witness must be lightweight and pass a measured memory/network test |
+| `pantry-bot-oracle` | 2 vCPU; 2 allocatable k3s CPU | 11,932 MiB total, 10,023 MiB available; k3s currently 5% CPU / 16% memory | 40 GiB free | Independent arm64 Oracle k3s Ready; only system pods plus the empty PantryBot namespace | Keep resource limits explicit; recheck with PantryBot workloads and egress |
+| `discordmusicbot` | 2 vCPU | 969 MiB total, 578 MiB available at check | 3.3 GiB free | x86_64 observer host; no swap, k3s, or Docker active; OS Login SSH and passwordless sudo verified | Observer-only; any coordination witness must be lightweight and pass a measured memory/network test |
 | `chasebot` | 2 allocatable CPU | 3,342,604 KiB allocatable; 1,314 MiB currently used (39%) | Local-path storage only; current PVCs are RWO and node-local | Ready second home k3s node; current usage 211m CPU (10%). Adds compute capacity inside the home failure domain, not an independent site | Use for stateless replicas and worker capacity only; do not treat it as the Oracle/database failure domain |
 
 ## Current home-to-Oracle network observation
@@ -31,18 +31,19 @@ use on that node. Its local-path RWO storage confirms that it adds compute
 capacity inside the home failure domain, not independent state redundancy.
 
 Oracle k3s is also currently a single Ready arm64 control-plane node with 2
-allocatable CPU and 11,932 MiB total memory. `kubectl top` reports 45m CPU
-(2%) and 1,341 MiB memory (11%) while only k3s system pods are running and the
-PantryBot namespace is empty. This confirms available application capacity,
-not database replication or cross-site failover evidence.
+allocatable CPU and 11,932 MiB total memory. The live host check reports 101m
+CPU (5%) and `kubectl top` reports 1,946Mi memory (16%) while only k3s system
+pods are running and the PantryBot namespace is empty. This confirms available
+application capacity, not database replication or cross-site failover evidence.
 
 ## GCP evidence boundary
 
 OS Login SSH access to `discordmusicbot` was verified on 2026-09-10 as
-`chasepdrsn_gmail_com` using the existing operator key. Passwordless sudo is
-available for the monitor service. The host is running the external monitor,
-and its persisted state reports healthy checks for the public status, Grafana,
-commands, mods, OAuth, Authentik, and protected Kubernetes API routes.
+`chasepdrsn_gmail_com` using the existing operator key. The host reports 2
+vCPUs, 969 MiB RAM, 3.3 GiB free root disk, x86_64, no swap, and no active
+k3s or Docker service. Passwordless sudo is available for the monitor service.
+This confirms a lightweight observer host, not a database or general-purpose
+application site.
 
 This proves host access and observer operation only. It does not verify the
 active GCP project, instance region, billing account, free-tier eligibility,
