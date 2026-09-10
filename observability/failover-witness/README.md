@@ -17,6 +17,11 @@ outbound SSH local-forward to GCP; no public application port or paid load
 balancer is required. The shared secret belongs in a root-owned environment
 file and must not be committed.
 
+The site tunnel units bind only to the site/node address (`192.168.40.208` on
+the home control host, `192.168.40.200` on ChaseBot, and `100.78.181.15` on
+Oracle), not to a public interface. Pod configuration should use the address
+of the node-local tunnel it can reach.
+
 Before enabling the unit, create its unprivileged account once:
 
 ```sh
@@ -51,3 +56,9 @@ Oracle uses the separate `failover-witness-oracle-tunnel.service` unit and
 the Oracle-generated `/home/ubuntu/.ssh/gcp-witness-oracle` key. Its GCP OS
 Login public key must be added for the service-account OS Login username shown
 by `gcloud beta compute os-login ssh-keys add`; do not reuse the home key.
+
+The home worker node uses `failover-witness-chasebot-tunnel.service` with a
+separate `/home/cpederson/.ssh/gcp-witness-chasebot` key and binds to the
+ChaseBot node address. This keeps home pod access to coordination available
+when MinecraftMachine is unavailable; the witness remains authenticated and
+private to the LAN path.
