@@ -1,8 +1,9 @@
 # PRODUCTION BOOTSTRAP PATH — applied only after the external-secret escrow
 # gate passed. Migration, replication, and promotion remain separate gates.
 #
-# This is a single home PostgreSQL authority only. It intentionally contains
-# no replication, promotion, or fencing resources. The legacy PantryBot
+# This is a single home PostgreSQL authority only. It contains the PostgreSQL
+# WAL prerequisites for a future externally transported standby, but no
+# replication client, promotion, or fencing resources. The legacy PantryBot
 # Deployment and Minecraft placement are not part of this manifest.
 apiVersion: v1
 kind: Service
@@ -60,6 +61,20 @@ spec:
         - name: postgres
           # Verified multi-architecture manifest digest on 2026-09-10.
           image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+          # These settings only prepare WAL for a future standby. They do not
+          # expose PostgreSQL, create a replication role, or authorize a
+          # promotion while the old writer may still be reachable.
+          args:
+            - -c
+            - wal_level=replica
+            - -c
+            - max_wal_senders=10
+            - -c
+            - max_replication_slots=10
+            - -c
+            - wal_keep_size=256MB
+            - -c
+            - max_slot_wal_keep_size=1GB
           ports:
             - name: postgres
               containerPort: 5432

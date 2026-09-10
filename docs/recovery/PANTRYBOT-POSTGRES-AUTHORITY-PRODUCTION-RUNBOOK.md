@@ -17,6 +17,12 @@ The resource budget follows the measured home cluster baseline: 500m CPU and
 768Mi memory requests, with a 1 CPU and 1Gi memory limit. `chasebot` is inside
 the home failure domain; this is not cross-site HA.
 
+The authority starts with explicit physical-replication prerequisites:
+`wal_level=replica`, 10 WAL senders, 10 replication slots, 256MiB retained WAL,
+and a 1GiB per-slot WAL cap. These settings only make a future standby
+possible; they do not expose PostgreSQL, create a replication role, or
+authorize promotion.
+
 The container runs the official PostgreSQL entrypoint as root only during
 initial volume ownership setup, with the narrow `CHOWN`, `DAC_OVERRIDE`,
 `FOWNER`, `SETGID`, and `SETUID` capabilities; the entrypoint drops to the
@@ -101,8 +107,8 @@ The initial live verification passed:
 
 ## Explicit separation from replication and fencing
 
-This manifest deliberately has one replica and no replication configuration,
-standby, promotion controller, fencing adapter, witness, or cross-site route.
+This manifest deliberately has one replica and no replication client, standby,
+promotion controller, fencing adapter, witness, or cross-site route.
 The stable Service selector identifies the home primary only. A healthy pod or
 Service is not proof that another site can be promoted safely.
 
