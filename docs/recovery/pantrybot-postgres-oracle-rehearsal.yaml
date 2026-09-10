@@ -1,0 +1,77 @@
+# Disposable Oracle arm64 PostgreSQL rehearsal only. Apply remotely to the
+# Oracle k3s cluster, then delete the namespace after the checks.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pantry-bot-rehearsal-oracle-20260910
+  labels:
+    homelab/rehearsal: pantrybot-postgres-oracle
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-rehearsal
+  namespace: pantry-bot-rehearsal-oracle-20260910
+type: Opaque
+stringData:
+  POSTGRES_USER: pantry
+  POSTGRES_DB: pantry
+  POSTGRES_PASSWORD: replace-at-apply
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: pantry-bot-rehearsal-oracle-20260910
+spec:
+  selector:
+    app.kubernetes.io/name: postgres-rehearsal
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: pantry-bot-rehearsal-oracle-20260910
+  labels:
+    app.kubernetes.io/name: postgres-rehearsal
+    homelab/rehearsal: pantrybot-postgres-oracle
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres-rehearsal
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres-rehearsal
+        homelab/rehearsal: pantrybot-postgres-oracle
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: postgres-rehearsal
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 384Mi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            periodSeconds: 5
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault

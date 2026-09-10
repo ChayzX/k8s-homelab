@@ -1,0 +1,92 @@
+# Free-Tier Capacity Baseline
+
+**Measured:** 2026-09-10 CDT; live host and k3s capacity refreshed at 11:21 CDT during the active-active implementation pass
+
+This is the initial capacity gate for the free active-active design. It is an observation record, not an authorization to deploy production failover.
+
+## Observed hosts
+
+| Host | CPU | Memory | Disk | Current observation | Gate |
+|---|---:|---:|---:|---|---|
+| `minecraftmachine` | 16 logical CPUs | 15 GiB total, 8 GiB available | Root 3.4 TiB free; `/mnt/nvme` 188 GiB free | Home control plane and Minecraft host; Minecraft excluded from this project | Do not alter Minecraft placement |
+| `pantry-bot-oracle` | 2 vCPU; 2 allocatable k3s CPU | 11,932 MiB total, 10,672 MiB available; k3s currently 11% memory | 41 GiB free | Independent arm64 Oracle k3s Ready; 2% CPU / 11% memory at refresh, only system pods plus the empty PantryBot namespace | Keep resource limits explicit; recheck with PantryBot workloads and egress |
+| `discordmusicbot` | 2 vCPU | 969 MiB total, 597 MiB available | 3.4 GiB free | External monitor; no swap | Coordination workload requires a memory/egress test first |
+| `chasebot` | 2 allocatable CPU | 3,342,604 KiB allocatable; 1,314 MiB currently used (39%) | Local-path storage only; current PVCs are RWO and node-local | Ready second home k3s node; current usage 211m CPU (10%). Adds compute capacity inside the home failure domain, not an independent site | Use for stateless replicas and worker capacity only; do not treat it as the Oracle/database failure domain |
+
+## Current home-to-Oracle network observation
+
+From `minecraftmachine` over the existing Tailscale path to
+`pantry-bot-oracle.tailc0f3c6.ts.net` (`100.78.181.15`), four ICMP probes
+returned 4/4 packets with 0% loss and 126.7–131.3 ms latency (129.1 ms
+average, 1.9 ms deviation). This is suitable for asynchronous application
+replication and queue processing, but is not evidence for synchronous
+cross-site PostgreSQL commits or a stretched k3s control plane.
+
+The same host currently reports 16 logical CPUs, 15,898 MiB RAM with 8,107 MiB
+available, 3.4 TiB free on `/`, and 188 GiB free on `/mnt/nvme`.
+
+Current cluster evidence also shows `chasebot` Ready with 2 CPU and 3,342,604
+KiB allocatable memory. Kubernetes reports 187m CPU and 1,327 MiB memory in
+use on that node. Its local-path RWO storage confirms that it adds compute
+capacity inside the home failure domain, not independent state redundancy.
+
+Oracle k3s is also currently a single Ready arm64 control-plane node with 2
+allocatable CPU and 11,932 MiB total memory. `kubectl top` reports 45m CPU
+(2%) and 1,341 MiB memory (11%) while only k3s system pods are running and the
+PantryBot namespace is empty. This confirms available application capacity,
+not database replication or cross-site failover evidence.
+
+## GCP evidence boundary
+
+The current homelab host does not have the `gcloud` CLI installed, so a
+read-only attempt cannot verify the active GCP project, instance region,
+billing account, free-tier eligibility, disk allowance, or current egress.
+Those facts must be collected from Cloud Shell or another authenticated GCP
+operator environment before GCP can be promoted beyond observer-only use.
+
+## Published free-tier constraints (account eligibility still unverified)
+
+- Google Compute Engine Free Tier currently covers one non-preemptible
+  `e2-micro` month in `us-west1`, `us-central1`, or `us-east1`, 30 GB-months
+  of standard persistent disk, and 1 GB/month outbound transfer from North
+  America to eligible destinations. This is an observer-sized allowance, not
+  a safe assumption for PostgreSQL, k3s, or active application capacity.
+  Source: <https://docs.cloud.google.com/free/docs/free-cloud-features>.
+- Oracle Always Free currently documents 2 total Ampere A1 OCPUs and 12 GB
+  memory, 200 GB combined block volume, and possible reclaim of idle compute
+  when CPU/network (and A1 memory) remain below 20% at the 95th percentile for
+  seven days. The current Oracle host measurement fits the practical second
+  application-site role, but tenancy limits and reclamation status still need
+  account-level verification. Source:
+  <https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm>.
+- Cloudflare R2 Standard currently includes 10 GB-month storage, 1 million
+  Class A operations, 10 million Class B operations, and free egress monthly;
+  Infrequent Access is not covered by that free tier. Source:
+  <https://developers.cloudflare.com/r2/pricing/>.
+
+These published limits do not replace account-level billing, region, quota,
+egress, or current-usage checks. No production placement is approved from
+published limits alone.
+
+## Initial conclusions
+
+- Oracle has the most spare memory and is the practical second application site, but its 2 vCPU limit requires worker and database resource limits.
+- GCP has enough observed headroom for monitoring, but not enough to assume a full database or coordination workload. Keep it observer-only until a measured lightweight coordination test passes.
+- The home tower has ample storage but is not a second failure domain. Its large disk does not make Minecraft or home-local state highly available.
+- The initial design should use PostgreSQL queue/state on the two application sites and only add a third coordination participant after validating GCP memory, disk, and network impact.
+
+## Free-cost gates
+
+Before production reliance, record:
+
+1. Google Cloud free-tier project, region, billing, disk, and monthly egress eligibility.
+2. Oracle Always Free tenancy/region eligibility, current A1 usage, and idle reclamation status.
+3. R2 object bytes, request volume, retention growth, and backup egress.
+4. Cloudflare plan and route behavior; paid Load Balancing remains excluded from the baseline.
+5. Peak PantryBot CPU/memory/egress on both sites after the first non-production deployment.
+
+The design must stop before a paid service, instance resize, quota increase, or unexpected egress cost. Free-tier eligibility is not inferred from host size alone.
+
+## Access gap
+
+The local key `/home/chase/.ssh/mini-pc` did not authenticate as `chase@192.168.40.200` during the original measurement. Kubernetes now confirms the node is reachable and Ready, but direct SSH identity/key validation remains a management-access follow-up. This is not a reason to change the active architecture; the existing GitHub issue for ChaseBot access/recovery should record the correct username/key path before any direct host migration.

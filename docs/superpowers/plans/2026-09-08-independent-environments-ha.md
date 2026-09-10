@@ -1,5 +1,7 @@
 # Independent Environments HA and Recovery Implementation Plan
 
+> **Historical baseline:** This plan covers the recovery foundation that preceded the approved free active-active application design. Continue with [`2026-09-10-free-active-active-homelab.md`](2026-09-10-free-active-active-homelab.md) for the current goal. Minecraft remains excluded from active-active work.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the unsafe WAN-spanning embedded-etcd proposal with independent home/cloud environments and demonstrated recovery, while preserving a path to true automatic HA if suitable local hardware or managed infrastructure is added.

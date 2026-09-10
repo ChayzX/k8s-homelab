@@ -1,5 +1,7 @@
 # Homelab Availability and Recovery Architecture
 
+> **Superseded direction:** This document remains the recovery baseline and records why WAN-spanning k3s consensus was rejected. The current target is the approved free active-active application architecture in [`docs/superpowers/specs/2026-09-10-free-active-active-homelab-design.md`](docs/superpowers/specs/2026-09-10-free-active-active-homelab-design.md) and [`docs/superpowers/plans/2026-09-10-free-active-active-homelab.md`](docs/superpowers/plans/2026-09-10-free-active-active-homelab.md). Minecraft remains excluded. PantryBot is the first implementation; other services follow after their own state and side-effect gates.
+
 **Status: architecture decision revised 2026-09-08.** The previous proposal to create one k3s embedded-etcd cluster spanning home and cloud is superseded. The current hardware and network do not justify WAN-spanning consensus. This plan separates home and cloud environments, improves recovery, and leaves a path to automatic HA if suitable local hardware or a properly redundant cloud platform is added.
 
 ## Decision summary
