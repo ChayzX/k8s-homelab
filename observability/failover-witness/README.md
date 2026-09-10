@@ -14,6 +14,15 @@ outbound SSH local-forward to GCP; no public application port or paid load
 balancer is required. The shared secret belongs in a root-owned environment
 file and must not be committed.
 
+Before enabling the unit, create its unprivileged account once:
+
+```sh
+sudo useradd --system --home-dir /var/lib/failover-witness \
+  --no-create-home --shell /usr/sbin/nologin failover-witness
+sudo install -d -o failover-witness -g failover-witness -m 0750 \
+  /var/lib/failover-witness
+```
+
 Run the unit test with:
 
 ```sh
@@ -22,3 +31,15 @@ python3 observability/failover-witness/test_witness.py
 
 The service API is `GET /healthz`, `POST /v1/authority/acquire`, and
 `POST /v1/authority/renew`, authenticated with `Authorization: Bearer ...`.
+
+The repository also includes the home-side tunnel unit. Install it only on a
+site that has its own SSH identity authorized on GCP; never copy the home
+private key to Oracle:
+
+```sh
+sudo install -o root -g root -m 0644 \
+  observability/failover-witness/failover-witness-home-tunnel.service \
+  /etc/systemd/system/failover-witness-home-tunnel.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now failover-witness-home-tunnel.service
+```
