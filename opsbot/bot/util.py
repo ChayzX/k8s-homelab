@@ -43,7 +43,7 @@ BOT_REPOS = {
 }
 # If truthy (default), /bug is usable by ANY Discord user who can see the
 # bot -- the point of the card is server members filing bugs. The reporter's
-# Discord identity is still recorded in the bead and the audit log. Set to
+# Discord identity is still recorded in the GitHub issue and the audit log. Set to
 # "false" to fall back to the DISCORD_USER_ID allowlist for everything.
 REPORT_OPEN_ACCESS = os.environ.get("REPORT_OPEN_ACCESS", "true").strip().lower() == "true"
 
@@ -168,7 +168,7 @@ _REPORT_TITLE_MAX = 120
 
 
 def report_title(bot_label: str, what: str) -> str:
-    """Derive a bead title from the reporter's free text: first ~120 chars on
+    """Derive a GitHub issue title from the reporter's free text: first ~120 chars on
     one line, so Discord text with newlines becomes a clean one-line title.
     Never returns empty -- a blank description still produces a title."""
     summary = " ".join(what.split())[:_REPORT_TITLE_MAX].strip() or "no description"

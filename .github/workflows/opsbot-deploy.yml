@@ -1,4 +1,4 @@
-# Bead: k8s-homelab-os2 — one visible CI/CD workflow with publish, manifest,
+# One visible CI/CD workflow with publish, manifest,
 # restart, rollout, and health-verification stages.
 #
 # k8s-homelab-oiv.8: reaches the cluster's private API through a dedicated

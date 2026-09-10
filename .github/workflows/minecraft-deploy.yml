@@ -1,4 +1,3 @@
-# Bead: k8s-homelab-5vu
 # A merge to main is the deployment approval. The workflow resolves the newest
 # Paper version at merge time, publishes it, then applies/restarts/verifies it.
 name: Minecraft CI/CD
