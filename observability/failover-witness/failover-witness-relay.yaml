@@ -108,16 +108,17 @@ spec:
         - name: relay
           image: python:3.12-alpine
           imagePullPolicy: IfNotPresent
-          command: ["python3", "/opt/failover-witness/relay.py"]
+          # Bind all interfaces on the host-networked node. The Service and
+          # node firewall keep this private; loopback binding would prevent
+          # ordinary pods from reaching the relay through the node address.
+          command: ["/bin/sh", "-c"]
           args:
-            - --listen-host
-            - $(LISTEN_HOST)
-            - --listen-port
-            - "18766"
-            - --upstream-host
-            - 127.0.0.1
-            - --upstream-port
-            - "18765"
+            - >-
+              exec python3 /opt/failover-witness/relay.py
+              --listen-host 0.0.0.0
+              --listen-port 18766
+              --upstream-host 127.0.0.1
+              --upstream-port 18765
           env:
             - name: LISTEN_HOST
               valueFrom:
@@ -131,17 +132,6 @@ spec:
             - name: witness
               containerPort: 18766
               protocol: TCP
-          readinessProbe:
-            tcpSocket:
-              port: witness
-            periodSeconds: 5
-            timeoutSeconds: 2
-            failureThreshold: 3
-          livenessProbe:
-            tcpSocket:
-              port: witness
-            periodSeconds: 10
-            timeoutSeconds: 2
           resources:
             requests:
               cpu: 5m
