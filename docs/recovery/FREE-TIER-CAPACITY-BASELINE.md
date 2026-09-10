@@ -10,7 +10,7 @@ This is the initial capacity gate for the free active-active design. It is an ob
 |---|---:|---:|---:|---|---|
 | `minecraftmachine` | 16 logical CPUs | 15 GiB total, 8 GiB available | Root 3.4 TiB free; `/mnt/nvme` 188 GiB free | Home control plane and Minecraft host; Minecraft excluded from this project | Do not alter Minecraft placement |
 | `pantry-bot-oracle` | 2 vCPU; 2 allocatable k3s CPU | 11,932 MiB total, 10,672 MiB available; k3s currently 11% memory | 41 GiB free | Independent arm64 Oracle k3s Ready; 2% CPU / 11% memory at refresh, only system pods plus the empty PantryBot namespace | Keep resource limits explicit; recheck with PantryBot workloads and egress |
-| `discordmusicbot` | 2 vCPU | 969 MiB total, 597 MiB available | 3.4 GiB free | External monitor; no swap | Coordination workload requires a memory/egress test first |
+| `discordmusicbot` | 2 vCPU | 969 MiB total, 593 MiB available at check | 3.4 GiB free | External monitor; no swap; OS Login SSH and passwordless sudo verified | Observer is deployed; any coordination witness must be lightweight and pass a measured memory/network test |
 | `chasebot` | 2 allocatable CPU | 3,342,604 KiB allocatable; 1,314 MiB currently used (39%) | Local-path storage only; current PVCs are RWO and node-local | Ready second home k3s node; current usage 211m CPU (10%). Adds compute capacity inside the home failure domain, not an independent site | Use for stateless replicas and worker capacity only; do not treat it as the Oracle/database failure domain |
 
 ## Current home-to-Oracle network observation
@@ -38,11 +38,18 @@ not database replication or cross-site failover evidence.
 
 ## GCP evidence boundary
 
-The current homelab host does not have the `gcloud` CLI installed, so a
-read-only attempt cannot verify the active GCP project, instance region,
-billing account, free-tier eligibility, disk allowance, or current egress.
-Those facts must be collected from Cloud Shell or another authenticated GCP
-operator environment before GCP can be promoted beyond observer-only use.
+OS Login SSH access to `discordmusicbot` was verified on 2026-09-10 as
+`chasepdrsn_gmail_com` using the existing operator key. Passwordless sudo is
+available for the monitor service. The host is running the external monitor,
+and its persisted state reports healthy checks for the public status, Grafana,
+commands, mods, OAuth, Authentik, and protected Kubernetes API routes.
+
+This proves host access and observer operation only. It does not verify the
+active GCP project, instance region, billing account, free-tier eligibility,
+disk allowance, or monthly egress. Those account-level facts still require
+Cloud Shell or another authenticated GCP operator environment before relying
+on the VM for anything beyond the observer and a measured lightweight
+coordination candidate.
 
 ## Published free-tier constraints (account eligibility still unverified)
 
@@ -71,7 +78,7 @@ published limits alone.
 ## Initial conclusions
 
 - Oracle has the most spare memory and is the practical second application site, but its 2 vCPU limit requires worker and database resource limits.
-- GCP has enough observed headroom for monitoring, but not enough to assume a full database or coordination workload. Keep it observer-only until a measured lightweight coordination test passes.
+- GCP has enough observed headroom for monitoring, but not enough to assume a full database, k3s, or general-purpose coordination workload. Keep it observer-first; a lightweight witness candidate still needs a measured memory/network test and account-level billing/egress verification.
 - The home tower has ample storage but is not a second failure domain. Its large disk does not make Minecraft or home-local state highly available.
 - The initial design should use PostgreSQL queue/state on the two application sites and only add a third coordination participant after validating GCP memory, disk, and network impact.
 
@@ -79,7 +86,7 @@ published limits alone.
 
 Before production reliance, record:
 
-1. Google Cloud free-tier project, region, billing, disk, and monthly egress eligibility.
+1. Google Cloud project, region, billing, disk, and monthly egress eligibility; host SSH access is now verified, but account-level eligibility is not.
 2. Oracle Always Free tenancy/region eligibility, current A1 usage, and idle reclamation status.
 3. R2 object bytes, request volume, retention growth, and backup egress.
 4. Cloudflare plan and route behavior; paid Load Balancing remains excluded from the baseline.

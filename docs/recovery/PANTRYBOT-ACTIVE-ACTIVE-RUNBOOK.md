@@ -165,11 +165,12 @@ PostgreSQL promotion command; those must be supplied by adapters that can
 prove fencing even when the old site is unreachable. This is an executable
 ordering guard, not evidence that a witness or provider adapter is configured.
 
-GCP remains the intended lightweight external observer/coordination candidate,
-but this operator session has no authenticated `gcloud` path and the VM is not
-currently a Tailscale peer. Do not enable automatic failover or place a
-coordination service there until authenticated capacity, network reachability,
-and fencing-adapter tests are recorded.
+GCP is now a verified lightweight external observer: OS Login SSH works as
+`chasepdrsn_gmail_com`, passwordless sudo is available for the monitor unit,
+and the persisted monitor state is healthy for the public and protected
+routes. The 969 MiB VM remains too small for PostgreSQL or k3s. Do not enable
+automatic failover or place a coordination service there until the account
+eligibility, memory/network impact, and fencing-adapter tests are recorded.
 
 ## Free-cost guardrails
 
