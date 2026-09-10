@@ -1,7 +1,9 @@
 import json
 import importlib.util
+import subprocess
 import sys
 import tempfile
+from urllib.error import HTTPError
 from pathlib import Path
 
 
@@ -111,5 +113,131 @@ finally:
     monitor.STATE_FILE = original_state_file
     monitor.notify = original_notify
     monitor.FAILURE_THRESHOLD = original_failure_threshold
+
+
+# Notification delivery must produce a provider-acceptance receipt that can be
+# inspected after a failover rehearsal without exposing alert text or secrets.
+original_webhook = monitor.WEBHOOK
+original_urlopen = monitor.urllib.request.urlopen
+try:
+    monitor.WEBHOOK = "https://notify.example.test/hook-secret"
+
+    class AcceptedResponse:
+        status = 204
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monitor.urllib.request.urlopen = lambda request, timeout: AcceptedResponse()
+    accepted = monitor.notify("private alert text")
+    assert accepted["accepted"] is True
+    assert accepted["transport"] == "webhook"
+    assert accepted["status"] == 204
+    assert "message" not in accepted
+    assert "hook-secret" not in json.dumps(accepted)
+
+    def reject(request, timeout):
+        raise HTTPError(request.full_url, 503, "unavailable", {}, None)
+
+    monitor.urllib.request.urlopen = reject
+    rejected = monitor.notify("private alert text")
+    assert rejected["accepted"] is False
+    assert rejected["status"] == 503
+    assert rejected["reason"] == "http_error"
+finally:
+    monitor.WEBHOOK = original_webhook
+    monitor.urllib.request.urlopen = original_urlopen
+
+
+original_checks = monitor.CHECKS
+original_check = monitor.check
+original_state_file = monitor.STATE_FILE
+original_notify = monitor.notify
+original_failure_threshold = monitor.FAILURE_THRESHOLD
+try:
+    monitor.CHECKS = (monitor.Check("commands", "https://commands.example/", frozenset({200})),)
+    monitor.check = lambda item: {"ok": False}
+    monitor.FAILURE_THRESHOLD = 1
+    monitor.notify = lambda message: {
+        "accepted": True,
+        "transport": "test",
+        "status": 204,
+        "observed_at": 123,
+    }
+    with tempfile.TemporaryDirectory() as directory:
+        monitor.STATE_FILE = Path(directory) / "state.json"
+        monitor.run_once()
+        state = json.loads(monitor.STATE_FILE.read_text())
+        assert state["notification_receipts"] == [{
+            "identity": "external-monitor:commands",
+            "event": "firing",
+            "accepted": True,
+            "transport": "test",
+            "status": 204,
+            "observed_at": 123,
+        }]
+finally:
+    monitor.CHECKS = original_checks
+    monitor.check = original_check
+    monitor.STATE_FILE = original_state_file
+    monitor.notify = original_notify
+    monitor.FAILURE_THRESHOLD = original_failure_threshold
+
+
+receipt_state = {
+    "notification_receipts": [{
+        "identity": "external-monitor:commands",
+        "event": "firing",
+        "accepted": True,
+        "transport": "webhook",
+        "status": 204,
+        "observed_at": 100,
+    }]
+}
+found, receipt = monitor.notification_receipt_probe(
+    receipt_state,
+    identity="external-monitor:commands",
+    event="firing",
+    max_age_seconds=101,
+    now=200,
+)
+assert found is True
+assert receipt["status"] == 204
+
+stale, reason = monitor.notification_receipt_probe(
+    receipt_state,
+    identity="external-monitor:commands",
+    event="firing",
+    max_age_seconds=99,
+    now=200,
+)
+assert stale is False
+assert reason == "stale"
+
+with tempfile.TemporaryDirectory() as directory:
+    state_file = Path(directory) / "state.json"
+    state_file.write_text(json.dumps(receipt_state))
+    probe = subprocess.run(
+        [
+            sys.executable,
+            str(MODULE_PATH.with_name("probe-notification-receipt.py")),
+            "--state-file",
+            str(state_file),
+            "--identity",
+            "external-monitor:commands",
+            "--event",
+            "firing",
+            "--max-age-seconds",
+            "9999999999",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert probe.returncode == 0
+    assert json.loads(probe.stdout)["ok"] is True
 
 print("test_monitor: all assertions passed")

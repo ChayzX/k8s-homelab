@@ -44,5 +44,28 @@ logs state transitions and writes the latest result to
 `/var/lib/homelab-monitor/state.json`. UptimeRobot is the external monitor for
 public endpoint availability; its account configuration is outside this repo.
 
+## Notification receipt probe
+
+When a webhook is configured, each firing/recovery transition records a
+bounded receipt in `notification_receipts`. A receipt means the provider
+accepted the HTTP request (2xx); it does not prove that a human read the
+message. The record contains only the check identity, event, transport,
+provider status, acceptance, timestamp, and a non-secret failure reason. Alert
+text, webhook URLs, and credentials are never persisted.
+
+During an outage rehearsal, probe the provider-acceptance contract from the
+external VM:
+
+```bash
+python3 /usr/local/lib/homelab-monitor/probe-notification-receipt.py \
+  --identity external-monitor:status \
+  --event firing \
+  --max-age-seconds 900
+```
+
+Exit status 0 means a recent accepted receipt exists. A missing, stale, or
+non-accepted receipt exits 1 and prints only a small JSON reason. Human receipt
+still requires an independent operator confirmation.
+
 When changing the environment file, write a complete merged file and restart
 the unit rather than replacing it with only the newly added variable.

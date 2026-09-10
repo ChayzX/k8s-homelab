@@ -34,6 +34,7 @@ R2_ENDPOINT = os.environ.get("MONITOR_R2_ENDPOINT", "").rstrip("/")
 R2_ACCESS_KEY_ID = os.environ.get("MONITOR_R2_ACCESS_KEY_ID", "")
 R2_SECRET_ACCESS_KEY = os.environ.get("MONITOR_R2_SECRET_ACCESS_KEY", "")
 R2_PREFIXES = os.environ.get("MONITOR_R2_PREFIXES", "")
+MAX_NOTIFICATION_RECEIPTS = 32
 
 
 @dataclass(frozen=True)
@@ -220,10 +221,16 @@ def load_state() -> dict[str, object]:
         return {}
 
 
-def notify(message: str) -> None:
+def notify(message: str) -> dict[str, object]:
+    """Send an alert and return provider-acceptance metadata, never its body."""
     if not WEBHOOK:
         print(f"ALERT {message}", flush=True)
-        return
+        return {
+            "accepted": False,
+            "transport": "stdout",
+            "observed_at": int(time.time()),
+            "reason": "webhook_unconfigured",
+        }
     payload = json.dumps({"content": f"**Homelab external monitor**\n{message}"}).encode()
     request = urllib.request.Request(
         WEBHOOK,
@@ -232,10 +239,30 @@ def notify(message: str) -> None:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT):
-            pass
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+            status = int(getattr(response, "status", 200))
+        return {
+            "accepted": 200 <= status < 300,
+            "transport": "webhook",
+            "status": status,
+            "observed_at": int(time.time()),
+        }
+    except urllib.error.HTTPError as exc:
+        return {
+            "accepted": False,
+            "transport": "webhook",
+            "status": exc.code,
+            "observed_at": int(time.time()),
+            "reason": "http_error",
+        }
     except Exception as exc:  # noqa: BLE001 - report notification failure locally
         print(f"NOTIFICATION_FAILURE {type(exc).__name__}: {exc}", flush=True)
+        return {
+            "accepted": False,
+            "transport": "webhook",
+            "observed_at": int(time.time()),
+            "reason": type(exc).__name__,
+        }
 
 
 def run_once() -> None:
@@ -265,18 +292,74 @@ def run_once() -> None:
         "active_alerts": active_alerts,
         "checks": checks,
     }
+    previous_receipts = previous.get("notification_receipts", [])
+    if not isinstance(previous_receipts, list):
+        previous_receipts = []
+    notification_receipts = list(previous_receipts)[-MAX_NOTIFICATION_RECEIPTS:]
+    for name in sorted(set(active_alerts) - set(previous_active)):
+        receipt = notify(
+            f"Alert `{active_alerts[name]}` firing; failed checks: {','.join(failed)}"
+        ) or {}
+        notification_receipts.append(_receipt_record(active_alerts[name], "firing", receipt))
+    for name in sorted(set(previous_active) - set(active_alerts)):
+        receipt = notify(f"Alert `{previous_active[name]}` recovered") or {}
+        notification_receipts.append(_receipt_record(previous_active[name], "recovered", receipt))
+    state["notification_receipts"] = notification_receipts[-MAX_NOTIFICATION_RECEIPTS:]
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     STATE_FILE.write_text(json.dumps(state, indent=2) + "\n")
-    for name in sorted(set(active_alerts) - set(previous_active)):
-        notify(
-            f"Alert `{active_alerts[name]}` firing; failed checks: {','.join(failed)}"
-        )
-    for name in sorted(set(previous_active) - set(active_alerts)):
-        notify(f"Alert `{previous_active[name]}` recovered")
     if failed:
         print(f"CHECK_FAILURE count={failure_count}/{FAILURE_THRESHOLD} failed={','.join(failed)}", flush=True)
     else:
         print("HEALTHY", flush=True)
+
+
+def _receipt_record(identity: str, event: str, receipt: dict[str, object]) -> dict[str, object]:
+    """Persist only the stable, non-secret notification receipt fields."""
+    record = {
+        "identity": identity,
+        "event": event,
+        "accepted": bool(receipt.get("accepted", False)),
+        "transport": str(receipt.get("transport", "unknown")),
+        "observed_at": int(receipt.get("observed_at", time.time())),
+    }
+    if "status" in receipt:
+        record["status"] = int(receipt["status"])
+    if "reason" in receipt:
+        record["reason"] = str(receipt["reason"])
+    return record
+
+
+def notification_receipt_probe(
+    state: dict[str, object],
+    *,
+    identity: str,
+    event: str,
+    max_age_seconds: int,
+    now: float | None = None,
+) -> tuple[bool, dict[str, object] | str]:
+    """Check whether a recent provider-accepted receipt exists for an event."""
+    receipts = state.get("notification_receipts", [])
+    if not isinstance(receipts, list):
+        return False, "missing"
+    matching = [
+        receipt
+        for receipt in receipts
+        if isinstance(receipt, dict)
+        and receipt.get("identity") == identity
+        and receipt.get("event") == event
+    ]
+    if not matching:
+        return False, "missing"
+    receipt = matching[-1]
+    if not receipt.get("accepted", False):
+        return False, str(receipt.get("reason", "not_accepted"))
+    observed_at = receipt.get("observed_at")
+    if not isinstance(observed_at, (int, float)):
+        return False, "invalid_timestamp"
+    now = time.time() if now is None else now
+    if max(0, now - observed_at) > max_age_seconds:
+        return False, "stale"
+    return True, receipt
 
 
 if __name__ == "__main__":

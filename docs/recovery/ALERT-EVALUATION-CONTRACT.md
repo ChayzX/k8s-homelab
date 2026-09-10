@@ -7,7 +7,7 @@ an in-cluster condition is healthy.
 | Signal | Collection/history | Single evaluator | Stable identity / continuity |
 |---|---|---|---|
 | Workload, node, restart-loop, and Loki log conditions | Prometheus and Loki | Host `k3s-watcher` | Hashed `eventKey`; singleton lock prevents two watcher processes; Operations reconciliation resolves only after a complete collection pass. |
-| Public HTTP/API/R2 continuity from outside home | GCP `homelab-external-monitor` | GCP monitor | `external-monitor:<check>` is persisted in `active_alerts`; notifications are emitted only when that per-check identity fires or recovers. |
+| Public HTTP/API/R2 continuity from outside home | GCP `homelab-external-monitor` | GCP monitor | `external-monitor:<check>` is persisted in `active_alerts`; notifications are emitted only when that per-check identity fires or recovers. Provider-acceptance receipts are bounded in `notification_receipts` and can be checked with `probe-notification-receipt.py`. |
 | Independent public reachability observation | UptimeRobot account configuration (not stored here) | UptimeRobot | Provider-side monitor identity; its notification is independent evidence, not a second source for the watcher’s workload alerts. |
 | Dashboards and log exploration | Grafana | None | Grafana provisioning currently contains no alert rules; dashboards are views only. |
 
@@ -22,8 +22,16 @@ The GCP monitor and UptimeRobot intentionally remain independent public-edge
 observations. They may both detect the same outage, but the GCP monitor's
 messages are now per-check and durable across process restarts; they are not
 treated as watcher events and must not be copied into the in-cluster alert
-stream. A human-notification receipt test is still required before claiming
-end-to-end alert continuity.
+stream. A provider-acceptance receipt is not a human-read receipt. The
+dependency-free `probe-notification-receipt.py` command proves that the latest
+matching event was accepted by the configured notification provider within a
+bounded age. A human-notification receipt test is still required before
+claiming end-to-end alert continuity.
+
+Receipt records contain only `identity`, `event`, `accepted`, `transport`,
+optional provider `status`, optional non-secret `reason`, and `observed_at`.
+The monitor retains at most 32 records and never stores alert text, webhook
+URLs, or credentials.
 
 Continuity limits:
 
