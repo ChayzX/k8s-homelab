@@ -62,6 +62,16 @@ uses emptyDir only and has no production PVC mount.
   by an isolated Authentik 2026.5.6 server. The server reached
   `/-/health/ready/` with HTTP 200. No ingress, production PVC, or production
   service was used. The temporary namespace was deleted after verification.
+  A repeat on 2026-09-11 used the retained
+  `authentik-20260909T044050Z.dump.gz` artifact and copied configuration
+  Secret names/values into a disposable namespace. PostgreSQL restore passed,
+  Authentik reached readiness, and its API returned the restored 12-user
+  dataset. The actual flow accepted a temporary synthetic username/password
+  and advanced to the restored WebAuthn-registration stage. This proves
+  restored identity data and password-stage behavior; full session completion
+  remains open until a non-production WebAuthn credential or an explicitly
+  configured alternate test flow is exercised. The namespace and synthetic
+  user were deleted after the rehearsal.
 
 - **Operations isolated SQLite restore:** `operations-20260909T044548Z.db.gz`
   was restored by an init container into an emptyDir-backed temporary

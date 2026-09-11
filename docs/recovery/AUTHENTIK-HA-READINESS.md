@@ -50,7 +50,11 @@ the rehearsal.
    also confirmed while the LDAP outpost was unavailable.
 2. In an isolated target, complete an Authentik web login and reconstruct the
    database, signing, provider, LDAP/outpost, bootstrap, and certificate
-   Secret names by behavior without recording values.
+   Secret names by behavior without recording values. **Partial evidence
+   2026-09-11:** the retained dump and copied configuration booted an isolated
+   Authentik with the restored 12-user dataset; the flow accepted a synthetic
+   username/password and reached WebAuthn registration. Full session completion
+   and provider/LDAP/outpost/certificate behavior remain open.
 3. ~~Make only the isolated LDAP target unavailable, repeat local-key logins,
    and document SSSD cache behavior and recovery.~~ **Passed 2026-09-11:**
    the LDAP outpost was scaled to zero and restored after the check; both hosts
