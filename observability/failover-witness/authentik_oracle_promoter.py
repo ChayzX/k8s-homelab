@@ -2,9 +2,10 @@
 """Guarded Oracle promotion controller for Authentik PostgreSQL.
 
 This controller is intentionally opt-in.  It acquires the shared witness
-authority before changing the standby role, switches the Oracle-local
-Authentik secret to the promoted service, and only then restarts the
-application tier.  Losing the lease fences the local Oracle writer domain.
+authority, runs an explicit out-of-band fence command for the old home writer,
+then changes the standby role, switches the Oracle-local Authentik secret to
+the promoted service, and only then restarts the application tier. Losing the
+lease fences the local Oracle writer domain.
 
 The controller does not claim physical fencing of the home site.  Production
 automatic promotion must remain disabled until the documented old-writer
@@ -17,6 +18,7 @@ import argparse
 import base64
 import json
 import os
+import shlex
 import subprocess
 import time
 from typing import Any
@@ -58,6 +60,10 @@ def _patch_secret_key(namespace: str, secret_name: str, key: str, value: str) ->
 
 
 def build_adapters(args: argparse.Namespace) -> PromotionAdapters:
+    old_writer_fence_command = shlex.split(args.old_writer_fence_command)
+    if not old_writer_fence_command:
+        raise ValueError("--old-writer-fence-command must not be empty")
+
     def acquire() -> dict[str, Any] | None:
         try:
             result = _post(
@@ -171,7 +177,10 @@ def build_adapters(args: argparse.Namespace) -> PromotionAdapters:
             timeout=30,
         )
 
-    return PromotionAdapters(acquire, is_primary, promote, switch_endpoint, enable_roles, fence, renew, ready)
+    def fence_old_writer() -> None:
+        subprocess.run(old_writer_fence_command, check=True, timeout=30)
+
+    return PromotionAdapters(acquire, is_primary, promote, switch_endpoint, enable_roles, fence, renew, ready, fence_old_writer)
 
 
 def run() -> None:
@@ -186,16 +195,13 @@ def run() -> None:
     parser.add_argument("--lease-seconds", type=int, default=30)
     parser.add_argument("--fence-command", default="/usr/local/lib/failover-witness/fence-writer-domain.sh")
     parser.add_argument(
-        "--confirm-old-writer-fenced",
-        action="store_true",
-        help="required acknowledgement that the home writer is fenced before promotion",
+        "--old-writer-fence-command",
+        required=True,
+        help="out-of-band command that fences the home writer and fails unless fencing succeeds",
     )
     args = parser.parse_args()
     if not args.witness_url or not args.secret:
         raise SystemExit("WITNESS_URL and WITNESS_SHARED_SECRET are required")
-    if not args.confirm_old_writer_fenced:
-        raise SystemExit("refusing promotion without --confirm-old-writer-fenced")
-
     promoter = OraclePromoter(build_adapters(args))
     while not promoter.run_once():
         time.sleep(max(1, args.lease_seconds // 3))

@@ -57,9 +57,12 @@ endpoint update, and application restart. It is not enabled as a production
 systemd unit: the remaining gate is a proven old-writer fencing mechanism plus
 a non-production promotion rehearsal. Do not run it against production until
 the fencing checklist below has been completed and independently observed.
-The command also requires the explicit `--confirm-old-writer-fenced` flag so a
-restart or an accidental invocation cannot promote Oracle based only on a
-network partition.
+The command requires `--old-writer-fence-command`; it executes that
+out-of-band command after acquiring the new witness epoch and before promoting
+Oracle, and aborts if the command fails. The command must fence the home
+writer domain (for example, by remotely invoking the site-local
+`fence-writer-domain.sh` helper), not merely acknowledge that fencing happened.
+This remains an opt-in controller with no production service unit enabled.
 
 ## Verification
 

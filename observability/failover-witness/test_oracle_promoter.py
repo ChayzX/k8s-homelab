@@ -64,6 +64,51 @@ def test_promotion_requires_shared_authority_and_orders_changes() -> None:
     assert calls == ["promote:7", "endpoint", "roles"]
 
 
+def test_old_writer_is_fenced_before_promotion() -> None:
+    calls: list[str] = []
+    adapters = PromotionAdapters(
+        acquire=lambda: {"epoch": 10, "token": "oracle-token"},
+        is_primary=lambda: False,
+        promote=lambda _token: calls.append("promote"),
+        switch_endpoint=lambda: calls.append("endpoint"),
+        enable_roles=lambda: calls.append("roles"),
+        fence=lambda: calls.append("fence"),
+        renew=None,
+        ready=lambda: True,
+        fence_old_writer=lambda: calls.append("old-writer-fence"),
+    )
+
+    assert OraclePromoter(adapters).run_once() is True
+    assert calls == ["old-writer-fence", "promote", "endpoint", "roles"]
+
+
+def test_failed_old_writer_fence_blocks_promotion_and_fences_locally() -> None:
+    calls: list[str] = []
+
+    def fence_old_writer() -> None:
+        calls.append("old-writer-fence")
+        raise RuntimeError("home writer could not be fenced")
+
+    adapters = PromotionAdapters(
+        acquire=lambda: {"epoch": 11, "token": "oracle-token"},
+        is_primary=lambda: False,
+        promote=lambda _token: calls.append("promote"),
+        switch_endpoint=lambda: calls.append("endpoint"),
+        enable_roles=lambda: calls.append("roles"),
+        fence=lambda: calls.append("local-fence"),
+        ready=lambda: True,
+        fence_old_writer=fence_old_writer,
+    )
+
+    try:
+        OraclePromoter(adapters).run_once()
+    except RuntimeError as error:
+        assert str(error) == "home writer could not be fenced"
+    else:
+        raise AssertionError("promotion must stop when old-writer fencing fails")
+    assert calls == ["old-writer-fence", "local-fence"]
+
+
 def test_renewal_loss_self_fences_after_promotion() -> None:
     calls: list[str] = []
     adapters = PromotionAdapters(

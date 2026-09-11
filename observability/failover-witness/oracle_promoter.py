@@ -36,6 +36,7 @@ class PromotionAdapters:
     fence: Callable[[], None]
     renew: Callable[[dict[str, Any]], bool] | None = None
     ready: Callable[[], bool] | None = None
+    fence_old_writer: Callable[[], None] | None = None
 
 
 class OraclePromoter:
@@ -61,6 +62,8 @@ class OraclePromoter:
                 self._fence()
             return False
         try:
+            if self.adapters.fence_old_writer:
+                self.adapters.fence_old_writer()
             self.adapters.promote(token)
             self.adapters.switch_endpoint()
             self.adapters.enable_roles()
