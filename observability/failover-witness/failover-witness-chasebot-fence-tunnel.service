@@ -1,0 +1,26 @@
+[Unit]
+Description=Reverse SSH fence transport from ChaseBot to the independent witness
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cpederson
+ExecStart=/usr/bin/ssh -NT \
+  -o BatchMode=yes \
+  -o ExitOnForwardFailure=yes \
+  -o ServerAliveInterval=30 \
+  -o ServerAliveCountMax=3 \
+  -o StrictHostKeyChecking=yes \
+  -i /home/cpederson/.ssh/gcp-witness-chasebot \
+  -R 127.0.0.1:2223:127.0.0.1:22 \
+  sa_105559435168833655240@136.113.178.106
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target
