@@ -32,7 +32,7 @@ Both sites run service capacity continuously. External side effects are protecte
 
 ### Oracle
 
-`pantry-bot-oracle` remains an independent ARM64 k3s server. It runs PantryBot capacity, stateless replicas, and recovery-capable services. JMusicBot remains standby or independently promoted because Oracle egress is constrained.
+`pantry-bot-oracle` remains an independent ARM64 k3s server. It runs the same continuously available non-Minecraft service capacity as home. Services with external side effects use a target-specific lease and fencing epoch so both sites can be running without both sites performing the same side effect. Oracle egress is a capacity constraint to measure, not a reason to leave a service powered off or classify it as standby.
 
 ### GCP
 
@@ -80,7 +80,7 @@ The application is active-active; the database is not an uncontrolled multi-prim
 - Public viewer URLs should be short and descriptive: `commands.greeniespantry.uk` for the command guide, with private operator authentication on a separate hostname/path.
 - Observability must retain an external observer on GCP or Oracle and must not depend only on the home cluster.
 - Authentik and its database remain a separate availability workstream. Emergency SSH and monitoring access must not require Authentik.
-- JMusicBot remains home-primary with Oracle standby or controlled promotion due egress constraints.
+- JMusicBot runs a live process in both sites; a Discord-session ownership lease permits exactly one external voice writer at a time. Oracle egress is measured and bounded, but Oracle is not a powered-off standby.
 - Minecraft remains excluded from this active-active design.
 
 ## Free routing strategy
@@ -99,7 +99,7 @@ Required tests before enabling automatic production failover:
 6. Duplicate delivery and ambiguous Twitch API response.
 7. Oracle failure and controlled return to home.
 
-Automatic recovery is considered proven only when detection, fencing, promotion, routing, data freshness, and application readiness are measured together. Failback is controlled initially; automatic failback is deferred until repeated rehearsals show it is safe.
+Automatic recovery is considered proven only when detection, fencing, ownership transfer, routing, data freshness, and application readiness are measured together. Return of ownership is controlled initially; automatic return is deferred until repeated rehearsals show it is safe. Both sites remain active capacity throughout the ownership transition.
 
 ## Cost guardrails
 
