@@ -7,7 +7,9 @@ multi-primary writes are not provided by the free homelab design.
 
 ## Current topology
 
-- Home primary: the Helm-managed `auth-postgresql-0` StatefulSet.
+- Home primary: the ChaseBot-pinned `auth-postgresql-chasebot-standby-0`
+  StatefulSet. Its historical `standby` name is retained to preserve the PVC
+  and migration path; its live role label is `primary`.
 - Home transport: the private `auth-postgresql-transport` NodePort on `30433`.
 - Oracle standby: `auth-postgresql-standby-0`, backed by a local-path 10Gi PVC.
 - Replication slot: `auth_oracle_standby`.
@@ -15,7 +17,10 @@ multi-primary writes are not provided by the free homelab design.
 - Oracle standby accepts read-only connections and must not receive Authentik
   application traffic while home owns the database epoch.
 
-The standby manifest is [oracle-postgresql-standby.yaml](./oracle-postgresql-standby.yaml).
+The home migration manifest is
+[chasebot-postgresql-standby.yaml](./chasebot-postgresql-standby.yaml). The
+Oracle standby remains defined by
+[oracle-postgresql-standby.yaml](./oracle-postgresql-standby.yaml).
 Its credentials and primary endpoint are supplied through the
 `auth-postgresql-standby` Secret out of band; no credentials belong in Git.
 
