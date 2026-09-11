@@ -1,7 +1,24 @@
 #!/usr/bin/env python3
 """Tests for the guarded Oracle PostgreSQL promotion sequence."""
 
-from oracle_promoter import OraclePromoter, PromotionAdapters, _postgres_promote_command
+from oracle_promoter import (
+    ORACLE_PROMOTION_DEPLOYMENTS,
+    OraclePromoter,
+    PromotionAdapters,
+    _postgres_promote_command,
+)
+
+
+def test_promotion_endpoint_restart_covers_every_database_consumer() -> None:
+    assert ORACLE_PROMOTION_DEPLOYMENTS == (
+        "pantry-commands-site",
+        "pantry-private-api",
+        "pantry-private-site",
+        "pantry-overlay-delivery",
+        "pantry-twitch-gateway",
+        "pantry-chat-worker",
+        "pantry-twitch-dispatcher",
+    )
 
 
 def test_postgres_promotion_runs_as_postgres_user() -> None:
