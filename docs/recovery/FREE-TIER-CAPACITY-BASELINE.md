@@ -11,7 +11,7 @@ This is the initial capacity gate for the free active-active design. It is an ob
 | `minecraftmachine` | 16 logical CPUs | 15 GiB total, 8 GiB available | Root 3.4 TiB free; `/mnt/nvme` 188 GiB free | Home control plane and Minecraft host; Minecraft excluded from this project | Do not alter Minecraft placement |
 | `pantry-bot-oracle` | 2 vCPU; 2 allocatable k3s CPU | 11,932 MiB total, 10,164 MiB available; k3s currently 4% CPU / 15% memory | 40 GiB free | Independent arm64 Oracle k3s Ready; PantryBot stateless/API/overlay capacity plus the physical PostgreSQL standby Ready | Keep resource limits explicit; recheck with side-effect roles and egress |
 | `discordmusicbot` | 2 vCPU | 969 MiB total, 578 MiB available at check | 3.3 GiB free | x86_64 observer host; no swap, k3s, or Docker active; OS Login SSH and passwordless sudo verified | Observer-only; any coordination witness must be lightweight and pass a measured memory/network test |
-| `chasebot` | 2 allocatable CPU | 1,807 MiB currently used (54% of node memory); 433m CPU (21%) | Local-path storage only; current PVCs are RWO and node-local | Ready second home k3s node; hosts PantryBot stateless/API/overlay capacity and the live PostgreSQL primary | Use for stateless replicas and the home primary only; do not treat it as an independent site |
+| `chasebot` | 2 allocatable CPU | 2,026 MiB currently used (60% of node memory); 594m CPU (29%) | Local-path storage only; current PVCs are RWO and node-local | Ready second home k3s node; hosts PantryBot stateless/API/overlay capacity and the live PostgreSQL primary | Use for stateless replicas and the home primary only; do not treat it as an independent site |
 
 ## Current home-to-Oracle network observation
 
