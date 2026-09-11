@@ -1,0 +1,61 @@
+# Disposable reverse-transport rehearsal. This never mounts a production PVC
+# and never changes the home PostgreSQL StatefulSet.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pantry-bot-postgres-failback-rehearsal
+  labels:
+    homelab/rehearsal: pantrybot-postgres-failback
+    homelab/production: "false"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pg-basebackup-from-oracle
+  namespace: pantry-bot-postgres-failback-rehearsal
+  labels:
+    homelab/rehearsal: pantrybot-postgres-failback
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    kubernetes.io/hostname: chasebot
+  containers:
+    - name: rehearsal
+      image: postgres:16-alpine
+      command: ["sh", "-ec"]
+      args:
+        - |
+          : "${REPLICATION_USER:?missing replication user}"
+          : "${REPLICATION_PASSWORD:?missing replication password}"
+          rm -rf /rehearsal/*
+          printf '%s:*:*:%s:%s\n' 192.168.40.200 "$REPLICATION_USER" "$REPLICATION_PASSWORD" > /tmp/pgpass
+          chmod 600 /tmp/pgpass
+          PGPASSFILE=/tmp/pgpass pg_basebackup \
+            -h 192.168.40.200 -p 25433 -U "$REPLICATION_USER" \
+            -D /rehearsal -Fp -Xs -P -R
+          test -f /rehearsal/standby.signal
+          test -s /rehearsal/postgresql.auto.conf
+          printf 'failback_basebackup=passed\n'
+          printf 'standby_signal=present\n'
+          printf 'auto_conf=present\n'
+      env:
+        - name: REPLICATION_USER
+          valueFrom:
+            secretKeyRef:
+              name: pantry-bot-postgres-replication
+              key: REPLICATION_USER
+        - name: REPLICATION_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pantry-bot-postgres-replication
+              key: REPLICATION_PASSWORD
+      volumeMounts:
+        - name: rehearsal
+          mountPath: /rehearsal
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+  volumes:
+    - name: rehearsal
+      emptyDir: {}
