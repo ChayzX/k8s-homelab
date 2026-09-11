@@ -2,7 +2,10 @@
 
 This is the routing contract for the split PantryBot public UI. Cloudflare
 Tunnel hostnames are currently managed outside Git, so this file records the
-required entries before the split deployment is enabled.
+required entries before the split deployment is enabled. The live commands
+hostname is still on the shared tunnel and has not been cut over; see
+[`PANTRYBOT-COMMANDS-TUNNEL-PLAN.md`](./PANTRYBOT-COMMANDS-TUNNEL-PLAN.md) for
+the read-only evidence and the approved dedicated-tunnel migration procedure.
 
 ## Viewer command guide
 
