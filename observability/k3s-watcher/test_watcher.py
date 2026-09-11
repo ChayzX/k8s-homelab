@@ -1,7 +1,33 @@
+import json
+import subprocess
 import tempfile
+from pathlib import Path
 from unittest.mock import Mock
 
 import watcher
+
+
+# The retired monolith must not regain a functional endpoint probe while the
+# namespace remains monitored for its replacement workloads.
+runtime_config = subprocess.run(
+    [
+        "bash",
+        "-c",
+        (
+            "set -a; . ./watcher.env; "
+            "exec python3 -c 'import json, watcher; "
+            "print(json.dumps({\"watch_namespaces\": watcher.WATCH_NAMESPACES, "
+            "\"functional_health_urls\": watcher.FUNCTIONAL_HEALTH_URLS}))'"
+        ),
+    ],
+    cwd=Path(__file__).parent,
+    capture_output=True,
+    text=True,
+    check=True,
+)
+tracked_runtime = json.loads(runtime_config.stdout)
+assert "pantry-bot" in tracked_runtime["watch_namespaces"]
+assert set(tracked_runtime["functional_health_urls"]) == {"jmusicbot", "opsbot"}
 
 
 watcher._last_alert_time.clear()
