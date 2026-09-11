@@ -71,6 +71,13 @@ show:
 The isolated restore contract verifies the recovery components but does not
 by itself satisfy these active-active gates.
 
+PostgreSQL replication is now packaged separately in
+[`POSTGRES-REPLICATION.md`](./POSTGRES-REPLICATION.md). Oracle has a live
+physical standby and the home primary currently reports streaming with an
+active replication slot. This proves standby freshness, not automatic
+promotion: external epoch authority, old-writer fencing, promotion, and
+post-promotion routing remain required.
+
 ## Current deployment boundary
 
 The repository contract is now two replicas with hostname anti-affinity for
