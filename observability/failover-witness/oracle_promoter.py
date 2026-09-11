@@ -92,6 +92,11 @@ def _kubectl(*args: str, input_text: str | None = None) -> str:
     return result.stdout.strip()
 
 
+def _postgres_promote_command(data_directory: str) -> tuple[str, ...]:
+    """Return a pg_ctl command that is valid in the official Postgres image."""
+    return ("su-exec", "postgres", "pg_ctl", "-D", data_directory, "promote")
+
+
 def run() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--witness-url", default=os.environ.get("WITNESS_URL"))
@@ -125,7 +130,7 @@ def run() -> None:
     def promote(_token: dict[str, Any]) -> None:
         recovery = _kubectl("-n", args.namespace, "exec", args.pod, "--", "sh", "-ec", "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select pg_is_in_recovery();\"")
         if recovery == "t":
-            _kubectl("-n", args.namespace, "exec", args.pod, "--", "pg_ctl", "-D", "/var/lib/postgresql/data", "promote")
+            _kubectl("-n", args.namespace, "exec", args.pod, "--", *_postgres_promote_command("/var/lib/postgresql/data"))
             deadline = time.monotonic() + 60
             while time.monotonic() < deadline:
                 if _kubectl("-n", args.namespace, "exec", args.pod, "--", "sh", "-ec", "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select pg_is_in_recovery();\"") == "f":

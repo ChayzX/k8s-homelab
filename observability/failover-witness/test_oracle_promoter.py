@@ -1,7 +1,18 @@
 #!/usr/bin/env python3
 """Tests for the guarded Oracle PostgreSQL promotion sequence."""
 
-from oracle_promoter import OraclePromoter, PromotionAdapters
+from oracle_promoter import OraclePromoter, PromotionAdapters, _postgres_promote_command
+
+
+def test_postgres_promotion_runs_as_postgres_user() -> None:
+    assert _postgres_promote_command("/var/lib/postgresql/data") == (
+        "su-exec",
+        "postgres",
+        "pg_ctl",
+        "-D",
+        "/var/lib/postgresql/data",
+        "promote",
+    )
 
 
 def test_held_authority_does_not_promote_or_enable_roles() -> None:
