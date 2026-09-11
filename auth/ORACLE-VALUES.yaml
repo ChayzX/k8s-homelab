@@ -1,0 +1,64 @@
+# Secret-free Oracle Authentik application-tier values.
+#
+# The auth-authentik Secret is provisioned separately from the home Secret
+# with the Oracle-reachable current database authority endpoint. PostgreSQL
+# is deliberately disabled here; Oracle must not create a second writer.
+global:
+  image:
+    tag: "2026.5.6"
+
+authentik:
+  enabled: true
+  existingSecret:
+    secretName: auth-authentik
+  postgresql:
+    host: 100.84.89.87
+    port: 30433
+    name: authentik
+    user: authentik
+
+postgresql:
+  enabled: false
+
+server:
+  # One server per failure domain is active-active across home and Oracle.
+  # Authentik 2026.5.6 serializes startup migrations through a database lock;
+  # two server processes on this single-node Oracle site leave one non-ready.
+  replicas: 1
+  service:
+    type: ClusterIP
+  deploymentStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: server
+                app.kubernetes.io/instance: auth
+                app.kubernetes.io/name: authentik
+            topologyKey: kubernetes.io/hostname
+
+worker:
+  replicas: 2
+  deploymentStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: worker
+                app.kubernetes.io/instance: auth
+                app.kubernetes.io/name: authentik
+            topologyKey: kubernetes.io/hostname

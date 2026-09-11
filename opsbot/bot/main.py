@@ -14,6 +14,7 @@ import asyncio
 import datetime
 import os
 import sys
+import time
 
 import discord
 from discord import app_commands
@@ -425,6 +426,21 @@ async def on_ready() -> None:
     health.mark_ready()
 
 
+def acquire_lease_until_available(ownership: Ownership, retry_seconds: int = 5):
+    """Keep a standby process alive until the witness grants ownership.
+
+    A denied lease is an expected standby state, not a configuration failure.
+    The caller must not start Discord or any protected operation until this
+    returns a valid lease.
+    """
+    while True:
+        try:
+            return ownership.acquire()
+        except OwnershipError as error:
+            print(f"[opsbot] standby: {error}; retrying in {retry_seconds}s")
+            time.sleep(retry_seconds)
+
+
 def main() -> None:
     global OWNERSHIP
     if not DISCORD_BOT_TOKEN:
@@ -432,7 +448,11 @@ def main() -> None:
         sys.exit(1)
     try:
         OWNERSHIP = Ownership.from_env()
-        lease = OWNERSHIP.acquire()
+        stop_standby_health = health.start_background()
+        try:
+            lease = acquire_lease_until_available(OWNERSHIP)
+        finally:
+            stop_standby_health()
     except OwnershipError as error:
         print(f"[opsbot] FATAL: {error}", file=sys.stderr)
         sys.exit(1)

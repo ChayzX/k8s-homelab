@@ -1,0 +1,17 @@
+- op: replace
+  path: /spec/template/spec/containers/0/env/0/value
+  value: http://auth-authentik-server.auth.svc.cluster.local
+- op: replace
+  path: /spec/template/spec/containers/0/env/1/value
+  value: "true"
+- op: remove
+  path: /spec/template/spec/affinity/podAntiAffinity/requiredDuringSchedulingIgnoredDuringExecution
+- op: add
+  path: /spec/template/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution
+  value:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: ldap-outpost
+        topologyKey: kubernetes.io/hostname

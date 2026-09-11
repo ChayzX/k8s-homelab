@@ -24,7 +24,12 @@ metadata:
     app.kubernetes.io/name: ldap-outpost
     app.kubernetes.io/part-of: homelab
 spec:
-  replicas: 1
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: ldap-outpost
@@ -33,6 +38,13 @@ spec:
       labels:
         app.kubernetes.io/name: ldap-outpost
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: ldap-outpost
+              topologyKey: kubernetes.io/hostname
       # The outpost only needs its configured Authentik token; it does not
       # call the Kubernetes API.
       automountServiceAccountToken: false

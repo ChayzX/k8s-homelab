@@ -1,0 +1,38 @@
+# Secret-free Helm overlay for the Authentik application tier.
+#
+# Apply this fragment with the site-local Authentik values and --reuse-values.
+# It intentionally does not contain database credentials, bootstrap values,
+# tokens, or provider configuration.
+server:
+  replicas: 2
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: server
+              app.kubernetes.io/instance: auth
+              app.kubernetes.io/name: authentik
+          topologyKey: kubernetes.io/hostname
+  deploymentStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+
+worker:
+  replicas: 2
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: worker
+              app.kubernetes.io/instance: auth
+              app.kubernetes.io/name: authentik
+          topologyKey: kubernetes.io/hostname
+  deploymentStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1

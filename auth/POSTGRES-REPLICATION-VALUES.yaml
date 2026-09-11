@@ -1,0 +1,32 @@
+# Secret-free Bitnami PostgreSQL values for the Authentik home authority.
+#
+# Apply this as an overlay to the existing Authentik release values. The
+# database password, replication password, and existing secret names stay
+# outside Git. The second HBA rule is required because Oracle pod traffic is
+# NATed by the home cluster before it reaches the NodePort.
+postgresql:
+  primary:
+    configuration: |
+      listen_addresses = '*'
+      port = '5432'
+      wal_level = 'replica'
+      fsync = 'on'
+      hot_standby = 'on'
+      log_connections = 'false'
+      log_disconnections = 'false'
+      log_hostname = 'false'
+      client_min_messages = 'error'
+      max_wal_senders = 10
+      max_replication_slots = 10
+      wal_keep_size = '256MB'
+      include_dir = 'conf.d'
+    pgHbaConfiguration: |
+      host     replication     auth_replicator  100.78.181.15/32       scram-sha-256
+      host     replication     auth_replicator  10.42.0.0/16           scram-sha-256
+      host     all             all              0.0.0.0/0               scram-sha-256
+      host     all             all              ::/0                    scram-sha-256
+      local    all             all                                      scram-sha-256
+      host     all             all              127.0.0.1/32             scram-sha-256
+      host     all             all              ::1/128                  scram-sha-256
+    extendedConfiguration: |
+      max_connections = 500

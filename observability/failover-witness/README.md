@@ -86,6 +86,11 @@ authority:
 - `pantry-bot-postgres-oracle-forward.service` runs on Oracle and forwards its
   node-local `100.78.181.15:25432` to that GCP loopback port.
 
+The same pair carries Authentik's PostgreSQL authority on port `25433` from
+the home `auth-postgresql-transport` NodePort. It is transport only: Oracle
+must use the current fenced authority and must not start a second writable
+Authentik database.
+
 The two SSH identities remain site-local. This is encrypted transport for a
 standby rehearsal, not database replication, promotion, or writer fencing.
 Install and test these units independently before creating a replication role;
