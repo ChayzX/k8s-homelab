@@ -229,7 +229,7 @@
 - [x] Classify Opsbot, Operations, Authentik, observability, and CI tunnel as stateless, stateful, or externally side-effecting; record per-service promotion gates in `docs/recovery/SERVICE-FAILOVER-GATES.md`.
 - [ ] Run replicas in Oracle for stateless services that pass capacity and credential portability gates.
 - [ ] Keep stateful services on independent recovery paths until database promotion and fencing are proven.
-- [ ] Keep JMusicBot home-primary/Oracle-standby unless egress measurements prove otherwise.
+- [ ] Keep JMusicBot live in both sites with one fenced Discord ownership holder; measure Oracle egress and bound media capacity rather than powering Oracle off.
 - [ ] Leave Minecraft unchanged and explicitly mark it excluded in the matrix.
 - [x] Create the service matrix and one GitHub Issue per remaining service gate; link the gates to the architecture issue.
 
