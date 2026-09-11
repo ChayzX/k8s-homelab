@@ -162,6 +162,12 @@ spec:
           # see scripts/patches/jmusicbot-potoken.patch) — k8s-homelab#41.
           image: ghcr.io/chayzx/jmusicbot:upstream-0.7.0-3e3116039c64
           imagePullPolicy: IfNotPresent  # see header note 1 — do not change
+          # The active-active image requires the site-scoped witness settings.
+          # Keep them in the declarative workload so a CI image rollout cannot
+          # silently remove fencing from the live process.
+          envFrom:
+            - secretRef:
+                name: jmusicbot-witness
           # Health endpoint: a JDK-built-in HttpServer on
           # 9091 in the patched image. /health returns 200 only after the bot
           # has logged into Discord; /live returns 200 whenever the JVM is
