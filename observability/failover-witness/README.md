@@ -28,8 +28,11 @@ does not silently send coordination traffic across the home pair.
 The relay listens on the node's Kubernetes internal address at port 18766 and
 forwards only to that node's loopback tunnel. It adds no authentication: callers still need
 the witness Bearer secret, and the relay is intended only for the private home
-network. The Oracle tunnel remains a node-address listener until an equivalent
-Oracle relay is deployed.
+network. The same relay manifest may also be applied to the independent Oracle
+k3s cluster; its Oracle node selector creates one node-local relay there,
+backed by Oracle's own host tunnel. This keeps Opsbot and other site-local
+workloads on the same private witness contract without routing them through
+the home cluster.
 
 Before enabling the unit, create its unprivileged account once:
 
