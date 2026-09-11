@@ -24,10 +24,12 @@ class OwnershipConfig:
     lease_seconds: int = 30
     witness_url: str = ""
     witness_secret: str = ""
+    resource: str = "opsbot"
 
     @classmethod
     def from_env(cls) -> "OwnershipConfig":
         site = os.environ.get("OPSBOT_SITE", "").strip()
+        resource = os.environ.get("OPSBOT_WITNESS_RESOURCE", "opsbot").strip()
         witness_url = os.environ.get("OPSBOT_WITNESS_URL", "").strip().rstrip("/")
         secret = os.environ.get("OPSBOT_WITNESS_SECRET", "")
         if site not in {"home", "oracle"}:
@@ -36,13 +38,15 @@ class OwnershipConfig:
             raise OwnershipError("OPSBOT_WITNESS_URL is required")
         if not secret:
             raise OwnershipError("OPSBOT_WITNESS_SECRET is required")
+        if not resource or len(resource) > 128:
+            raise OwnershipError("OPSBOT_WITNESS_RESOURCE must be between 1 and 128 characters")
         try:
             lease_seconds = int(os.environ.get("OPSBOT_LEASE_SECONDS", "30"))
         except ValueError as error:
             raise OwnershipError("OPSBOT_LEASE_SECONDS must be an integer") from error
         if lease_seconds < 3:
             raise OwnershipError("OPSBOT_LEASE_SECONDS must be at least 3")
-        return cls(site, lease_seconds, witness_url, secret)
+        return cls(site, lease_seconds, witness_url, secret, resource)
 
 
 @dataclass(frozen=True)
@@ -87,13 +91,13 @@ class WitnessClient:
             raise OwnershipError(f"witness unavailable: {error}") from error
 
     def acquire(self, site: str) -> Lease | None:
-        payload = self._post("/v1/authority/acquire", {"site": site})
+        payload = self._post("/v1/authority/acquire", {"site": site, "resource": self.config.resource})
         return Lease.from_payload(payload) if payload else None
 
     def renew(self, site: str, epoch: int, token: str) -> bool:
         payload = self._post(
             "/v1/authority/renew",
-            {"site": site, "epoch": epoch, "token": token},
+            {"site": site, "resource": self.config.resource, "epoch": epoch, "token": token},
         )
         return bool(payload and payload.get("ok"))
 
