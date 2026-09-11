@@ -51,10 +51,15 @@ jobs:
           git -C "$RUNNER_TEMP/musicbot" apply "$GITHUB_WORKSPACE/scripts/patches/voice-channel-text-chat.patch"
           git -C "$RUNNER_TEMP/musicbot" apply --check "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-health-endpoint.patch"
           git -C "$RUNNER_TEMP/musicbot" apply "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-health-endpoint.patch"
+          git -C "$RUNNER_TEMP/musicbot" apply --check "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-active-active.patch"
+          git -C "$RUNNER_TEMP/musicbot" apply "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-active-active.patch"
+          git -C "$RUNNER_TEMP/musicbot" apply --check "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-active-active-test.patch"
+          git -C "$RUNNER_TEMP/musicbot" apply "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-active-active-test.patch"
           git -C "$RUNNER_TEMP/musicbot" apply --check "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-potoken.patch"
           git -C "$RUNNER_TEMP/musicbot" apply "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-potoken.patch"
           yts="$(curl -fsSL https://api.github.com/repos/lavalink-devs/youtube-source/releases/latest | jq -r .tag_name | sed 's/^v//')"
           sed -i "s|<youtube-source.version>[^<]*</youtube-source.version>|<youtube-source.version>${yts}</youtube-source.version>|" "$RUNNER_TEMP/musicbot/pom.xml"
+          mvn -q -f "$RUNNER_TEMP/musicbot/pom.xml" -DskipTests=false test
           echo "tag=upstream-${ref#v}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
           echo "Upstream: $ref; youtube-source: $yts"
       # QEMU is what lets the amd64 GitHub Actions runner cross-compile an
