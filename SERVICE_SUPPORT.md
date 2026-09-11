@@ -10,14 +10,14 @@ secrets, SQLite databases, world data, or kubeconfigs into Git.
 | Service | Source of truth | Runtime | Safe access and maintenance |
 |---|---|---|---|
 | PantryBot | [ChayzX/pantry-bot](https://github.com/ChayzX/pantry-bot), local checkout `/home/chase/Downloads/pantry-bot`; k8s manifests in `pantry-bot/` | `pantry-bot` namespace; Cloudflare Tunnel routes OAuth/overlay traffic | Merging to the PantryBot repo's `main` builds, applies, restarts, and verifies automatically (see `DEPLOYING.md`'s trigger matrix) — a merge is the deploy approval, not a separate manual click. Secrets and the production SQLite PVC are documented in `pantry-bot/SECRETS.md`. Do not merge to `main` casually. |
-| JMusicBot | Host checkout `/home/chase/docker/jmusicbot` (no Git remote currently); deployment manifests in `jmusicbot/` | `jmusicbot` namespace; local image `jmusicbot-custom:<tag>` side-loaded into k3s | Use `scripts/auto-update.sh` or the runbook in `jmusicbot/README.md`. Preserve `imagePullPolicy: IfNotPresent`; k3s cannot pull the local-only image. State is on the `jmusicbot-config` PVC. |
+| JMusicBot | Published multi-architecture GHCR image from `.github/workflows/jmusicbot-deploy.yml`; deployment manifests in `jmusicbot/` | `jmusicbot` namespace; immutable GHCR image, R2-backed `emptyDir` state | Use the GitHub Actions workflow and `docs/recovery/ORACLE-JMUSICBOT-MIGRATION.md`. Preserve `Recreate`, the immutable image reference, and one-writer fencing. Do not resurrect the retired local updater or PVC-based state path. |
 | Minecraft | `minecraft/` in this repo; Paper image build and updater in `minecraft/Dockerfile` and `scripts/minecraft-auto-update.sh` | `minecraft` namespace; `minecraft-world` PVC; RCON is ClusterIP-only | Use `minecraft/MIGRATION.md`, `minecraft/secrets.md`, and `minecraft/BEDROCK.md`. Back up before upgrades. Keep Recreate strategy, RCON preStop shutdown, 120-second grace period, and 8 GiB memory limit. Never edit the world PVC directly while the pod is running. |
 | Opsbot | `opsbot/bot/` in this repo; image published to GHCR | `opsbot` namespace; Discord outbound gateway only | Merging changes under `opsbot/bot/**` builds, applies, restarts, and verifies automatically — no second click, merge is approval. RBAC is in `opsbot/20-rbac.yaml`; secrets are in `opsbot/SECRETS.md`. Use `/pods`, `/deploy`, `/mc`, and `/bug` through Discord for supported operations. |
 | Grafana | Dashboards in `dashboards/`; manifests/provisioning in `observability/` | `observability` namespace, Service port 3002, external hostname `grafana.greeniespantry.uk` | Pushing dashboard/config changes to `main` applies the ConfigMap, restarts, and verifies Grafana automatically via `grafana-deploy.yml` (a manual workflow dispatch also works, but isn't required). Datasource and alert provisioning are in `observability/grafana-provisioning.yaml`; credentials are in `observability/SECRETS.md`. |
 | Prometheus | `observability/prometheus*.yaml` | `observability` namespace, internal Service | Inspect targets and rules with `kubectl`; change scrape configuration in Git and apply through the observability workflow/runbook. Persistent data is on the Prometheus PVC. |
 | Loki / Promtail | `observability/loki*.yaml` and `observability/promtail*.yaml` | `observability` namespace | Loki stores logs; Promtail labels and parses them. Changes to labels affect dashboards and the host watcher, so update queries/tests together. |
 | Monitoring | `observability/k3s-watcher/`, Prometheus, and UptimeRobot | k3s-watcher sends Discord/Operations alerts; UptimeRobot checks public reachability | Keep functional workload URLs in the host-local watcher environment. Use per-node UptimeRobot Ping/Port monitors for node identity; use existing public hostnames for HTTP checks. |
-| Cloudflare connectors | `pantry-bot/60-deployment-cloudflared.yaml` and `ci-tunnel/20-deployment.yaml` | `pantry-bot` and `ci-tunnel` namespaces | Check `/ready` on metrics port 2000 and connector logs. Dashboard-managed hostname routing lives in Cloudflare, not this repo. Keep DNS, dial, origin, and readiness failures alertable. |
+| Cloudflare connectors | `pantry-bot/60-deployment-cloudflared.yaml`, `pantry-bot/62-deployment-commands-cloudflared.yaml`, and `ci-tunnel/20-deployment.yaml` | `pantry-bot` and `ci-tunnel` namespaces | Check `/ready` on metrics port 2000 and connector logs. The commands connector is deployed once per independent cluster and must serve only `commands.greeniespantry.uk`; the shared connector retains all private/Auth/SSH/RDP/monitoring routes. Remotely managed ingress and DNS live in Cloudflare, not this repo. |
 | k3s-watcher | Tracked source in `observability/k3s-watcher/`; host-installed copy consumed by `~/.config/systemd/user/k3s-watcher.service` | Host systemd user service; polls Loki and Kubernetes, sends Discord DMs | Copy/install from the tracked source, keep `.env` host-local, run `PYTHONPATH=. python3 test_watcher.py`, then restart the user unit. It health-gates only narrow Cloudflared QUIC teardown noise and deduplicates fingerprints. |
 
 ## File-level map
@@ -98,9 +98,12 @@ secrets, SQLite databases, world data, or kubeconfigs into Git.
   — Grafana Deployment, datasources, and alert provisioning.
 - `dashboards/*.json` and `dashboards/dashboards-configmap.yaml` — dashboard
   panels and their ConfigMap packaging.
-- `pantry-bot/60-deployment-cloudflared.yaml` and
-  `ci-tunnel/20-deployment.yaml` — Cloudflare connector Deployments; hostname
-  ingress rules are managed in Cloudflare, not source control.
+- `pantry-bot/60-deployment-cloudflared.yaml`,
+  `pantry-bot/62-deployment-commands-cloudflared.yaml`, and
+  `ci-tunnel/20-deployment.yaml` — shared, commands-only, and CI Cloudflare
+  connector Deployments. Hostname ingress rules are remotely managed in
+  Cloudflare; use `docs/recovery/PANTRYBOT-COMMANDS-TUNNEL-PLAN.md` for the
+  staged commands hostname cutover.
 - `observability/k3s-watcher/watcher.py` — Loki polling, restart-loop checks,
   readiness-gated Cloudflared suppression, persistence confirmation, and
   Discord alerting. Its host `.env` and systemd unit are intentionally local.
@@ -131,11 +134,10 @@ quality checks, and use the matching workflow's manual dispatch. The CI
 tunnel and scoped kubeconfigs are documented in `ci-tunnel/MANUAL-SETUP.md`
 and `ci-deploy/README.md`.
 
-For Beads, use `bd show`, `bd ready`, and `bd update <id> --claim --actor CodeX`;
-sync with `bd dolt push`. Scotty reads its mounted local databases directly;
-it does not automatically pull another computer's Beads changes. Run
-`bd dolt pull` on the host that owns the mounted database when cross-machine
-updates are expected.
+Project work is tracked only in GitHub Issues and the GitHub Projects board;
+use `gh issue view`, `gh issue comment`, and the repository's current issue
+workflow. Do not recreate the retired Beads database, Scotty service, or local
+issue-tracking commands.
 
 ## Recovery rules
 

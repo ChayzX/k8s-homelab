@@ -2,20 +2,24 @@
 
 **Status: applied and live.** The bot's Python source (`opsbot/bot/*.py`)
 landed and `40-deployment.yaml` is running (`opsbot` pod `1/1 Running`).
-The original beads issue tracker is retired — work now lives in GitHub
-Issues on the kanban board (see `../AGENTS.md`); historical design refs
-(`bd show k8s-homelab-bi6*`) are kept only for provenance.
+The original local issue tracker is retired — work now lives in GitHub Issues
+on the kanban board (see `../AGENTS.md`).
 
-Full design rationale, options compared, and open questions (historical
-beads refs, retired): `bd show k8s-homelab-bi6` (epic),
-`bd show k8s-homelab-bi6.2` (RBAC).
+Full design rationale and current open work are tracked in GitHub Issues.
 
 Deploys **opsbot**: a standalone Discord bot giving remote, phone-friendly
 control over specific homelab workloads — restart/status checks on
-allowlisted Deployments, and (in a later task, `bi6.4`) Minecraft RCON console
+allowlisted Deployments, and Minecraft RCON console
 access — entirely through Discord's own mobile app. The bot makes only an
 OUTBOUND connection to Discord's gateway; there is no new inbound network
 exposure of any kind.
+
+Before opening that gateway, the process acquires a site-scoped lease from
+the neutral failover witness (`opsbot-witness`). It renews the lease while
+running; a rejected renewal closes the gateway and protected Kubernetes/RCON
+operations fail closed. See [OWNERSHIP-REHEARSAL.md](OWNERSHIP-REHEARSAL.md)
+for the external failover gate and [SECRETS.md](SECRETS.md) for the required
+contract/configuration.
 
 Standalone rather than bolted onto jmusicbot: jmusicbot is a Java bot with its
 own fragile OAuth/build pipeline, not a general plugin host — see the epic's
@@ -79,11 +83,9 @@ fine-grained PAT, Issues Read+Write on those two repos) — see `SECRETS.md`.
 No image rebuild or cluster manifests are needed to change the /bug target:
 repo routing lives in `bot/util.py` (`BOT_REPOS`).
 
-This replaces the original beads-backed `/bug`: `bd create` against
-hostPath-mounted Dolt databases (`40-deployment.yaml` no longer mounts
-`.beads/` dirs). A filed issue lands on GitHub immediately and is visible on
-the GitHub Projects board; nothing waits on a host `bd dolt push`, and the
-pod is no longer bound to the single node hosting those databases.
+This replaces the original local-tracker-backed `/bug`. A filed issue lands on
+GitHub immediately and is visible on the GitHub Projects board, and the pod is
+no longer bound to a host-mounted issue database.
 
 ---
 

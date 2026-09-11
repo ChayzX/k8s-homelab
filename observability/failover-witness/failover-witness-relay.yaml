@@ -1,0 +1,169 @@
+# Node-local workload path for the host-side SSH witness tunnels.
+#
+# The tunnel units listen on host loopback:18765. This host-networked relay
+# exposes only the same node's tunnel on 18766. The Service's Local policy
+# prevents a workload from silently crossing to the other home node.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: failover-witness-relay
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: failover-witness-relay
+    app.kubernetes.io/part-of: observability
+data:
+  relay.py: |
+    # The checked-in source is observability/failover-witness/relay.py.
+    import argparse
+    import socket
+    import socketserver
+    import threading
+
+    class RelayHandler(socketserver.BaseRequestHandler):
+        def handle(self):
+            try:
+                upstream = socket.create_connection(self.server.target, timeout=self.server.connect_timeout)
+            except OSError:
+                return
+            with upstream:
+                left = threading.Thread(target=self.copy, args=(self.request, upstream), daemon=True)
+                right = threading.Thread(target=self.copy, args=(upstream, self.request), daemon=True)
+                left.start()
+                right.start()
+                left.join()
+                right.join()
+
+        @staticmethod
+        def copy(source, destination):
+            try:
+                while True:
+                    payload = source.recv(65536)
+                    if not payload:
+                        return
+                    destination.sendall(payload)
+            except OSError:
+                return
+
+    class RelayServer(socketserver.ThreadingTCPServer):
+        allow_reuse_address = True
+        daemon_threads = True
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--listen-host", default="0.0.0.0")
+    parser.add_argument("--listen-port", type=int, default=18766)
+    parser.add_argument("--upstream-host", default="127.0.0.1")
+    parser.add_argument("--upstream-port", type=int, default=18765)
+    parser.add_argument("--connect-timeout", type=float, default=2)
+    args = parser.parse_args()
+    server = RelayServer((args.listen_host, args.listen_port), RelayHandler)
+    server.target = (args.upstream_host, args.upstream_port)
+    server.connect_timeout = args.connect_timeout
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: failover-witness-relay
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: failover-witness-relay
+    app.kubernetes.io/part-of: observability
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: failover-witness-relay
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: failover-witness-relay
+        app.kubernetes.io/part-of: observability
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      automountServiceAccountToken: false
+      tolerations:
+        - operator: Exists
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - minecraftmachine
+                      - chasebot
+      securityContext:
+        runAsUser: 65532
+        runAsGroup: 65532
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: relay
+          image: python:3.12-alpine
+          imagePullPolicy: IfNotPresent
+          # Bind all interfaces on the host-networked node. The Service and
+          # node firewall keep this private; loopback binding would prevent
+          # ordinary pods from reaching the relay through the node address.
+          command: ["/bin/sh", "-c"]
+          args:
+            - >-
+              exec python3 /opt/failover-witness/relay.py
+              --listen-host 0.0.0.0
+              --listen-port 18766
+              --upstream-host 127.0.0.1
+              --upstream-port 18765
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          ports:
+            - name: witness
+              containerPort: 18766
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: relay-source
+              mountPath: /opt/failover-witness
+              readOnly: true
+      volumes:
+        - name: relay-source
+          configMap:
+            name: failover-witness-relay
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: failover-witness-relay
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: failover-witness-relay
+    app.kubernetes.io/part-of: observability
+spec:
+  type: ClusterIP
+  internalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: failover-witness-relay
+  ports:
+    - name: witness
+      port: 18765
+      targetPort: witness
+      protocol: TCP

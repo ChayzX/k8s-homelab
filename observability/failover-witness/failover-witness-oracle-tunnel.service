@@ -1,0 +1,18 @@
+[Unit]
+Description=SSH tunnel to the private homelab failover witness from Oracle
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+ExecStart=/usr/bin/ssh -NT -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=yes -i /home/ubuntu/.ssh/gcp-witness-oracle -L 100.78.181.15:18765:127.0.0.1:8765 sa_105559435168833655240@136.113.178.106
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

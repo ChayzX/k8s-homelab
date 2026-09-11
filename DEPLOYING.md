@@ -89,7 +89,7 @@ deployment (public package, or an image-pull Secret in the namespace).
 
 ## If Something Goes Wrong
 
-- **Pod doesn't become healthy**: the deploy workflow automatically rolls back to the previous version after 60 seconds. Check the Actions log for error details.
+- **Pod doesn't become healthy**: the workflow's verify stage fails and the rollback-on-failure job attempts `kubectl rollout undo` to the previous ReplicaSet, then verifies the rollback. Inspect the Actions summary and deployment history even after an automatic rollback.
 - **Deployment stays unhealthy**: the Discord monitoring alert system (`k3s-watcher`) will DM you on Discord within a few minutes if pods are crashing or erroring. Check the bot's logs: `kubectl logs -n opsbot deployment/opsbot` (or `kubectl logs -n pantry-bot deployment/pantry-bot`).
 - **Workflow itself fails during publish**: fix the code, commit, push to `main` again to rebuild. Nothing was deployed.
 - **Workflow fails during Apply/Restart/Verify**: inspect the failing stage and

@@ -1,0 +1,146 @@
+# Disposable PostgreSQL authority rehearsal only.
+# Apply only to a temporary, non-production namespace. This is the home
+# primary half of the physical-streaming candidate; it is not production.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pantry-bot-authority-rehearsal-home
+  labels:
+    homelab/rehearsal: pantrybot-postgres-authority
+    homelab/production: "false"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-authority-rehearsal
+  namespace: pantry-bot-authority-rehearsal-home
+type: Opaque
+stringData:
+  POSTGRES_USER: pantry
+  POSTGRES_DB: pantry
+  POSTGRES_PASSWORD: replace-at-apply
+  REPLICATION_USER: replicator
+  REPLICATION_PASSWORD: replace-at-apply
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-authority-init
+  namespace: pantry-bot-authority-rehearsal-home
+data:
+  001-replication.sh: |
+    #!/bin/sh
+    set -eu
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<SQL
+    CREATE ROLE "$REPLICATION_USER" WITH REPLICATION LOGIN PASSWORD '$REPLICATION_PASSWORD';
+    CREATE TABLE IF NOT EXISTS rehearsal_events (
+      event_id text PRIMARY KEY,
+      payload text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    INSERT INTO rehearsal_events(event_id, payload)
+      VALUES ('authority-bootstrap', 'physical-streaming-rehearsal')
+      ON CONFLICT (event_id) DO NOTHING;
+    SQL
+  pg_hba.conf: |
+    local all all trust
+    host all all 0.0.0.0/0 scram-sha-256
+    host replication replicator 0.0.0.0/0 scram-sha-256
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-authority
+  namespace: pantry-bot-authority-rehearsal-home
+  labels:
+    homelab/rehearsal: pantrybot-postgres-authority
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: pantry-postgres-authority
+    pantrybot.postgres/role: primary
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      nodePort: 30442
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-authority
+  namespace: pantry-bot-authority-rehearsal-home
+  labels:
+    homelab/rehearsal: pantrybot-postgres-authority
+spec:
+  serviceName: postgres-authority
+  replicas: 1
+  podManagementPolicy: OrderedReady
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pantry-postgres-authority
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pantry-postgres-authority
+        pantrybot.postgres/role: primary
+        homelab/rehearsal: pantrybot-postgres-authority
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: chasebot
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          args:
+            - -c
+            - wal_level=replica
+            - -c
+            - max_wal_senders=4
+            - -c
+            - wal_keep_size=128MB
+            - -c
+            - max_replication_slots=2
+            - -c
+            - hba_file=/etc/postgresql/pg_hba.conf
+          envFrom:
+            - secretRef:
+                name: postgres-authority-rehearsal
+          ports:
+            - name: postgres
+              containerPort: 5432
+          resources:
+            requests:
+              cpu: 500m
+              memory: 768Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d/001-replication.sh
+              subPath: 001-replication.sh
+            - name: init
+              mountPath: /etc/postgresql/pg_hba.conf
+              subPath: pg_hba.conf
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-authority-init
+            defaultMode: 0755
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 8Gi

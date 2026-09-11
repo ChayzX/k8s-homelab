@@ -1,7 +1,7 @@
 # Namespaces for the application workloads owned by this directory set.
 #
 # Scope note: this file intentionally creates ONLY the namespaces that the
-# application/RBAC manifests in ../jmusicbot, ../pantry-bot and ../opsbot
+# application/RBAC manifests in ../pantry-bot and ../opsbot
 # depend on. The `observability` and `minecraft` namespaces are owned by
 # their own directories in this repo and are created there — do not add
 # them here or you get two sources of truth for the same object.
@@ -9,17 +9,9 @@
 # `keel` namespace removed 2026-08-13 (k8s-homelab-oiv.6) -- Keel itself was
 # decommissioned, retired in favor of GitHub Actions deploy workflows
 # (see pantry-bot/40-deployment.yaml's header).
+# Apply this before the pantry-bot and opsbot manifests. JMusicBot owns its
+# namespace in jmusicbot/00-namespace.yaml.
 #
-# Apply this FIRST. Everything else in this repo assumes these exist.
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: jmusicbot
-  labels:
-    app.kubernetes.io/name: jmusicbot
-    app.kubernetes.io/part-of: homelab
-    kubernetes.io/metadata.name: jmusicbot
 ---
 apiVersion: v1
 kind: Namespace

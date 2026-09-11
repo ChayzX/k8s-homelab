@@ -3,7 +3,7 @@
 No secret values live in this repo. Every Secret below is created imperatively
 by the operator, on the node, before the Deployments are applied.
 
-Run these **after** `_bootstrap/00-namespaces.yaml` and **before**
+Run these **after** `00-namespace.yaml` and **before**
 `40-deployment-jmusicbot.yaml` / `50-deployment-release-notifier.yaml`.
 A Deployment whose Secret does not exist yet will sit in
 `CreateContainerConfigError` until it does — that is recoverable, not fatal.

@@ -51,10 +51,8 @@ metadata:
     app.kubernetes.io/name: cloudflared
     app.kubernetes.io/part-of: homelab
     app.kubernetes.io/component: tunnel
-  # No keel.sh annotations. cloudflared:latest is upstream Cloudflare's tag;
-  # auto-updating the ingress path to the only publicly reachable service in
-  # this cluster, unattended, is not a trade this home-lab needs. Update it
-  # deliberately with `kubectl rollout restart` (imagePullPolicy: Always).
+  # No keel.sh annotations. The connector release is pinned below so an
+  # upstream tag move cannot silently change the public failover path.
 spec:
   # 2, not 1: as of the Oracle node joining as a second k3s agent
   # (pantry-bot-infra), one replica per node via the anti-affinity rule
@@ -118,8 +116,9 @@ spec:
         runAsNonRoot: true
       containers:
         - name: cloudflared
-          image: cloudflare/cloudflared:latest
-          imagePullPolicy: Always
+          # Verified multi-architecture manifest digest (amd64 + arm64).
+          image: cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf
+          imagePullPolicy: IfNotPresent
           args:
             - tunnel
             - --no-autoupdate
