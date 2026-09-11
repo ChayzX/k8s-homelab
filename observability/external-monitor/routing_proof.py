@@ -40,6 +40,12 @@ ROUTES = (
     Route("command_manifest", "/api/public/commands", frozenset({200}), "application/json"),
 )
 
+# These paths must not expose the private OAuth/moderator surface when the
+# viewer-friendly hostname is routed to the standalone commands service.
+PUBLIC_ONLY_ROUTES = (
+    Route("operator_login", "/login/broadcaster", frozenset({404})),
+)
+
 
 def utc_timestamp(epoch_seconds: float) -> str:
     return datetime.fromtimestamp(epoch_seconds, timezone.utc).isoformat().replace("+00:00", "Z")
@@ -157,6 +163,16 @@ def _public_route(
 ) -> dict[str, Any]:
     routes = {}
     for route in ROUTES:
+        routes[route.name] = probe_url(
+            origin_url(public_url, route.path),
+            expected_statuses=route.expected_statuses,
+            expected_content_type=route.expected_content_type,
+            opener=opener,
+            now=now,
+            timeout=timeout,
+            capture_header=public_origin_header,
+        )
+    for route in PUBLIC_ONLY_ROUTES:
         routes[route.name] = probe_url(
             origin_url(public_url, route.path),
             expected_statuses=route.expected_statuses,
