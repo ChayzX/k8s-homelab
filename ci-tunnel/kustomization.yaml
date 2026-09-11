@@ -1,0 +1,5 @@
+resources:
+  - 00-namespace.yaml
+  - 10-serviceaccount.yaml
+  - 20-deployment.yaml
+  - 25-service.yaml
