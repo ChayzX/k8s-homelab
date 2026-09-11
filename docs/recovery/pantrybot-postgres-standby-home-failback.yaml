@@ -78,6 +78,10 @@ spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
+      volumes:
+        - name: hba
+          configMap:
+            name: postgres-authority-hba
       initContainers:
         - name: basebackup
           image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
@@ -110,6 +114,8 @@ spec:
             - hot_standby=on
             - -c
             - wal_receiver_timeout=10s
+            - -c
+            - hba_file=/etc/postgresql/pg_hba.conf
           envFrom:
             - secretRef:
                 name: pantry-bot-postgres-home-failback
@@ -130,6 +136,10 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            - name: hba
+              mountPath: /etc/postgresql/pg_hba.conf
+              subPath: pg_hba.conf
+              readOnly: true
   volumeClaimTemplates:
     - metadata:
         name: data
