@@ -1,0 +1,5 @@
+resources:
+  - ../../../jmusicbot
+
+patches:
+  - path: replicas-zero.yaml
