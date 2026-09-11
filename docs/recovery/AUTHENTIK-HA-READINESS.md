@@ -27,8 +27,8 @@ authentication/account/password/session modules.
 | `%posix-admins` sudoers policy | Pass; effective `NOPASSWD:ALL` | Pass; effective `NOPASSWD:ALL` |
 | Local key fallback | Pass with `ubuntu` and the Oracle key | Pass with `cpederson` and the mini-PC key |
 | SSH/PAM configuration | PAM enabled; sshd password/keyboard-interactive disabled | PAM enabled; sshd password authentication permitted |
-| Interactive directory authentication | Not tested | Not tested |
-| LDAP-outage fallback | Not tested | Not tested |
+| Interactive directory authentication | Pass via a temporary synthetic user and local `su` PAM path | Pass via a temporary synthetic user and local `su` PAM path |
+| LDAP-outage fallback | Pass: cached identity, password authentication, and `sudo -n` remained usable while the LDAP outpost was stopped | Pass: cached identity, password authentication, and `sudo -n` remained usable while the LDAP outpost was stopped |
 
 The sudo rules are root-owned `/etc/sudoers.d/90-authentik-posix-admins` files;
 `visudo -cf` passed on both hosts and effective policy was checked for `chase`.
@@ -41,14 +41,22 @@ the rehearsal.
 
 ## Required gates before HA readiness
 
-1. Use a synthetic non-production directory credential to complete actual PAM
+1. ~~Use a synthetic non-production directory credential to complete actual PAM
    authentication on both hosts; Oracle needs a deliberate local PAM test path
-   because sshd does not expose password or keyboard-interactive auth.
+   because sshd does not expose password or keyboard-interactive auth.~~
+   **Passed 2026-09-11:** a uniquely named temporary Authentik user was added
+   to `posix-admins`, authenticated through the local `su` PAM path on Oracle
+   and ChaseBot, and deleted after the test. SSH key access to both hosts was
+   also confirmed while the LDAP outpost was unavailable.
 2. In an isolated target, complete an Authentik web login and reconstruct the
    database, signing, provider, LDAP/outpost, bootstrap, and certificate
    Secret names by behavior without recording values.
-3. Make only the isolated LDAP target unavailable, repeat local-key logins,
-   and document SSSD cache behavior and recovery.
+3. ~~Make only the isolated LDAP target unavailable, repeat local-key logins,
+   and document SSSD cache behavior and recovery.~~ **Passed 2026-09-11:**
+   the LDAP outpost was scaled to zero and restored after the check; both hosts
+   resolved the cached synthetic identity, accepted cached PAM authentication,
+   and retained the cached `posix-admins` sudo policy. The outpost rollout was
+   healthy after restoration.
 4. Document and rehearse password rotation, account disablement, cache expiry,
    and rollback to local emergency accounts.
 5. For issue #202, prove PostgreSQL promotion, measured RPO/RTO, old-writer
