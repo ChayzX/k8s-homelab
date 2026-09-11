@@ -80,17 +80,17 @@ post-promotion routing remain required.
 
 ## Current deployment boundary
 
-The repository contract is now two replicas with hostname anti-affinity for
-the application and LDAP tiers. The live home cluster now has two LDAP
-outpost replicas, while the Authentik server tier runs one replica per site
-(home plus Oracle) and workers scale independently. This preserves
-active-active service capacity across failure domains without starting
-concurrent Authentik migration authorities on one database. Oracle's
-site-local values therefore use one server and two workers; home and Oracle
-provide the two active server endpoints. The ChaseBot
-node's 13.1-GiB image filesystem is also a capacity gate. A failed scale
-attempt on 2026-09-11 pulled the
-Authentik image into ChaseBot DiskPressure; the cluster was recovered and
-verified before further rollout. Do not call the current live state
-active-active Authentik until both site-local deployments and their shared
-database/fencing gates are proven.
+The repository contract targets two replicas with hostname anti-affinity for
+the application and LDAP tiers. The live cross-site deployment provides
+Authentik server, worker, and LDAP capacity in both home and Oracle, using the
+same configuration and the home database authority. Same-site replica density
+is a separate capacity concern: home currently runs one server, two workers,
+and one LDAP outpost; Oracle runs one server, two workers, and two LDAP
+outposts. A scale attempt on 2026-09-11 caused ChaseBot's node to report
+ephemeral-storage pressure and evict the extra server/LDAP pods, so those
+replicas were rolled back after the remaining workloads returned Ready.
+
+Do not describe same-site two-replica density as complete until ChaseBot's
+storage pressure is resolved and the anti-affinity rollout is re-proven. The
+cross-site active-active application capacity and database/fencing gates must
+still be verified independently.
