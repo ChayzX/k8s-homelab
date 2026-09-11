@@ -1,0 +1,27 @@
+[Unit]
+Description=PantryBot PostgreSQL witness-backed self-fence
+Wants=network-online.target
+After=network-online.target failover-witness-home-tunnel.service
+Before=k3s.service k3s-agent.service
+
+[Service]
+Type=simple
+# Copy fence_agent.py to this path and install a root-owned EnvironmentFile
+# containing WITNESS_URL and WITNESS_SHARED_SECRET.  The fence command must
+# stop the local k3s writer domain; do not replace it with a pod deletion.
+ExecStart=/usr/bin/python3 /usr/local/lib/failover-witness/fence_agent.py \
+  --site home \
+  --resource pantry:postgres:home \
+  --lease-seconds 30 \
+  --fence-command "/usr/bin/systemctl stop k3s-agent.service"
+EnvironmentFile=/etc/failover-witness/postgres-fence.env
+Restart=always
+RestartSec=5
+User=root
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target
