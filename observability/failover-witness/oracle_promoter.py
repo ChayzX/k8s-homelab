@@ -24,6 +24,7 @@ class PromotionAdapters:
     enable_roles: Callable[[], None]
     fence: Callable[[], None]
     renew: Callable[[dict[str, Any]], bool] | None = None
+    ready: Callable[[], bool] | None = None
 
 
 class OraclePromoter:
@@ -41,6 +42,8 @@ class OraclePromoter:
         self.token = None
 
     def run_once(self) -> bool:
+        if self.adapters.ready and not self.adapters.ready():
+            return False
         token = self.adapters.acquire()
         if not token:
             if self.adapters.is_primary and self.adapters.is_primary():
@@ -140,6 +143,13 @@ def run() -> None:
         except Exception:
             return False
 
+    def ready() -> bool:
+        try:
+            _kubectl("version", "--request-timeout=5s")
+            return True
+        except Exception:
+            return False
+
     def switch_endpoint() -> None:
         selector = json.dumps({"app.kubernetes.io/name": "pantry-postgres-authority-standby", "pantrybot.postgres/role": "primary"}, separators=(",", ":"))
         _kubectl("-n", args.namespace, "patch", "service", args.service, "--type=merge", "-p", json.dumps({"spec": {"selector": json.loads(selector)}}))
@@ -164,7 +174,7 @@ def run() -> None:
     def fence() -> None:
         subprocess.run(["systemctl", "stop", "k3s.service"], check=True, timeout=30)
 
-    adapters = PromotionAdapters(acquire, is_primary, promote, switch_endpoint, enable_roles, fence, renew)
+    adapters = PromotionAdapters(acquire, is_primary, promote, switch_endpoint, enable_roles, fence, renew, ready)
     promoter = OraclePromoter(adapters)
     while not promoter.run_once():
         time.sleep(max(1, args.lease_seconds // 3))
