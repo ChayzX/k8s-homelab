@@ -110,7 +110,7 @@ apply set is:
 kubectl --kubeconfig "$ORACLE_KUBECONFIG" apply -f jmusicbot/00-namespace.yaml
 kubectl --kubeconfig "$ORACLE_KUBECONFIG" apply -f jmusicbot/10-serviceaccounts.yaml
 # Create jmusicbot-config-txt and jmusicbot-r2 in the approved secret store.
-kubectl --kubeconfig "$ORACLE_KUBECONFIG" apply -f jmusicbot/40-deployment-jmusicbot.yaml
+kubectl --kubeconfig "$ORACLE_KUBECONFIG" apply -k docs/recovery/jmusicbot-oracle-standby
 kubectl --kubeconfig "$ORACLE_KUBECONFIG" apply -f jmusicbot/45-service-health.yaml
 ```
 
@@ -126,8 +126,14 @@ curl -fsS http://127.0.0.1:19091/live
 curl -fsS http://127.0.0.1:19091/health
 ```
 
-For the standby, apply the main Deployment with `replicas: 0`. The home
-Deployment remains the sole Discord writer. A temporary R2 restore Job may be
+The Oracle standby overlay renders the main Deployment with `replicas: 0`.
+Verify that invariant before applying it:
+
+```bash
+kubectl kustomize docs/recovery/jmusicbot-oracle-standby | grep -A2 '^spec:'
+```
+
+The home Deployment remains the sole Discord writer. A temporary R2 restore Job may be
 run on Oracle because it has no Discord client or writer side effect; delete
 the Job and its emptyDir after recording the result. To promote Oracle later,
 first scale the home Deployment to zero, wait for termination, verify no home
