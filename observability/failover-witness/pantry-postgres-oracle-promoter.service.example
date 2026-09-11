@@ -1,0 +1,23 @@
+[Unit]
+Description=PantryBot Oracle PostgreSQL promotion controller
+Wants=network-online.target
+After=network-online.target k3s.service failover-witness-oracle-tunnel.service
+
+[Service]
+Type=simple
+# Copy oracle_promoter.py to /usr/local/lib/failover-witness/ and install a
+# root-owned EnvironmentFile containing WITNESS_URL and WITNESS_SHARED_SECRET.
+# In normal operation the shared pantry:postgres lease is held by home and
+# this process only waits. It promotes Oracle after the lease expires.
+ExecStart=/usr/bin/python3 /usr/local/lib/failover-witness/oracle_promoter.py
+EnvironmentFile=/etc/failover-witness/postgres-fence.env
+Restart=always
+RestartSec=5
+User=root
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target
