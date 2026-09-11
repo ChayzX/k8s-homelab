@@ -31,6 +31,13 @@ GCP loopback port `25433`, and ChaseBot exposes that path at
 `192.168.40.200:25433`. The reverse tunnel carries no application traffic in
 normal mode and does not by itself reconfigure the home StatefulSet.
 
+The controlled return procedure is documented in
+`docs/recovery/PANTRYBOT-POSTGRES-FAILBACK.md`. It seeds a new home PVC with
+`docs/recovery/pantrybot-postgres-standby-home-failback.yaml`, fences Oracle,
+then performs the witness-epoch handoff before switching the stable Service.
+Automatic failback remains disabled until that procedure has one complete
+measured rehearsal.
+
 The disposable `pantrybot-postgres-failback-rehearsal.yaml` uses only
 `emptyDir`. Before applying it, copy the existing replication Secret into the
 rehearsal namespace with sanitized metadata; never commit that Secret. The

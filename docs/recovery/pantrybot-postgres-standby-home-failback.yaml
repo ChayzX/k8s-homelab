@@ -1,0 +1,141 @@
+# Controlled Oracle-to-home return target for PantryBot PostgreSQL.
+#
+# This is a new PVC and StatefulSet so the fenced home primary is never
+# overwritten in place. Apply only while the home writer is fenced and Oracle
+# is the sole promoted writer. The failback runbook switches the stable
+# postgres-authority Service only after this pod has caught up and Oracle has
+# been fenced.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pantry-bot-postgres-home-failback
+  namespace: pantry-bot
+  labels:
+    homelab/production: "true"
+    pantrybot.postgres/role: standby
+    pantrybot.postgres/failback: home
+type: Opaque
+# Create out-of-band on home. Never commit values.
+stringData:
+  POSTGRES_USER: replace-at-apply
+  POSTGRES_DB: replace-at-apply
+  POSTGRES_PASSWORD: replace-at-apply
+  REPLICATION_USER: replace-at-apply
+  REPLICATION_PASSWORD: replace-at-apply
+  PRIMARY_HOST: "192.168.40.200"
+  PRIMARY_PORT: "25433"
+  PRIMARY_SLOT_NAME: pantry_home_failback
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-authority-home-failback
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: pantry-postgres-authority-home-failback
+    app.kubernetes.io/part-of: pantrybot
+    homelab/production: "true"
+    pantrybot.postgres/role: standby
+    pantrybot.postgres/failback: home
+spec:
+  selector:
+    app.kubernetes.io/name: pantry-postgres-authority-home-failback
+    pantrybot.postgres/role: primary
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-authority-home-failback
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: pantry-postgres-authority-home-failback
+    app.kubernetes.io/part-of: pantrybot
+    homelab/production: "true"
+    pantrybot.postgres/role: standby
+    pantrybot.postgres/failback: home
+spec:
+  serviceName: postgres-authority-home-failback
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pantry-postgres-authority-home-failback
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pantry-postgres-authority-home-failback
+        app.kubernetes.io/part-of: pantrybot
+        homelab/production: "true"
+        pantrybot.postgres/role: standby
+        pantrybot.postgres/failback: home
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: chasebot
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: basebackup
+          image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+          envFrom:
+            - secretRef:
+                name: pantry-bot-postgres-home-failback
+          command: ["sh", "-ec"]
+          args:
+            - |
+              if [ -n "$(find /var/lib/postgresql/data -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+                exit 0
+              fi
+              until pg_isready -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER"; do sleep 3; done
+              printf '%s:*:*:%s:%s\n' "$PRIMARY_HOST" "$REPLICATION_USER" "$REPLICATION_PASSWORD" > /tmp/pgpass
+              chmod 600 /tmp/pgpass
+              PGPASSFILE=/tmp/pgpass pg_basebackup \
+                -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER" \
+                -D /var/lib/postgresql/data -Fp -Xs -P -R -C -S "$PRIMARY_SLOT_NAME"
+              printf "primary_conninfo = 'host=%s port=%s user=%s password=%s application_name=pantry-home-failback'\nprimary_slot_name = '%s'\n" \
+                "$PRIMARY_HOST" "$PRIMARY_PORT" "$REPLICATION_USER" "$REPLICATION_PASSWORD" "$PRIMARY_SLOT_NAME" \
+                >> /var/lib/postgresql/data/postgresql.auto.conf
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      containers:
+        - name: postgres
+          image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+          args:
+            - -c
+            - hot_standby=on
+            - -c
+            - wal_receiver_timeout=10s
+          envFrom:
+            - secretRef:
+                name: pantry-bot-postgres-home-failback
+          ports:
+            - name: postgres
+              containerPort: 5432
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 8Gi
