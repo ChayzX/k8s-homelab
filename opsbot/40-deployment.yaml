@@ -76,7 +76,10 @@ spec:
           type: RuntimeDefault
       containers:
         - name: opsbot
-          image: ghcr.io/chayzx/opsbot:latest@sha256:f469930bffbef3fb4282906db642a140cc21e7fe3d53a268ac95d3c908c30063
+          # Immutable digest verified live on home and used for the fenced
+          # Oracle standby. This image acquires the site witness lease before
+          # opening the Discord gateway; stale replicas fail closed.
+          image: ghcr.io/chayzx/opsbot:81b6d858224e3cd4e17775c1703f69273f151f10@sha256:ab00280b390f21f52af1f7a5409d6ea2f1b90d71260d956f2b75b20e5464e321
           # Keep the pull policy explicit while the manifest digest provides
           # immutable content and multi-architecture resolution.
           imagePullPolicy: Always
