@@ -3,7 +3,9 @@
 No secret values live in this repo. Create these imperatively on the node,
 **before** applying the Deployments.
 
-Four Secrets are needed here (a fifth is optional). Deploy pipeline is GitHub Actions
+Four application/shared-tunnel Secrets are needed here (a fifth is optional).
+The dedicated public commands tunnel adds one independently provisioned Secret
+in each cluster. Deploy pipeline is GitHub Actions
 (`.github/workflows/deploy.yml` in the pantry-bot repo — a single
 "PantryBot CI/CD" workflow that builds, applies, restarts, and verifies
 automatically on every merge to `main`; a merge is the approval, not a
@@ -58,6 +60,34 @@ This token is high value: it identifies the tunnel *and* authorises running it.
 Anyone holding it can stand up a connector for `oauth.greeniespantry.uk`. If it
 is ever exposed, rotate it in the Cloudflare Zero Trust dashboard
 (Networks > Tunnels > this tunnel > Refresh token) and recreate this Secret.
+
+### `commands-cloudflared-tunnel-token` — public commands-only tunnel token
+
+Create this Secret separately in the home and independent Oracle clusters
+after Cloudflare has created the dedicated remotely managed tunnel. Both
+Secrets use the same name and key so the checked-in connector manifest is
+portable, but the value is entered directly into each cluster and never saved
+in Git, a ConfigMap, a shell argument, or an issue comment.
+
+```bash
+read -r -s -p 'commands-only tunnel token: ' COMMANDS_TUNNEL_TOKEN; echo
+kubectl -n pantry-bot create secret generic commands-cloudflared-tunnel-token \
+  --from-literal=TUNNEL_TOKEN="$COMMANDS_TUNNEL_TOKEN" \
+  --dry-run=client -o yaml | kubectl apply -f -
+unset COMMANDS_TUNNEL_TOKEN
+```
+
+For Oracle, add `--kubeconfig "$ORACLE_KUBECONFIG"` to both `kubectl`
+invocations. Verify metadata and key names only:
+
+```bash
+kubectl -n pantry-bot get secret commands-cloudflared-tunnel-token \
+  -o json | jq -r '.data | keys[]'
+```
+
+Expected output is the key name `TUNNEL_TOKEN`; never decode or print it. This
+token must belong to the commands-only tunnel and must not reuse the shared
+`cloudflared-tunnel` value.
 
 ---
 
@@ -182,3 +212,15 @@ kubectl -n pantry-bot get secret pantry-bot-twitch cloudflared-tunnel ghcr-pull-
 
 All four must exist (`pantry-bot-discord-alerts` is optional). Never commit
 them, never `kubectl get -o yaml` them into a paste.
+
+Before applying `62-deployment-commands-cloudflared.yaml`, also require the
+dedicated tunnel Secret in that target cluster:
+
+```bash
+kubectl -n pantry-bot get secret commands-cloudflared-tunnel-token \
+  -o json | jq -e '.data | keys == ["TUNNEL_TOKEN"]' >/dev/null
+```
+
+Run the same metadata-only check with the Oracle kubeconfig before applying
+the connector there. Do not add this Secret to the normal shared-tunnel apply
+set until the dedicated Cloudflare tunnel has been created.
