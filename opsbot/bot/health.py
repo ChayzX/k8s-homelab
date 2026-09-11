@@ -67,6 +67,7 @@ def start_background(port: int = 9091):
     loop = asyncio.new_event_loop()
     started = threading.Event()
     failure: list[BaseException] = []
+    runner_holder: list[web.AppRunner] = []
 
     async def launch() -> None:
         app = _application()
@@ -75,11 +76,12 @@ def start_background(port: int = 9091):
         site = web.TCPSite(runner, "0.0.0.0", port)
         await site.start()
         print(f"[opsbot] standby health endpoint listening on :{port}")
+        return runner
 
     def run() -> None:
         asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(launch())
+            runner_holder.append(loop.run_until_complete(launch()))
             started.set()
             loop.run_forever()
         except BaseException as error:  # pragma: no cover - background path
@@ -97,6 +99,11 @@ def start_background(port: int = 9091):
 
     def stop() -> None:
         if loop.is_running():
+            async def cleanup() -> None:
+                if runner_holder:
+                    await runner_holder[0].cleanup()
+
+            asyncio.run_coroutine_threadsafe(cleanup(), loop).result(timeout=5)
             loop.call_soon_threadsafe(loop.stop)
         thread.join(timeout=5)
 
