@@ -49,8 +49,17 @@ following, in order:
 
 Never promote Oracle while home can still commit. A stale home writer would
 make the two databases diverge and invalidate the active-active safety model.
-There is no automatic production promotion in this manifest; the remaining
-gate is a proven fencing mechanism plus a non-production promotion rehearsal.
+The guarded Authentik controller in
+[`../observability/failover-witness/authentik_oracle_promoter.py`](../observability/failover-witness/authentik_oracle_promoter.py)
+now packages the Oracle-side promotion sequence, including witness resource
+`auth:postgres`, standby promotion, service selector switch, Authentik secret
+endpoint update, and application restart. It is not enabled as a production
+systemd unit: the remaining gate is a proven old-writer fencing mechanism plus
+a non-production promotion rehearsal. Do not run it against production until
+the fencing checklist below has been completed and independently observed.
+The command also requires the explicit `--confirm-old-writer-fenced` flag so a
+restart or an accidental invocation cannot promote Oracle based only on a
+network partition.
 
 ## Verification
 
