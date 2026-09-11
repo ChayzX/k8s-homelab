@@ -16,10 +16,14 @@ Run monitoring outside `minecraftmachine`, preferably on Oracle or GCP. It must 
 GCP runs `homelab-external-monitor.service` as an unprivileged system user.
 The monitor checks `status.greeniespantry.uk`, `grafana.greeniespantry.uk`,
 `commands.greeniespantry.uk`, `mods.greeniespantry.uk`, `overlay.greeniespantry.uk`,
-`oauth.greeniespantry.uk`, and `auth.greeniespantry.uk`; the current observed
-responses include HTTP 200 for the split commands/moderator surfaces and the
-documented expected responses for the other routes. The service is active and
-logged a healthy persisted state on 2026-09-10. Earlier
+`oauth.greeniespantry.uk`, and `auth.greeniespantry.uk`. The service is active
+and its persisted state is authoritative for the current public result. At
+2026-09-11T06:07 CDT, GCP recorded `status=404` as an accepted status,
+`grafana=200`, `authentik=200`, and `kubernetes-api=403` as healthy, while
+`commands=502`, `mods=502`, and `oauth=502` were failing; the overall state was
+`degraded` after 81 consecutive failure cycles. This is a Cloudflare
+route/origin gate, not evidence that the home or Oracle PantryBot Deployments
+are unready. Earlier
 `HEARTBEAT_OK` entries came from the now-retired Healthchecks.io integration;
 the public checks use no Kubernetes or Authentik credentials.
 
