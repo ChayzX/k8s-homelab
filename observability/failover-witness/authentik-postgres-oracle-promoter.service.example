@@ -19,5 +19,8 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
 
-# This example is intentionally not enabled. Enable only after the controlled
-# old-writer fencing and Authentik promotion rehearsal passes.
+# Enable only after the controlled old-writer fencing and Authentik promotion
+# rehearsal passes. The unit remains idle while home holds auth:postgres.
+
+[Install]
+WantedBy=multi-user.target

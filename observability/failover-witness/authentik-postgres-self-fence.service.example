@@ -1,0 +1,26 @@
+[Unit]
+Description=Authentik PostgreSQL witness-backed home self-fence
+Wants=network-online.target
+After=network-online.target failover-witness-chasebot-tunnel.service
+Before=k3s-agent.service
+
+[Service]
+Type=simple
+# Reuse the root-owned witness environment already used by the home
+# PostgreSQL self-fence. It contains no values in this repository.
+ExecStart=/usr/bin/python3 /usr/local/lib/failover-witness/fence_agent.py \
+  --site home \
+  --resource auth:postgres \
+  --lease-seconds 30 \
+  --fence-command "/usr/local/lib/failover-witness/fence-writer-domain.sh k3s-agent.service"
+EnvironmentFile=/etc/failover-witness/postgres-fence.env
+Restart=always
+RestartSec=5
+User=root
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target
