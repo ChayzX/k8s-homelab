@@ -15,6 +15,17 @@ from urllib import request
 from urllib.error import HTTPError
 
 
+ORACLE_PROMOTION_DEPLOYMENTS = (
+    "pantry-commands-site",
+    "pantry-private-api",
+    "pantry-private-site",
+    "pantry-overlay-delivery",
+    "pantry-twitch-gateway",
+    "pantry-chat-worker",
+    "pantry-twitch-dispatcher",
+)
+
+
 @dataclass
 class PromotionAdapters:
     acquire: Callable[[], dict[str, Any] | None]
@@ -167,7 +178,7 @@ def run() -> None:
         local = f"{userinfo}@{args.service}.{args.namespace}.svc.cluster.local:5432/{database}"
         replacement = base64.b64encode(local.encode()).decode()
         _kubectl("-n", args.namespace, "patch", "secret", "pantry-bot-platform", "--type=merge", "-p", json.dumps({"data": {"PANTRY_DATABASE_URL": replacement}}))
-        for deployment in ("pantry-private-api", "pantry-private-site", "pantry-overlay-delivery"):
+        for deployment in ORACLE_PROMOTION_DEPLOYMENTS:
             _kubectl("-n", args.namespace, "rollout", "restart", f"deployment/{deployment}")
             _kubectl("-n", args.namespace, "rollout", "status", f"deployment/{deployment}", "--timeout=180s")
 
