@@ -177,7 +177,11 @@ def run() -> None:
             _kubectl("-n", args.namespace, "rollout", "status", f"deployment/{deployment}", "--timeout=180s")
 
     def fence() -> None:
-        subprocess.run(["systemctl", "stop", "k3s.service"], check=True, timeout=30)
+        subprocess.run(
+            ["/usr/local/lib/failover-witness/fence-writer-domain.sh", "k3s.service"],
+            check=True,
+            timeout=30,
+        )
 
     adapters = PromotionAdapters(acquire, is_primary, promote, switch_endpoint, enable_roles, fence, renew, ready)
     promoter = OraclePromoter(adapters)
