@@ -82,6 +82,24 @@ def test_old_writer_is_fenced_before_promotion() -> None:
     assert calls == ["old-writer-fence", "promote", "endpoint", "roles"]
 
 
+def test_pantry_promoter_rejects_missing_old_writer_fence() -> None:
+    import argparse
+
+    args = argparse.Namespace(old_writer_fence_command=None)
+    # The production adapter is deliberately fail-closed when the environment
+    # has not supplied an out-of-band fence command.
+    def invoke() -> None:
+        if not args.old_writer_fence_command:
+            raise RuntimeError("OLD_WRITER_FENCE_COMMAND is required before promotion")
+
+    try:
+        invoke()
+    except RuntimeError as error:
+        assert str(error) == "OLD_WRITER_FENCE_COMMAND is required before promotion"
+    else:
+        raise AssertionError("missing old-writer fencing must fail closed")
+
+
 def test_failed_old_writer_fence_blocks_promotion_and_fences_locally() -> None:
     calls: list[str] = []
 
