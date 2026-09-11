@@ -1,0 +1,10 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: ci-tunnel
+spec:
+  # Oracle needs a separately scoped API endpoint and kubeconfig before this
+  # connector can be enabled. Keep it a recovery target, never an accidental
+  # second connector using the home deployment credential.
+  replicas: 0
