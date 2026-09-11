@@ -9,7 +9,7 @@ This is the initial capacity gate for the free active-active design. It is an ob
 | Host | CPU | Memory | Disk | Current observation | Gate |
 |---|---:|---:|---:|---|---|
 | `minecraftmachine` | 16 logical CPUs | 15 GiB total, 8 GiB available | Root 3.4 TiB free; `/mnt/nvme` 188 GiB free | Home control plane and Minecraft host; Minecraft excluded from this project | Do not alter Minecraft placement |
-| `pantry-bot-oracle` | 2 vCPU; 2 allocatable k3s CPU | 11,932 MiB total, 10,164 MiB available; k3s currently 4% CPU / 15% memory | 40 GiB free | Independent arm64 Oracle k3s Ready; PantryBot stateless/API/overlay capacity plus the physical PostgreSQL standby Ready | Keep resource limits explicit; recheck with side-effect roles and egress |
+| `pantry-bot-oracle` | 2 vCPU; 2 allocatable k3s CPU | 11,932 MiB total, 8,743 MiB available; k3s currently 19% CPU / 29% memory | 36 GiB free | Independent arm64 Oracle k3s Ready; PantryBot stateless/API/overlay capacity plus the physical PostgreSQL standby Ready | Keep resource limits explicit; recheck with side-effect roles and egress |
 | `discordmusicbot` | 2 vCPU | 969 MiB total, 578 MiB available at check | 3.3 GiB free | x86_64 observer host; no swap, k3s, or Docker active; OS Login SSH and passwordless sudo verified | Observer-only; any coordination witness must be lightweight and pass a measured memory/network test |
 | `chasebot` | 2 allocatable CPU | 2,026 MiB currently used (60% of node memory); 594m CPU (29%) | Local-path storage only; current PVCs are RWO and node-local | Ready second home k3s node; hosts PantryBot stateless/API/overlay capacity and the live PostgreSQL primary | Use for stateless replicas and the home primary only; do not treat it as an independent site |
 
@@ -33,8 +33,8 @@ capacity inside the home failure domain, not independent state redundancy.
 Oracle k3s is also currently a single Ready arm64 control-plane node with 2
 allocatable CPU and 11,932 MiB total memory. After deploying the stateless
 PantryBot public/private UI, API, and overlay capacity plus the persistent
-physical standby, the live host check reports 91m CPU (4%) and 1,835Mi memory
-(15%), with 40GiB free on the root filesystem.
+physical standby, the live host check reports 388m CPU (19%) and 3,555Mi
+memory (29%), with 36GiB free on the root filesystem.
 The standby is streaming with equal receive/replay LSNs. The old disposable
 `pantry-bot-db-rehearsal` namespace was removed after this measurement. The
 source-fencing rehearsal passed, and the side-effecting gateway, worker, and
@@ -114,4 +114,8 @@ The design must stop before a paid service, instance resize, quota increase, or 
 
 ## Access gap
 
-The local key `/home/chase/.ssh/mini-pc` did not authenticate as `chase@192.168.40.200` during the original measurement. Kubernetes now confirms the node is reachable and Ready, but direct SSH identity/key validation remains a management-access follow-up. This is not a reason to change the active architecture; the existing GitHub issue for ChaseBot access/recovery should record the correct username/key path before any direct host migration.
+Direct ChaseBot SSH management is now recovered through the configured
+`cpederson` account and `/home/chase/.ssh/mini-pc`; the node remains reachable
+over wired LAN at `192.168.40.200`. This access is operational evidence only:
+ChaseBot is still part of the home failure domain and its local-path volumes do
+not provide cross-site state redundancy.
