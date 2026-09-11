@@ -16,6 +16,7 @@ ExecStart=/usr/bin/ssh -NT \
   -o StrictHostKeyChecking=yes \
   -i /home/ubuntu/.ssh/gcp-witness-oracle \
   -L 100.78.181.15:25432:127.0.0.1:25432 \
+  -L 100.78.181.15:25433:127.0.0.1:25433 \
   sa_105559435168833655240@136.113.178.106
 Restart=always
 RestartSec=5

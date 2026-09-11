@@ -1,0 +1,25 @@
+# Private cross-site transport for the Authentik database authority.
+#
+# This is a NodePort only so the existing encrypted host tunnel can carry the
+# connection to Oracle. It is not a public database endpoint and does not
+# change PostgreSQL writer ownership or promotion semantics.
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-postgresql-transport
+  namespace: auth
+  labels:
+    app.kubernetes.io/name: auth-postgresql
+    app.kubernetes.io/part-of: homelab
+    homelab/transport: encrypted
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/component: primary
+    app.kubernetes.io/instance: auth
+    app.kubernetes.io/name: postgresql
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      nodePort: 30433
