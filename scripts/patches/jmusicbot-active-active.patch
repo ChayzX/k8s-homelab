@@ -170,6 +170,8 @@ index 0000000..cab7655
 +                            + "\",\"epoch\":" + current.epoch() + ",\"token\":\""
 +                            + escape(current.token()) + "\"}");
 +            if (response.statusCode() != 200 || !booleanField(response.body(), "ok")) {
++                System.err.printf("JMusicBot witness renewal rejected: HTTP %d body=%s%n",
++                        response.statusCode(), response.body());
 +                fence();
 +                return false;
 +            }
@@ -244,19 +246,22 @@ index 0000000..cab7655
 +    private static String escape(String value) { return value.replace("\\", "\\\\").replace("\"", "\\\""); }
 +
 +    private static String stringField(String body, String name) throws IOException {
-+        Matcher matcher = Pattern.compile(String.format(STRING_FIELD.pattern(), Pattern.quote(name))).matcher(body);
++        Matcher matcher = Pattern.compile("\\\"" + Pattern.quote(name)
++                + "\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"").matcher(body);
 +        if (!matcher.find()) throw new IOException("missing witness field " + name);
 +        return matcher.group(1);
 +    }
 +
 +    private static long longField(String body, String name) throws IOException {
-+        Matcher matcher = Pattern.compile(String.format(LONG_FIELD.pattern(), Pattern.quote(name))).matcher(body);
++        Matcher matcher = Pattern.compile("\\\"" + Pattern.quote(name)
++                + "\\\"\\s*:\\s*(\\d+)").matcher(body);
 +        if (!matcher.find()) throw new IOException("missing witness field " + name);
 +        return Long.parseLong(matcher.group(1));
 +    }
 +
 +    private static boolean booleanField(String body, String name) {
-+        Matcher matcher = Pattern.compile(String.format(BOOLEAN_FIELD.pattern(), Pattern.quote(name))).matcher(body);
++        Matcher matcher = Pattern.compile("\\\"" + Pattern.quote(name)
++                + "\\\"\\s*:\\s*(true|false)").matcher(body);
 +        return matcher.find() && Boolean.parseBoolean(matcher.group(1));
 +    }
 +}
