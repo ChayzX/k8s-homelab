@@ -1,64 +1,63 @@
-# Authentik HA readiness
+# Authentik emergency-access readiness
 
-This is the bounded readiness record for homelab issue #198. It describes the
-current identity-service boundary and the evidence required before controlled
-promotion. It does not authorize a second writer, change the production
-Authentik installation, or make Authentik a prerequisite for recovery access.
+This bounded record covers homelab issues #198 and #202. It records sanitized
+evidence only and does not authorize a second Authentik/PostgreSQL writer or
+make Authentik a prerequisite for recovery.
 
 ## Current boundary
 
-- Authentik server, worker, and PostgreSQL are home-only and run on the
-  `minecraftmachine` k3s control-plane host.
-- PostgreSQL uses a local-path, single-writer PVC. There is no Oracle replica,
-  promotion target, or old-writer fencing proof.
-- The tracked LDAP outpost is `auth/50-ldap-outpost.yaml`. It is intentionally
-  one replica and uses only the `ldap-outpost-token` Secret; its pod does not
-  need a Kubernetes service-account token.
-- Oracle and ChaseBot have resolved the Authentik LDAP identity `chase` and the
-  `posix-admins` group through SSSD. This proves NSS/group lookup only, not
-  password authentication or an interactive SSH/PAM login.
-- Emergency SSH/key access, external monitoring, and the independent Oracle
-  standby must continue to work while Authentik and LDAP are unavailable.
+- Authentik server, worker, PostgreSQL, and LDAP outpost are home-only.
+- Authentik PostgreSQL uses a local-path single-writer PVC; promotion and
+  old-writer fencing are not proven.
+- Oracle and ChaseBot use SSSD over LDAPS and resolve `chase` and
+  `posix-admins` (UID/GID 2018/27557).
+- Local SSH/key recovery remains independent of Authentik.
 
-## Evidence already recorded
+## Live validation
 
-- An Authentik/PostgreSQL dump was restored into an isolated PostgreSQL 17.10
-  target; Authentik 2026.5.6 reached `/-/health/ready/` with HTTP 200.
-- The isolated target used no production PVC, Service, ingress, or scheduled
-  writer and was deleted after the rehearsal.
-- The current backup and restore procedure is documented in
-  `docs/recovery/RESTORE-REHEARSAL.md` and
-  `scripts/authentik-postgres-backup.sh`.
+The production Authentik provider, application, group binding, outpost
+association, certificate attachment, and readiness endpoint were verified
+read-only. The LDAPS certificate served to both hosts matches their installed
+CA file. SSSD is enabled on both hosts with cached credentials and `pam_sss`
+authentication/account/password/session modules.
 
-These facts establish restore/readiness evidence, not HA or login acceptance.
+| Gate | Oracle | ChaseBot |
+| --- | --- | --- |
+| Directory identity and group lookup | Pass | Pass |
+| `%posix-admins` sudoers policy | Pass; effective `NOPASSWD:ALL` | Pass; effective `NOPASSWD:ALL` |
+| Local key fallback | Pass with `ubuntu` and the Oracle key | Pass with `cpederson` and the mini-PC key |
+| SSH/PAM configuration | PAM enabled; sshd password/keyboard-interactive disabled | PAM enabled; sshd password authentication permitted |
+| Interactive directory authentication | Not tested | Not tested |
+| LDAP-outage fallback | Not tested | Not tested |
 
-## Required gates before calling it HA-ready
+The sudo rules are root-owned `/etc/sudoers.d/90-authentik-posix-admins` files;
+`visudo -cf` passed on both hosts and effective policy was checked for `chase`.
+No password or token values were recorded.
 
-1. **Provider and secret reconstruction:** in an isolated target, verify the
-   LDAP provider, `posix-admins` policy, outpost token, signing/provider
-   secrets, bootstrap secret, and LDAPS certificate by name and behavior only;
-   never record values.
-2. **Interactive identity proof:** use a synthetic non-production account to
-   complete an Authentik login and a host-side SSH/PAM login on Oracle and
-   ChaseBot. Keep the existing `getent`/`id` checks as a separate NSS gate.
-3. **Emergency fallback:** make Authentik/LDAP unavailable in the isolated
-   target and prove direct host SSH plus the documented local recovery path
-   still works. Record mechanism names and sanitized status only.
-4. **Database promotion:** restore or replicate to a separately controlled
-   PostgreSQL writer, measure freshness/RPO, fence the old writer, and prove
-   that writes from the old primary are rejected before routing changes.
-5. **Rollback:** record the reverse routing/fencing sequence and demonstrate
-   that the original home writer can be resumed without split-brain.
+An Authentik/PostgreSQL dump restore into an isolated PostgreSQL target reached
+the Authentik readiness endpoint with HTTP 200. The isolated target used no
+production PVC, Service, ingress, or scheduled writer and was deleted after
+the rehearsal.
 
-Until gates 1–5 have evidence in issue #198, the supported model is
-home-primary with isolated restore/controlled-promotion capacity. Do not scale
-the production writer or deploy an Oracle Authentik/PostgreSQL writer as a
-routine active-active pair.
+## Required gates before HA readiness
+
+1. Use a synthetic non-production directory credential to complete actual PAM
+   authentication on both hosts; Oracle needs a deliberate local PAM test path
+   because sshd does not expose password or keyboard-interactive auth.
+2. In an isolated target, complete an Authentik web login and reconstruct the
+   database, signing, provider, LDAP/outpost, bootstrap, and certificate
+   Secret names by behavior without recording values.
+3. Make only the isolated LDAP target unavailable, repeat local-key logins,
+   and document SSSD cache behavior and recovery.
+4. Document and rehearse password rotation, account disablement, cache expiry,
+   and rollback to local emergency accounts.
+5. For issue #202, prove PostgreSQL promotion, measured RPO/RTO, old-writer
+   fencing, session behavior, routing, and rollback without split-brain.
+
+Until these gates have issue evidence, Authentik remains home-primary with
+isolated restore/controlled-promotion capacity only.
 
 ## Safe verification commands
-
-These commands inspect configuration or isolated targets only; they do not
-read secret values or modify production:
 
 ```bash
 bash tests/authentik-manifest-test.sh
@@ -66,6 +65,4 @@ kubectl -n auth get deploy,sts,svc,pvc -o wide
 kubectl -n auth get secret -o name
 ```
 
-For the restore and login gates, use the isolated procedure in
-`docs/recovery/RESTORE-REHEARSAL.md`, then attach sanitized output and the
-target boundary to issue #198.
+Secret values must never be printed or added to GitHub issues.
