@@ -48,6 +48,8 @@ def test_run_proof_keeps_origin_health_separate_from_public_route_claim():
 
     def opener(request, timeout):
         calls.append(request.full_url)
+        if request.full_url.endswith("/login/broadcaster"):
+            return FakeResponse(status=404, body=b"Not Found", headers={"Content-Type": "text/plain"})
         return FakeResponse(body=b'{"commands":[]}')
 
     evidence = routing_proof.run_proof(
@@ -66,10 +68,12 @@ def test_run_proof_keeps_origin_health_separate_from_public_route_claim():
         "https://oracle.example/api/public/commands",
         "https://commands.greeniespantry.uk/",
         "https://commands.greeniespantry.uk/api/public/commands",
+        "https://commands.greeniespantry.uk/login/broadcaster",
     ]
     assert evidence["origins"]["home"]["ok"] is True
     assert evidence["origins"]["oracle"]["ok"] is True
     assert evidence["public_route"]["ok"] is True
+    assert evidence["public_route"]["routes"]["operator_login"]["status"] == 404
     assert evidence["cloudflare_failover"]["status"] == "not_verified"
     assert evidence["cloudflare_failover"]["reason"] == "no external route transition was observed"
     assert evidence["assumptions"]["route_convergence_seconds"] == 90
