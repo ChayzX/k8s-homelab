@@ -20,6 +20,7 @@ def test_authentik_promotion_targets_the_auth_resource_and_local_secret(monkeypa
         secret_name="auth-authentik",
         timeout=1,
         fence_command="/bin/true",
+        old_writer_fence_command="ssh home sudo fence-writer-domain.sh k3s-agent.service",
     )
 
     adapters = promoter.build_adapters(args)
@@ -28,8 +29,39 @@ def test_authentik_promotion_targets_the_auth_resource_and_local_secret(monkeypa
     adapters.switch_endpoint()
 
     assert any("auth-postgresql-standby" in call for call in calls)
-    assert any("AUTHENTIK_POSTGRESQL__HOST" in call for call in calls)
+    assert any("AUTHENTIK_POSTGRESQL__HOST" in item for call in calls for item in call)
     assert not any("pantry" in item for call in calls for item in call)
+
+
+def test_authentik_promotion_wires_an_explicit_old_writer_fence(monkeypatch) -> None:
+    calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
+    monkeypatch.setattr(
+        promoter.subprocess,
+        "run",
+        lambda command, **kwargs: calls.append((tuple(command), kwargs)),
+    )
+    args = Namespace(
+        witness_url="http://witness",
+        secret="secret",
+        namespace="auth",
+        pod="auth-postgresql-standby-0",
+        service="auth-postgresql-standby",
+        secret_name="auth-authentik",
+        timeout=1,
+        fence_command="/bin/true",
+        old_writer_fence_command="ssh home sudo fence-writer-domain.sh k3s-agent.service",
+    )
+
+    adapters = promoter.build_adapters(args)
+    assert adapters.fence_old_writer is not None
+    adapters.fence_old_writer()
+
+    assert calls == [
+        (
+            ("ssh", "home", "sudo", "fence-writer-domain.sh", "k3s-agent.service"),
+            {"check": True, "timeout": 30},
+        )
+    ]
 
 
 def test_authentik_deployments_are_bounded_to_application_tier() -> None:
