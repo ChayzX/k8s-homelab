@@ -39,6 +39,21 @@ the Authentik readiness endpoint with HTTP 200. The isolated target used no
 production PVC, Service, ingress, or scheduled writer and was deleted after
 the rehearsal.
 
+The restore now has a fail-closed, names-only contract check:
+
+```bash
+AUTHENTIK_RESTORE_NAMESPACE=<disposable-namespace> \
+  scripts/authentik-restore-contract-check.sh
+```
+
+The checker refuses the production `auth` namespace, requires ready
+PostgreSQL, Authentik server/worker, and LDAP outpost workloads, and verifies
+the required Secret names and key names for database, signing, bootstrap,
+LDAP bind, and outpost reconstruction without reading or printing values. A
+passing result is only reconstruction preflight; it does not prove that the
+restored LDAP provider, `posix-admins` policy, certificate, or web session
+works.
+
 ## Required gates before HA readiness
 
 1. ~~Use a synthetic non-production directory credential to complete actual PAM
@@ -73,6 +88,8 @@ isolated restore/controlled-promotion capacity only.
 
 ```bash
 bash tests/authentik-manifest-test.sh
+AUTHENTIK_RESTORE_NAMESPACE=<disposable-namespace> \
+  scripts/authentik-restore-contract-check.sh
 kubectl -n auth get deploy,sts,svc,pvc -o wide
 kubectl -n auth get secret -o name
 ```
