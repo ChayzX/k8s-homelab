@@ -1,7 +1,7 @@
 # Authentik active-active application tier
 
 Authentik is part of the non-Minecraft active-active target. The server,
-worker, and LDAP outpost run capacity in both home and Oracle. The sites use
+worker, and LDAP outpost must run capacity in both home and Oracle. The sites use
 the same Authentik secret key, provider configuration, certificates, and
 session settings.
 
@@ -70,3 +70,16 @@ show:
 
 The isolated restore contract verifies the recovery components but does not
 by itself satisfy these active-active gates.
+
+## Current deployment boundary
+
+The repository contract is now two replicas with hostname anti-affinity for
+the application and LDAP tiers. The live home cluster now has two LDAP
+outpost replicas, while server and worker remain intentionally at one replica
+each until the ChaseBot node's
+13.1-GiB image filesystem is remediated and Oracle's database-authority
+transport is made durable. A failed scale attempt on 2026-09-11 pulled the
+Authentik image into ChaseBot DiskPressure; the cluster was recovered and
+verified before further rollout. Do not call the current live state
+active-active Authentik until both site-local deployments and their shared
+database/fencing gates are proven.
