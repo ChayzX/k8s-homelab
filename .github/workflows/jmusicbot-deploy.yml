@@ -39,6 +39,11 @@ jobs:
     steps:
       - name: Checkout homelab patches
         uses: actions/checkout@v5
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
       - name: Resolve upstream and apply required patches
         id: meta
         run: |
