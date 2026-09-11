@@ -17,10 +17,12 @@ Kubernetes API and its in-cluster ServiceAccount/RBAC. PantryBot and
 Authentik/Postgres are stateful or writer-sensitive and require stronger
 fencing/promotion tests.
 
-This runbook establishes Oracle as a **standby/recovery environment**, not the
-primary JMusicBot writer. Oracle's egress capacity is treated as constrained,
-so the home cluster remains the normal writer. Promotion is an explicit,
-fenced operation only after the home writer is confirmed stopped.
+This runbook establishes Oracle as a **standby/recovery environment** with
+active process capacity but no Discord side effects unless it owns the
+resource-scoped witness lease. Oracle's egress capacity is treated as
+constrained, so the home cluster remains the normal writer. Promotion is an
+explicit, fenced operation: the new site acquires the next witness epoch and
+the old process must lose renewal and shut down before Oracle connects.
 
 ## Gates before touching Oracle
 
@@ -40,6 +42,8 @@ fenced operation only after the home writer is confirmed stopped.
   Secret names, and R2 object listing are recorded.
 - [x] A Discord-side duplicate-work check is prepared; only one JMusicBot
   writer may run at a time.
+- [ ] The same neutral witness is provisioned in both clusters with resource
+  `jmusicbot`; without this, active-active capacity is not safe to enable.
 
 ## Phase 1: record and protect the current environment
 
@@ -126,12 +130,13 @@ curl -fsS http://127.0.0.1:19091/live
 curl -fsS http://127.0.0.1:19091/health
 ```
 
-For the standby, apply the main Deployment with `replicas: 0`. The home
-Deployment remains the sole Discord writer. A temporary R2 restore Job may be
-run on Oracle because it has no Discord client or writer side effect; delete
-the Job and its emptyDir after recording the result. To promote Oracle later,
-first scale the home Deployment to zero, wait for termination, verify no home
-writer remains, then scale the Oracle Deployment to one.
+For the standby, apply the main Deployment with `replicas: 1` only after the
+`jmusicbot-witness` Secret exists. It remains NotReady while home owns the
+`jmusicbot` lease and does not open a Discord session. To promote Oracle, stop
+or isolate the home pod, wait for the 30-second lease to expire, then verify
+Oracle acquired the higher epoch and became Ready. If the witness Secret or
+endpoint is unavailable, leave Oracle at `replicas: 0`; never bypass the lease
+by starting a second writer.
 
 Validate the R2 restore log, Discord login, health readiness, five-minute sync
 sidecar, and outbound access to required APIs. Record the start time, readiness
@@ -159,6 +164,10 @@ plane and home Cloudflare capacity are healthy. Record the rollback in Issue
 The standby migration is accepted only when all of the following are evidenced:
 
 - exactly one JMusicBot writer is running in the home environment;
+- both environments use the same witness authority and resource `jmusicbot`;
+- the non-owner process has no Discord gateway session and is NotReady;
+- after renewal loss, the old process closes Discord and exits before the next
+  witness epoch is acquired;
 - Oracle has the pinned multi-architecture image, required Secret names, and
   can restore the retained R2 generation without starting a writer;
 - home public routes and the external monitor remain healthy;
@@ -168,4 +177,7 @@ The standby migration is accepted only when all of the following are evidenced:
 
 The Oracle standalone server and standby deployment were created on
 2026-09-10. The R2 restore check recovered `serversettings.json` and
-`youtubetoken.txt`; the Oracle JMusicBot Deployment remains at zero replicas.
+`youtubetoken.txt`; keep the Oracle JMusicBot Deployment at zero replicas
+until `jmusicbot-witness` is provisioned and the lease/fencing rehearsal above
+has recorded evidence. After that gate, `replicas: 1` is safe capacity, not a
+second Discord writer.

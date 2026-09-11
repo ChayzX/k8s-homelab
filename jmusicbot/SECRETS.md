@@ -120,3 +120,23 @@ kubectl -n jmusicbot get secret jmusicbot-config-txt jmusicbot-notifier-secrets
 
 Both must exist. Neither should ever be committed, exported to a file in this
 repo, or included in a `kubectl get -o yaml` paste.
+
+## 4. `jmusicbot-witness` — cross-site Discord ownership
+
+Create this Secret separately in the home and independent Oracle clusters. The
+site value must be `home` in the home cluster and `oracle` in Oracle; the URL
+and secret must identify the same neutral witness used by the other
+active-active workloads.
+
+```bash
+kubectl -n jmusicbot create secret generic jmusicbot-witness \
+  --from-literal=JMUSICBOT_SITE=home \
+  --from-literal=JMUSICBOT_WITNESS_URL='https://witness.example.invalid' \
+  --from-literal=JMUSICBOT_WITNESS_SECRET='REPLACE_WITH_SECRET'
+```
+
+Use `JMUSICBOT_SITE=oracle` for the Oracle cluster. The application sends the
+resource name `jmusicbot` to `/v1/authority/acquire` and `/v1/authority/renew`,
+so its lease is independent of Opsbot and PantryBot. The witness must support
+the existing response contract (`site`, positive `epoch`, opaque `token`, and
+renewal `{ "ok": true }`).
