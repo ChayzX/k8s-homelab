@@ -1,0 +1,28 @@
+[Unit]
+Description=Reverse SSH transport for Oracle PostgreSQL failback
+After=network-online.target failover-witness-oracle-tunnel.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+# Oracle publishes its local PostgreSQL primary to GCP loopback only. ChaseBot
+# consumes the port through its independent local-forward unit.
+ExecStart=/usr/bin/ssh -NT \
+  -o BatchMode=yes \
+  -o ExitOnForwardFailure=yes \
+  -o ServerAliveInterval=30 \
+  -o ServerAliveCountMax=3 \
+  -o StrictHostKeyChecking=yes \
+  -i /home/ubuntu/.ssh/gcp-witness-oracle \
+  -R 127.0.0.1:25433:127.0.0.1:5432 \
+  sa_105559435168833655240@136.113.178.106
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

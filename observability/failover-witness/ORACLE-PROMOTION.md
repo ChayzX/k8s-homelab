@@ -25,6 +25,12 @@ forward to the home primary. The Oracle standby is intentionally read-only
 until this controller performs promotion. The endpoint switch is local to the
 Oracle cluster and does not require paid Cloudflare load balancing.
 
+Reverse transport for return-home recovery is separate and always read-only
+until a failback procedure uses it: Oracle publishes local PostgreSQL through
+GCP loopback port `25433`, and ChaseBot exposes that path at
+`192.168.40.200:25433`. The reverse tunnel carries no application traffic in
+normal mode and does not by itself reconfigure the home StatefulSet.
+
 Verification:
 
 ```sh
