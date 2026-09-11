@@ -72,6 +72,13 @@ uses emptyDir only and has no production PVC mount.
   remains open until a non-production WebAuthn credential or an explicitly
   configured alternate test flow is exercised. The namespace and synthetic
   user were deleted after the rehearsal.
+  Before the interactive step, run
+  `AUTHENTIK_RESTORE_NAMESPACE=<namespace> scripts/authentik-restore-contract-check.sh`.
+  It refuses `auth`, checks that the disposable PostgreSQL, Authentik, and
+  LDAP workloads are ready, and verifies only the required Secret key names. Its
+  `provider_behavior=follow_up_required` and
+  `session_completion=follow_up_required` markers prevent the preflight from
+  being mistaken for a completed login or provider reconstruction.
 
 - **Operations isolated SQLite restore:** `operations-20260909T044548Z.db.gz`
   was restored by an init container into an emptyDir-backed temporary
