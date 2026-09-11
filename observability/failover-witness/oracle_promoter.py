@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable
 from urllib import request
+from urllib.error import HTTPError
 
 
 @dataclass
@@ -101,7 +102,12 @@ def run() -> None:
         raise SystemExit("WITNESS_URL and WITNESS_SHARED_SECRET are required")
 
     def acquire() -> dict[str, Any] | None:
-        result = _post(args.witness_url, args.secret, "/v1/authority/acquire", {"site": "oracle", "resource": "pantry:postgres"})
+        try:
+            result = _post(args.witness_url, args.secret, "/v1/authority/acquire", {"site": "oracle", "resource": "pantry:postgres"})
+        except HTTPError as error:
+            if error.code == 409:
+                return None
+            raise
         return result if result.get("token") else None
 
     def renew(token: dict[str, Any]) -> bool:
