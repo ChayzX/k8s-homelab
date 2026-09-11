@@ -26,6 +26,12 @@ this keeps normal merge deploys quiet while still reporting a replacement pod
 that cannot start. The JMusicBot dashboard's Pod Status and Ready Containers
 panels expose the same Kubernetes state in Grafana.
 
+Keep `pantry-bot` in `WATCH_NAMESPACES` so these generic checks cover the
+replacement PantryBot workloads. Do not add the retired monolith Service to
+`FUNCTIONAL_HEALTH_URLS`: its Deployment is intentionally scaled to zero, so
+the Service has no endpoint and a dedicated health probe can only generate a
+false incident. Functional probes remain configured for JMusicBot and Opsbot.
+
 Node health is checked cluster-wide (not per-namespace): if any node's
 `Ready` condition is false for `WORKLOAD_CONFIRMATION_SECONDS` (default 5
 minutes, shared with the workload checks above), it alerts. This is separate
@@ -76,3 +82,16 @@ Run the unit tests with:
 ```sh
 PYTHONPATH=. python3 test_watcher.py
 ```
+
+To re-enable the host watcher after this change is merged and installed, run
+the test above from the installed directory, then have an operator run:
+
+```sh
+sudo systemctl restart k3s-watcher.service
+systemctl is-active k3s-watcher.service
+journalctl -u k3s-watcher.service --since '5 minutes ago' --no-pager
+```
+
+Confirm the service is active, the startup message still lists the
+`pantry-bot` namespace, and no PantryBot functional-health probe appears. A
+service restart was not part of this repository change.
