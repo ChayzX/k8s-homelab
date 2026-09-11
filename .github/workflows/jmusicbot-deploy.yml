@@ -31,7 +31,9 @@ jobs:
   publish-image:
     name: 1 - Resolve upstream, build, and publish
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
+      actions: write
       contents: read
       packages: write
     outputs:
@@ -89,6 +91,8 @@ jobs:
           context: ${{ runner.temp }}/musicbot
           push: true
           platforms: linux/amd64,linux/arm64
+          cache-from: type=gha,scope=jmusicbot-multiarch
+          cache-to: type=gha,mode=max,scope=jmusicbot-multiarch
           tags: |
             ${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}
             ${{ env.IMAGE }}:latest
