@@ -11,7 +11,9 @@ Type=simple
 # stop the local k3s writer domain; do not replace it with a pod deletion.
 ExecStart=/usr/bin/python3 /usr/local/lib/failover-witness/fence_agent.py \
   --site home \
-  --resource pantry:postgres:home \
+  # This resource is intentionally shared by both sites. The site is the
+  # holder; separate per-site resources would permit two database writers.
+  --resource pantry:postgres \
   --lease-seconds 30 \
   --fence-command "/usr/bin/systemctl stop k3s-agent.service"
 EnvironmentFile=/etc/failover-witness/postgres-fence.env
