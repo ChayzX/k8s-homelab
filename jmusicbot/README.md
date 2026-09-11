@@ -9,7 +9,9 @@ Migrates `/home/chase/docker/jmusicbot/docker-compose.yml` (2 services) to k3s.
 | `release-notifier` | Deployment `jmusicbot-release-notifier` | PVC `jmusicbot-notifier-data` (256Mi) at `/data` |
 
 Only the health endpoint (see "Design notes") is exposed, and only in-cluster
-via the ClusterIP Service; neither workload talks to the Kubernetes API.
+via the ClusterIP Service; neither workload talks to the Kubernetes API. The
+main bot uses the neutral witness for a resource-scoped Discord lease; the
+release notifier remains single-site and is not part of active-active capacity.
 
 ---
 
@@ -20,7 +22,7 @@ via the ClusterIP Service; neither workload talks to the Kubernetes API.
 kubectl apply -f 00-namespace.yaml
 
 # 1. secrets (imperative, never in git) — see SECRETS.md
-#    creates: jmusicbot-config-txt, jmusicbot-notifier-secrets
+#    creates: jmusicbot-config-txt, jmusicbot-notifier-secrets, jmusicbot-witness
 
 # 2. identity + notifier config + optional notifier storage
 kubectl apply -f 10-serviceaccounts.yaml
@@ -63,10 +65,12 @@ portable between nodes and independent clusters while retaining one-writer
 semantics through `Recreate` and the migration runbook's fencing step.
 
 Before starting a new environment, verify that `jmusicbot-r2` exists, that the
-R2 prefix contains a retained generation, and that only one JMusicBot writer is
-running. Do not copy state files from a live pod or place R2 credentials in the
-repository. The first Oracle cutover procedure is documented in
-`docs/recovery/ORACLE-JMUSICBOT-MIGRATION.md`.
+R2 prefix contains a retained generation, and that both clusters have the
+resource-scoped `jmusicbot-witness` Secret. Both main-bot Deployments may be
+running, but only the witness lease holder may connect to Discord; the other
+pod waits without opening a Discord session. Do not copy state files from a
+live pod or place R2 credentials in the repository. The first Oracle cutover
+procedure is documented in `docs/recovery/ORACLE-JMUSICBOT-MIGRATION.md`.
 
 ### C. Deployment authority
 
