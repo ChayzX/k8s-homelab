@@ -37,17 +37,18 @@ physical standby, the live host check reports 91m CPU (4%) and 1,835Mi memory
 (15%), with 40GiB free on the root filesystem.
 The standby is streaming with equal receive/replay LSNs. The old disposable
 `pantry-bot-db-rehearsal` namespace was removed after this measurement. The
-side-effecting gateway, worker, and dispatcher deployments remain at zero
-replicas pending source-fencing proof. This confirms available free-tier
-application/database-standby capacity, not automatic cross-site failover.
+source-fencing rehearsal passed, and the side-effecting gateway, worker, and
+dispatcher deployments now run at their declared home/Oracle capacity; the
+legacy SQLite `pantry-bot` Deployment remains scaled to zero. This confirms
+available free-tier application/database-standby capacity, not automatic
+cross-site failover.
 
-The home cluster currently reports `chasebot` at 433m CPU and 1,807Mi memory
-(21% and 54%) and `minecraftmachine` at 573m CPU and 10,180Mi memory (3% and
-82%). The home PantryBot PostgreSQL authority is Ready on `chasebot`; its
-non-secret state copy contains 275 users and 1,700 inventory rows, while the
-legacy SQLite deployment remains the active writer. These readings are a
-point-in-time observation and do not authorize adding workloads to the
-Minecraft node or declaring the database redundant.
+The latest point-in-time home check reports `chasebot` at 594m CPU and
+2,026Mi memory (29% and 60%) and `minecraftmachine` at 615m CPU and 9,658Mi
+memory (4% and 78%). The home PantryBot PostgreSQL authority is Ready and
+writable on `chasebot`; the legacy SQLite deployment is scaled to zero. These
+readings do not authorize adding workloads to the Minecraft node or declaring
+the database multi-primary.
 
 ## GCP evidence boundary
 
