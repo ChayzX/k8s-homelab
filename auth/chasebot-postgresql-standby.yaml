@@ -1,0 +1,119 @@
+# Authentik's home writer on ChaseBot after the cutover.
+#
+# This is a physical standby of the current home Authentik PostgreSQL. It is
+# deliberately a separate StatefulSet/PVC so the original MinecraftMachine
+# PVC remains preserved as a rollback artifact.
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-postgresql-chasebot-standby
+  namespace: auth
+  labels:
+    app.kubernetes.io/name: auth-postgresql-chasebot-standby
+    app.kubernetes.io/part-of: authentik
+    authentik.postgres/role: primary
+spec:
+  selector:
+    app.kubernetes.io/name: auth-postgresql-chasebot-standby
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: auth-postgresql-chasebot-standby
+  namespace: auth
+  labels:
+    app.kubernetes.io/name: auth-postgresql-chasebot-standby
+    app.kubernetes.io/part-of: authentik
+    authentik.postgres/role: primary
+spec:
+  serviceName: auth-postgresql-chasebot-standby
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auth-postgresql-chasebot-standby
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: auth-postgresql-chasebot-standby
+        app.kubernetes.io/part-of: authentik
+        authentik.postgres/role: primary
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: chasebot
+      tolerations:
+        - key: node.kubernetes.io/disk-pressure
+          operator: Exists
+          effect: NoSchedule
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: basebackup
+          image: postgres:17.10-bookworm
+          envFrom:
+            - secretRef:
+                name: auth-postgresql-chasebot-standby
+          command: ["sh", "-ec"]
+          args:
+            - |
+              if [ -f /var/lib/postgresql/data/PG_VERSION ]; then
+                exit 0
+              fi
+              until pg_isready -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER"; do sleep 3; done
+              printf '%s:*:*:%s:%s\n' "$PRIMARY_HOST" "$REPLICATION_USER" "$REPLICATION_PASSWORD" > /tmp/pgpass
+              chmod 600 /tmp/pgpass
+              PGPASSFILE=/tmp/pgpass pg_basebackup \
+                -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER" \
+                -D /var/lib/postgresql/data -Fp -Xs -P -R -S "$PRIMARY_SLOT_NAME"
+              printf "primary_conninfo = 'host=%s port=%s user=%s password=%s application_name=auth-chasebot-standby'\nprimary_slot_name = '%s'\n" \
+                "$PRIMARY_HOST" "$PRIMARY_PORT" "$REPLICATION_USER" "$REPLICATION_PASSWORD" "$PRIMARY_SLOT_NAME" \
+                >> /var/lib/postgresql/data/postgresql.auto.conf
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      containers:
+        - name: postgres
+          image: postgres:17.10-bookworm
+          args:
+            - -c
+            - hot_standby=on
+            - -c
+            - wal_receiver_timeout=10s
+            - -c
+            - max_connections=500
+          envFrom:
+            - secretRef:
+                name: auth-postgresql-chasebot-standby
+          ports:
+            - name: postgres
+              containerPort: 5432
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 10Gi
