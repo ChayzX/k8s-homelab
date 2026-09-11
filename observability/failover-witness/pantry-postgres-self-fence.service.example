@@ -15,7 +15,7 @@ ExecStart=/usr/bin/python3 /usr/local/lib/failover-witness/fence_agent.py \
   # holder; separate per-site resources would permit two database writers.
   --resource pantry:postgres \
   --lease-seconds 30 \
-  --fence-command "/usr/bin/systemctl stop k3s-agent.service"
+  --fence-command "/usr/local/lib/failover-witness/fence-writer-domain.sh k3s-agent.service"
 EnvironmentFile=/etc/failover-witness/postgres-fence.env
 Restart=always
 RestartSec=5

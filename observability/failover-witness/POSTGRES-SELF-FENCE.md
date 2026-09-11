@@ -26,7 +26,11 @@ rejects a commit.
    site, tunnel dependency, and local fence command. Keep the resource exactly
    `pantry:postgres` on both sites; separate per-site resources would permit
    two database writers. Home ChaseBot
-   should stop `k3s-agent.service`; Oracle should stop `k3s.service`.
+   should run `fence-writer-domain.sh k3s-agent.service`; Oracle should run
+   `fence-writer-domain.sh k3s.service`. The helper stops the unit and kills
+   all remaining processes in its cgroup because the k3s units use
+   `KillMode=process` and can otherwise leave containerd shims—and a
+   PostgreSQL writer—alive.
 4. Install the matching `k3s-writer-fence-drop-in.conf.example` as a drop-in
    for that service. `Requires` and `After` are required: `Before` on the
    fence unit alone does not prevent k3s from starting after a failed acquire.
