@@ -131,7 +131,7 @@ index 0000000..cab7655
 +            throw new IllegalStateException("JMUSICBOT_LEASE_SECONDS must be at least 3");
 +        return new WitnessOwnership(url, secret, site,
 +                System.getenv().getOrDefault("JMUSICBOT_WITNESS_RESOURCE", "jmusicbot"),
-+                leaseSeconds, HttpClient.newHttpClient(), Clock.systemUTC());
++                leaseSeconds, HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(), Clock.systemUTC());
 +    }
 +
 +    WitnessOwnership(String baseUrl, String secret, String site, String resource,
@@ -235,10 +235,14 @@ index 0000000..cab7655
 +                .timeout(java.time.Duration.ofSeconds(REQUEST_TIMEOUT_SECONDS))
 +                .header("Authorization", "Bearer " + secret)
 +                .header("Content-Type", "application/json")
-+                .header("Connection", "close")
 +                .POST(HttpRequest.BodyPublishers.ofString(body))
 +                .build();
-+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
++        // The site-local relay closes each HTTP response. Use a fresh client so
++        // Java cannot reuse a stale pooled connection on the next renewal.
++        return HttpClient.newBuilder()
++                .version(HttpClient.Version.HTTP_1_1)
++                .build()
++                .send(request, HttpResponse.BodyHandlers.ofString());
 +    }
 +
 +    private Lease parseLease(String body) throws IOException {
