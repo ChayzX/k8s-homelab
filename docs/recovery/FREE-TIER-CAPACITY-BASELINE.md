@@ -55,7 +55,10 @@ the database multi-primary.
 OS Login SSH access to `discordmusicbot` was verified on 2026-09-10 as
 `chasepdrsn_gmail_com` using the existing operator key. The host reports 2
 vCPUs, 969 MiB RAM, 3.3 GiB free root disk, x86_64, no swap, and no active
-k3s or Docker service. Passwordless sudo is available for the monitor service.
+k3s or Docker service. Read-only Compute Engine metadata confirms project
+`dave-487602`, instance `discordmusicbot`, machine type `e2-micro`, and zone
+`us-central1-a`; the boot disk is persistent. Passwordless sudo is available
+for the monitor service.
 This confirms a lightweight observer host, not a database or general-purpose
 application site.
 
