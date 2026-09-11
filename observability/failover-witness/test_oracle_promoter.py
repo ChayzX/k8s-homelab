@@ -13,6 +13,7 @@ def test_held_authority_does_not_promote_or_enable_roles() -> None:
         switch_endpoint=lambda: calls.append("endpoint"),
         enable_roles=lambda: calls.append("roles"),
         fence=lambda: calls.append("fence"),
+        ready=lambda: True,
     )
 
     assert OraclePromoter(adapters).run_once() is False
@@ -28,6 +29,7 @@ def test_promotion_requires_shared_authority_and_orders_changes() -> None:
         switch_endpoint=lambda: calls.append("endpoint"),
         enable_roles=lambda: calls.append("roles"),
         fence=lambda: calls.append("fence"),
+        ready=lambda: True,
     )
 
     assert OraclePromoter(adapters).run_once() is True
@@ -44,6 +46,7 @@ def test_renewal_loss_self_fences_after_promotion() -> None:
         enable_roles=lambda: calls.append("roles"),
         fence=lambda: calls.append("fence"),
         renew=lambda _token: False,
+        ready=lambda: True,
     )
 
     promoter = OraclePromoter(adapters)
@@ -61,10 +64,27 @@ def test_primary_without_authority_fences_on_restart() -> None:
         switch_endpoint=lambda: calls.append("endpoint"),
         enable_roles=lambda: calls.append("roles"),
         fence=lambda: calls.append("fence"),
+        ready=lambda: True,
     )
 
     assert OraclePromoter(adapters).run_once() is False
     assert calls == ["fence"]
+
+
+def test_unready_oracle_does_not_claim_shared_authority() -> None:
+    calls: list[str] = []
+    adapters = PromotionAdapters(
+        acquire=lambda: calls.append("acquire") or {"epoch": 9, "token": "oracle-token"},
+        is_primary=lambda: False,
+        promote=lambda _token: calls.append("promote"),
+        switch_endpoint=lambda: calls.append("endpoint"),
+        enable_roles=lambda: calls.append("roles"),
+        fence=lambda: calls.append("fence"),
+        ready=lambda: False,
+    )
+
+    assert OraclePromoter(adapters).run_once() is False
+    assert calls == []
 
 
 if __name__ == "__main__":
@@ -72,4 +92,5 @@ if __name__ == "__main__":
     test_promotion_requires_shared_authority_and_orders_changes()
     test_renewal_loss_self_fences_after_promotion()
     test_primary_without_authority_fences_on_restart()
+    test_unready_oracle_does_not_claim_shared_authority()
     print("test_oracle_promoter: all assertions passed")
