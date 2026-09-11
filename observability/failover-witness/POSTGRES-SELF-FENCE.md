@@ -4,7 +4,7 @@
 site-local PostgreSQL writer. It is deliberately separate from the ordinary
 PantryBot application leases:
 
-- resource: `pantry:postgres:home` or `pantry:postgres:oracle`;
+- resource: one shared `pantry:postgres` lease; the site is the holder;
 - the writer acquires a short-lived witness epoch before its site starts;
 - every renewal failure immediately runs the configured local fence command;
 - a failed fence command is fatal, so systemd retries instead of continuing;
@@ -23,7 +23,9 @@ rejects a commit.
 2. Create `/etc/failover-witness/postgres-fence.env` mode `0600`, owned by
    root, with only `WITNESS_URL` and `WITNESS_SHARED_SECRET`.
 3. Copy the example unit to the site-specific systemd unit and change the
-   site, resource, tunnel dependency, and local fence command. Home ChaseBot
+   site, tunnel dependency, and local fence command. Keep the resource exactly
+   `pantry:postgres` on both sites; separate per-site resources would permit
+   two database writers. Home ChaseBot
    should stop `k3s-agent.service`; Oracle should stop `k3s.service`.
 4. Install the matching `k3s-writer-fence-drop-in.conf.example` as a drop-in
    for that service. `Requires` and `After` are required: `Before` on the
