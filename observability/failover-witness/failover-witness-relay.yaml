@@ -98,6 +98,7 @@ spec:
                     values:
                       - minecraftmachine
                       - chasebot
+                      - pantry-bot-oracle
       securityContext:
         runAsUser: 65532
         runAsGroup: 65532

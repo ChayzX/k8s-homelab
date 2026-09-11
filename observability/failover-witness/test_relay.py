@@ -40,7 +40,11 @@ class RelayTests(unittest.TestCase):
 
     def test_home_units_use_loopback_upstreams_and_service_is_node_local(self):
         root = Path(__file__).parent
-        for unit in ("failover-witness-home-tunnel.service", "failover-witness-chasebot-tunnel.service"):
+        for unit in (
+            "failover-witness-home-tunnel.service",
+            "failover-witness-chasebot-tunnel.service",
+            "failover-witness-oracle-tunnel.service",
+        ):
             text = (root / unit).read_text()
             self.assertIn("-L 127.0.0.1:18765:127.0.0.1:8765", text)
             self.assertNotIn("-L 192.168.40.", text)
@@ -54,6 +58,7 @@ class RelayTests(unittest.TestCase):
         self.assertIn("kubernetes.io/hostname", manifest)
         self.assertIn("minecraftmachine", manifest)
         self.assertIn("chasebot", manifest)
+        self.assertIn("pantry-bot-oracle", manifest)
 
 
 if __name__ == "__main__":
