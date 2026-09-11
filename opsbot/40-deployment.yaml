@@ -124,6 +124,8 @@ spec:
                 secretKeyRef:
                   name: opsbot-witness
                   key: OPSBOT_WITNESS_SECRET
+            - name: OPSBOT_WITNESS_RESOURCE
+              value: opsbot
           ports:
             - name: health
               containerPort: 9091
