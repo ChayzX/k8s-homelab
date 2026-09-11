@@ -7,6 +7,7 @@ import argparse
 import base64
 import json
 import os
+import shlex
 import subprocess
 import time
 from dataclasses import dataclass
@@ -119,6 +120,7 @@ def run() -> None:
     parser.add_argument("--namespace", default="pantry-bot")
     parser.add_argument("--pod", default="postgres-authority-standby-0")
     parser.add_argument("--service", default="postgres-authority-standby")
+    parser.add_argument("--old-writer-fence-command", default=os.environ.get("OLD_WRITER_FENCE_COMMAND"))
     args = parser.parse_args()
     if not args.witness_url or not args.secret:
         raise SystemExit("WITNESS_URL and WITNESS_SHARED_SECRET are required")
@@ -197,7 +199,15 @@ def run() -> None:
             timeout=30,
         )
 
-    adapters = PromotionAdapters(acquire, is_primary, promote, switch_endpoint, enable_roles, fence, renew, ready)
+    def fence_old_writer() -> None:
+        if not args.old_writer_fence_command:
+            raise RuntimeError("OLD_WRITER_FENCE_COMMAND is required before promotion")
+        command = shlex.split(args.old_writer_fence_command)
+        if not command:
+            raise RuntimeError("OLD_WRITER_FENCE_COMMAND must not be empty")
+        subprocess.run(command, check=True, timeout=30)
+
+    adapters = PromotionAdapters(acquire, is_primary, promote, switch_endpoint, enable_roles, fence, renew, ready, fence_old_writer)
     promoter = OraclePromoter(adapters)
     while not promoter.run_once():
         time.sleep(max(1, args.lease_seconds // 3))
