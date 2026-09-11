@@ -2,4 +2,4 @@ resources:
   - ../../../jmusicbot
 
 patches:
-  - path: replicas-zero.yaml
+  - path: replicas-one.yaml

@@ -1,0 +1,10 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jmusicbot
+  namespace: jmusicbot
+spec:
+  # Oracle runs continuously as active-active process capacity. The witness
+  # lease in the shared Deployment gates Discord connection and R2 syncing, so
+  # one site can remain a non-owner without being powered off.
+  replicas: 1
