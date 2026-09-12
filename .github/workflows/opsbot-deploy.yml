@@ -102,6 +102,7 @@ jobs:
           cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
           echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/opsbot.kubeconfig"
           chmod 600 "$RUNNER_TEMP/opsbot.kubeconfig"
+          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" scripts/assert-kube-target.sh home
           KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl apply -f opsbot/40-deployment.yaml -n opsbot
 
   restart-opsbot:
@@ -130,6 +131,7 @@ jobs:
           cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
           echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/opsbot.kubeconfig"
           chmod 600 "$RUNNER_TEMP/opsbot.kubeconfig"
+          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" scripts/assert-kube-target.sh home
           POD="$(KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl get pods -n opsbot -l app.kubernetes.io/name=opsbot -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
           echo "previous_pod=$POD" >> "$GITHUB_OUTPUT"
           KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl set image deployment/opsbot "opsbot=ghcr.io/chayzx/opsbot:${IMAGE_TAG}" -n opsbot
@@ -159,6 +161,7 @@ jobs:
           cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
           echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/opsbot.kubeconfig"
           chmod 600 "$RUNNER_TEMP/opsbot.kubeconfig"
+          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" scripts/assert-kube-target.sh home
           KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl rollout status deployment/opsbot -n opsbot --timeout=180s
           # rollout status can return while the old pod is still terminating;
           # selecting .items[0] then races the replacement assertion. Wait for
@@ -201,6 +204,7 @@ jobs:
           chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
           cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
           echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/opsbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/opsbot.kubeconfig"
+          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" scripts/assert-kube-target.sh home
           KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl rollout undo deployment/opsbot -n opsbot
           KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl rollout status deployment/opsbot -n opsbot --timeout=180s
           echo '### Automatic rollback: ✅ completed' >> "$GITHUB_STEP_SUMMARY"
