@@ -1,0 +1,196 @@
+# Oracle-only log collector. Unlike the home DaemonSet this has no local Loki
+# client: Oracle ships directly to Grafana Cloud so the external history and
+# alerting path survives a home-cluster outage.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: promtail-oracle-sa
+  namespace: observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: observability-promtail-oracle
+rules:
+  - apiGroups: [""]
+    resources: [nodes, nodes/proxy, services, endpoints, pods]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: observability-promtail-oracle
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: observability-promtail-oracle
+subjects:
+  - kind: ServiceAccount
+    name: promtail-oracle-sa
+    namespace: observability
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: promtail-oracle-config
+  namespace: observability
+data:
+  promtail.yaml: |
+    server:
+      http_listen_port: 9080
+      grpc_listen_port: 0
+      log_level: info
+    positions:
+      filename: /run/promtail/positions.yaml
+    clients:
+      - url: https://logs-prod-036.grafana.net/loki/api/v1/push
+        basic_auth:
+          username: "1769810"
+          password_file: /etc/promtail/secrets/grafana-cloud-loki-password
+        backoff_config:
+          min_period: 500ms
+          max_period: 5m
+          max_retries: 10
+    scrape_configs:
+      - job_name: oracle-kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: __host__
+          - source_labels: [__meta_kubernetes_pod_phase]
+            regex: "Pending|Succeeded|Failed"
+            action: drop
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_container_name]
+            target_label: container
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            target_label: app_kubernetes_io_name
+          - target_label: cluster
+            replacement: pantry-bot-oracle
+          - target_label: site
+            replacement: oracle
+          - target_label: job
+            replacement: oracle-kubernetes-pods
+          - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+            separator: /
+            replacement: /var/log/pods/*$1/*.log
+            target_label: __path__
+        pipeline_stages:
+          - cri: {}
+          - static_labels:
+              level: info
+          - match:
+              selector: '{job="oracle-kubernetes-pods"} |~ "(?i)(error|exception|fatal|failed|panic)"'
+              stages:
+                - static_labels:
+                    level: error
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: promtail-oracle
+  namespace: observability
+  labels:
+    app: promtail-oracle
+    app.kubernetes.io/name: promtail-oracle
+    app.kubernetes.io/part-of: observability
+spec:
+  selector:
+    matchLabels:
+      app: promtail-oracle
+  template:
+    metadata:
+      labels:
+        app: promtail-oracle
+        app.kubernetes.io/name: promtail-oracle
+        app.kubernetes.io/part-of: observability
+    spec:
+      serviceAccountName: promtail-oracle-sa
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        seccompProfile:
+          type: RuntimeDefault
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: promtail
+          image: grafana/promtail:3.3.2
+          args: [-config.file=/etc/promtail/promtail.yaml]
+          env:
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - name: http-metrics
+              containerPort: 9080
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+              add: [DAC_READ_SEARCH]
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http-metrics
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 25m
+              memory: 48Mi
+            limits:
+              cpu: 150m
+              memory: 192Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/promtail
+              readOnly: true
+            - name: positions
+              mountPath: /run/promtail
+            - name: pod-logs
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: container-logs
+              mountPath: /var/log/containers
+              readOnly: true
+            - name: grafana-cloud-loki-secret
+              mountPath: /etc/promtail/secrets
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: promtail-oracle-config
+        - name: positions
+          hostPath:
+            path: /var/lib/promtail-oracle
+            type: DirectoryOrCreate
+        - name: pod-logs
+          hostPath:
+            path: /var/log/pods
+            type: Directory
+        - name: container-logs
+          hostPath:
+            path: /var/log/containers
+            type: DirectoryOrCreate
+        - name: grafana-cloud-loki-secret
+          secret:
+            secretName: grafana-cloud-loki
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: promtail-oracle
+  namespace: observability
+spec:
+  selector:
+    app: promtail-oracle
+  ports:
+    - name: http-metrics
+      port: 9080
+      targetPort: http-metrics
