@@ -72,6 +72,10 @@ assert not watcher.cloudflared_teardown_suppressed(teardown, False)
 assert watcher.CLOUDFLARED_BENIGN_RE.search(
     "failed to accept incoming stream requests error=timeout: no recent network activity"
 )
+assert watcher.CLOUDFLARED_BENIGN_RE.search(
+    'precheck component="UDP Connectivity" details="QUIC connection failed" '
+    'status=fail target=region1.v2.argotunnel.com'
+)
 assert not watcher.CLOUDFLARED_BENIGN_RE.search(
     "Failed to refresh feature selector error=lookup cfd-features.argotunnel.com"
 )
