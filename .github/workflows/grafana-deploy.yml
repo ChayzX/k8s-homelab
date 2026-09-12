@@ -1,19 +1,12 @@
-# One visible workflow with ConfigMap, restart,
-# rollout, and health-verification stages.
-# Dashboard/configuration deployment for Grafana. Dashboard JSON is kept in
-# dashboards/ and embedded in dashboards/dashboards-configmap.yaml; this
-# workflow makes the apply and restart visible in GitHub Actions instead of
-# requiring a manual kubectl session.
+# Rollback-only workflow for the retained self-hosted Grafana instance.
+#
+# Grafana Cloud is the production observability UI and dashboard destination.
+# The local Grafana deployment is retained only as a temporary comparison or
+# rollback buffer, so dashboard commits must never mutate it automatically.
 
 name: Deploy Grafana
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - dashboards/**
-      - .github/workflows/grafana-deploy.yml
   workflow_dispatch: {}
 
 permissions:
@@ -21,7 +14,7 @@ permissions:
 
 jobs:
   apply-configmap:
-    name: 1 - Apply dashboard ConfigMap (automatic on main push)
+    name: 1 - Apply retained local dashboard ConfigMap (manual rollback only)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
