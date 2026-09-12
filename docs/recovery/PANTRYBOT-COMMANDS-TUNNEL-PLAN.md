@@ -1,11 +1,11 @@
 # PantryBot commands-only Cloudflare Tunnel plan
 
-Status: repository preparation complete; live Cloudflare cutover blocked on an
-authenticated Cloudflare mutation capability. This is the safe routing plan
-for moving the viewer-facing commands site without changing the existing
-shared tunnel or any private/Minecraft route.
+Status: live cutover complete. The dedicated `PantryBot-Commands` tunnel is
+active on home and Oracle, and `commands.greeniespantry.uk` now points to it.
+The shared tunnel retains the other routes but no longer contains the
+commands hostname.
 
-## Read-only evidence captured 2026-09-11
+## Evidence captured 2026-09-12
 
 - The live shared, remotely-managed tunnel UUID is
   `59569621-7067-4146-a0e8-5ed84b7f9538`.
@@ -33,17 +33,22 @@ shared tunnel or any private/Minecraft route.
   the same Deployment/Service contract with two ready ARM64 replicas; its
   current management SSH key was not available to this session for a fresh
   read-only recheck.
-- The authenticated tool inventory exposed GitHub issue mutation, but no
-  Cloudflare tunnel create, tunnel configuration, token, DNS, or Access
-  mutation. No Cloudflare, DNS, tunnel, Secret, connector, or production route
-  mutation was performed. The checked-in connector is
-  `pantry-bot/62-deployment-commands-cloudflared.yaml`.
+- The checked-in connector is `pantry-bot/62-deployment-commands-cloudflared.yaml`.
+- The dedicated tunnel UUID is
+  `c0015a8b-3f9e-4af9-b172-a97b882b4b28`; Cloudflare reports it healthy with
+  eight active edge connections spanning home and Oracle.
+- Its ingress contains only `commands.greeniespantry.uk` and the HTTP 404
+  catch-all. DNS points to its `cfargotunnel.com` target, and the shared
+  tunnel has no commands ingress.
+- Both home and Oracle have one Ready `commands-cloudflared` pod using the
+  same independently provisioned Secret. External checks returned HTTP 200
+  for `/` and `/api/public/commands`.
 
-The UUID and route inventory above came from the live `cloudflared` log and
-Kubernetes read-only inspection, not from a tunnel token. The token was never
-read or printed.
+The original UUID and route inventory came from read-only inspection; the
+cutover was performed through the authenticated Cloudflare API. The tunnel
+token was never printed or committed.
 
-## Target configuration
+## Applied target configuration
 
 Create a new remotely-managed tunnel named `pantrybot-commands-only` (or an
 equivalent unique name). It must have exactly one published application route:
@@ -73,7 +78,13 @@ The same tunnel token may be stored as
 cluster. Each connector resolves the same service name inside its own local
 cluster; no private ClusterIP is published to DNS.
 
-## Safe preparation and cutover order
+## Completed cutover record
+
+The following procedure was executed on 2026-09-12. It remains as the
+rollback/reconstruction record; do not create a second tunnel or repoint DNS
+again unless intentionally rolling back.
+
+## Safe preparation and cutover order (historical)
 
 1. Using an authenticated, least-privilege Cloudflare OAuth/MCP capability,
    create the new remotely-managed tunnel but do not change DNS or the shared
