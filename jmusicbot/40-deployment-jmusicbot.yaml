@@ -61,6 +61,29 @@ spec:
       serviceAccountName: jmusicbot-sa
       # Zero Kubernetes API access required. No token is projected.
       automountServiceAccountToken: false
+      # Both independent sites may run this Deployment, but only the site
+      # holding the resource-scoped witness lease may open Discord. The other
+      # pod waits without creating a JDA session until the lease is available.
+      env:
+        - name: JMUSICBOT_SITE
+          valueFrom:
+            secretKeyRef:
+              name: jmusicbot-witness
+              key: JMUSICBOT_SITE
+        - name: JMUSICBOT_WITNESS_URL
+          valueFrom:
+            secretKeyRef:
+              name: jmusicbot-witness
+              key: JMUSICBOT_WITNESS_URL
+        - name: JMUSICBOT_WITNESS_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: jmusicbot-witness
+              key: JMUSICBOT_WITNESS_SECRET
+        - name: JMUSICBOT_WITNESS_RESOURCE
+          value: "jmusicbot"
+        - name: JMUSICBOT_LEASE_SECONDS
+          value: "30"
       # java is PID 1 inside this image (verified: `docker top` shows only the
       # java process, so /app/entrypoint.sh exec's it), so SIGTERM reaches the
       # JVM directly and 30s is ample for a clean Discord disconnect.
@@ -104,7 +127,7 @@ spec:
           command:
             - sh
             - -c
-            - rclone copy r2:pantry-bot-backups/jmusicbot/ /musicbot/ --config=/dev/null
+            - rclone copy r2:pantry-bot-backups/jmusicbot/ /musicbot/ --exclude '.jmusicbot-lease-owner' --config=/dev/null
           env: &r2-env
             - name: RCLONE_CONFIG_R2_TYPE
               value: s3
@@ -139,6 +162,12 @@ spec:
           # see scripts/patches/jmusicbot-potoken.patch) — k8s-homelab#41.
           image: ghcr.io/chayzx/jmusicbot:upstream-0.7.0-3e3116039c64
           imagePullPolicy: IfNotPresent  # see header note 1 — do not change
+          # The active-active image requires the site-scoped witness settings.
+          # Keep them in the declarative workload so a CI image rollout cannot
+          # silently remove fencing from the live process.
+          envFrom:
+            - secretRef:
+                name: jmusicbot-witness
           # Health endpoint: a JDK-built-in HttpServer on
           # 9091 in the patched image. /health returns 200 only after the bot
           # has logged into Discord; /live returns 200 whenever the JVM is
@@ -217,14 +246,20 @@ spec:
           # change rarely (serversettings.json on a config change,
           # youtubetoken.txt on OAuth refresh) -- a 5-minute sync loop is
           # more than tight enough and far simpler than an inotify watcher.
+          # Only the Java owner writes .jmusicbot-lease-owner after acquiring
+          # the witness lease. A standby therefore restores but never syncs
+          # its stale state back into the shared R2 prefix.
           command:
             - sh
             - -c
             - |
               while true; do
-                rclone sync /musicbot r2:pantry-bot-backups/jmusicbot/ \
-                  --exclude 'config.txt' --exclude 'config.txt.bak*' \
-                  --config=/dev/null --quiet
+                if [ -f /musicbot/.jmusicbot-lease-owner ]; then
+                  rclone sync /musicbot r2:pantry-bot-backups/jmusicbot/ \
+                    --exclude 'config.txt' --exclude 'config.txt.bak*' \
+                    --exclude '.jmusicbot-lease-owner' \
+                    --config=/dev/null --quiet
+                fi
                 sleep 300
               done
           env: *r2-env
