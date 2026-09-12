@@ -64,6 +64,7 @@ jobs:
           KUBECONFIG: ${{ runner.temp }}/grafana.kubeconfig
         run: |
           set -euo pipefail
+          scripts/assert-kube-target.sh home
           kubectl apply -f dashboards/dashboards-configmap.yaml -n observability
           echo '### Dashboard ConfigMap: ✅ applied' >> "$GITHUB_STEP_SUMMARY"
           echo '- Source: `dashboards/dashboards-configmap.yaml`' >> "$GITHUB_STEP_SUMMARY"
@@ -115,6 +116,7 @@ jobs:
           KUBECONFIG: ${{ runner.temp }}/grafana.kubeconfig
         run: |
           set -euo pipefail
+          scripts/assert-kube-target.sh home
           POD="$(kubectl get pods -n observability -l app.kubernetes.io/name=grafana -o jsonpath='{.items[0].metadata.name}')"
           echo "previous_pod=$POD" >> "$GITHUB_OUTPUT"
           kubectl rollout restart deployment/grafana -n observability
@@ -159,7 +161,9 @@ jobs:
       - name: Wait for Grafana rollout
         env:
           KUBECONFIG: ${{ runner.temp }}/grafana.kubeconfig
-        run: kubectl rollout status deployment/grafana -n observability --timeout=180s
+        run: |
+          scripts/assert-kube-target.sh home
+          kubectl rollout status deployment/grafana -n observability --timeout=180s
 
       - name: Verify Grafana pod health
         env:

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+if [[ "$*" == "get nodes -o json" ]]; then
+  printf '%s\n' '{"items":[{"metadata":{"name":"minecraftmachine"},"status":{"conditions":[{"type":"Ready","status":"True"}]}},{"metadata":{"name":"unexpected"},"status":{"conditions":[{"type":"Ready","status":"True"}]}}]}'
+  exit 0
+fi
+exit 1
