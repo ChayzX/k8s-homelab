@@ -6,8 +6,8 @@ an in-cluster condition is healthy.
 
 | Signal | Collection/history | Single evaluator | Stable identity / continuity |
 |---|---|---|---|
-| Workload, node, restart-loop, and Loki log conditions | Prometheus and Loki | Host `k3s-watcher` | Hashed `eventKey`; singleton lock prevents two watcher processes; Operations reconciliation resolves only after a complete collection pass. |
-| Route-specific public PantryBot checks while home is reachable | HTTPS checks from host `k3s-watcher` | Host `k3s-watcher` | `external:<route>` event keys; five-minute workload confirmation and normal recovery sweep. This adds Discord/Operations context but is not independent of MinecraftMachine. |
+| Workload, node, restart-loop, and Loki log conditions | Prometheus and Loki | Host `k3s-watcher` | Hashed `eventKey`; singleton lock prevents two watcher processes; one notification per active condition, with the gate cleared only on recovery; Operations reconciliation resolves only after a complete collection pass. |
+| Route-specific public PantryBot checks while home is reachable | HTTPS checks from host `k3s-watcher` | Host `k3s-watcher` | `external:<route>` event keys; five-minute workload confirmation, one notification per active condition, and normal recovery sweep. This adds Discord/Operations context but is not independent of MinecraftMachine. |
 | Public HTTP/API/R2 continuity from outside home | GCP `homelab-external-monitor` | GCP monitor | `external-monitor:<check>` is persisted in `active_alerts`; notifications are emitted only when that per-check identity fires or recovers. Provider-acceptance receipts are bounded in `notification_receipts` and can be checked with `probe-notification-receipt.py`. |
 | Independent public reachability observation | UptimeRobot account configuration (not stored here) | UptimeRobot | Provider-side monitor identity; its notification is independent evidence, not a second source for the watcher’s workload alerts. |
 | Dashboards and log exploration | Grafana | None | Grafana provisioning currently contains no alert rules; dashboards are views only. |
