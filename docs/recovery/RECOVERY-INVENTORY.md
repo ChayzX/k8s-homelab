@@ -17,7 +17,7 @@
 | Namespace/data | PVC or source | Current risk | Required recovery test |
 |---|---|---|---|
 | `auth` PostgreSQL | `data-auth-postgresql-0`, 10Gi local-path | Authentik and dashboard unavailable with tower | Restore dump into isolated Postgres and verify Authentik startup |
-| `cartwise` PostgreSQL | `cartwise-pgdata`, 2Gi local-path | Local state; Cartwise HA gate is tracked separately | Confirm backup/restore or controlled promotion, and remove the web hostPath before any Oracle placement (homelab #205) |
+| `cartwise` PostgreSQL | Not evaluated | Explicitly out of scope for this project | No HA, migration, promotion, or Oracle placement work in this project |
 | `jmusicbot` | `jmusicbot-config`, R2 file sync | Mutable mirror, no generation/freshness gate | Restore a retained generation and verify token/config integrity |
 | `jmusicbot` notifier | `jmusicbot-notifier-data`, 256Mi local-path | Local-only notifier state | Determine whether state matters; restore if required |
 | Minecraft | `minecraft-world`, 10Gi local-path plus host backup | Archive is now copied offsite, but isolated startup restore is not yet rehearsed | Restore world, plugins, config, and version metadata elsewhere |
