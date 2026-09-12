@@ -23,6 +23,26 @@ The legacy SQLite deployment in `k8s/deployment.yaml` and homelab
 `pantry-bot/40-deployment.yaml` is not the HA path and must not be started as a
 second writer during an incident.
 
+## Current recovery state (2026-09-12)
+
+The live system is in an Oracle-primary recovery window, not normal
+home-primary operation:
+
+- `pantry-bot-platform/PANTRY_DATABASE_URL` points to the Oracle database
+  endpoint; do not print the Secret value while checking this.
+- Oracle `postgres-authority-standby-0` reports `pg_is_in_recovery() = false`.
+- Home `postgres-authority-home-return-0` reports `pg_is_in_recovery() = true`
+  and is intentionally not selected by the production application endpoint.
+- Oracle currently owns the Twitch ingress, Twitch outbound, and overlay lease
+  rows. Home application capacity may remain Ready, but it must not acquire a
+  second external-side-effect owner.
+
+Do not switch the application Secret, promote the home standby, or reseed
+Oracle from home until the current Oracle writer is fenced, the home standby
+is verified current, and the controlled return-home sequence below has an
+explicit maintenance record in GitHub Issue #147 or #191. A healthy pod or a
+successful readiness probe is not a fencing proof.
+
 ## Normal health check
 
 ```bash
