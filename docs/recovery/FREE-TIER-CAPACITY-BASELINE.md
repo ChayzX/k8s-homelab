@@ -36,18 +36,19 @@ PantryBot public/private UI, API, and overlay capacity plus the persistent
 physical standby, the live host check reports 91m CPU (4%) and 1,835Mi memory
 (15%), with 40GiB free on the root filesystem. The standby is streaming with
 equal receive/replay LSNs. The old disposable `pantry-bot-db-rehearsal`
-namespace was removed after this measurement. The side-effecting gateway,
-worker, and dispatcher deployments remain at zero replicas pending
-source-fencing proof. This confirms available free-tier application/database-
-standby capacity, not automatic cross-site failover.
+namespace was removed after this measurement. Both sites now run the
+side-effecting gateway, worker, and dispatcher roles under target-scoped
+witness fencing; Oracle is the current writable authority and home is the
+read-only return standby. This confirms free-tier capacity and current
+single-writer placement, not automatic cross-site failover.
 
 The home cluster currently reports `chasebot` at 433m CPU and 1,807Mi memory
 (21% and 54%) and `minecraftmachine` at 573m CPU and 10,180Mi memory (3% and
-82%). The home PantryBot PostgreSQL authority is Ready on `chasebot`; its
-non-secret state copy contains 275 users and 1,700 inventory rows, while the
-legacy SQLite deployment remains the active writer. These readings are a
-point-in-time observation and do not authorize adding workloads to the
-Minecraft node or declaring the database redundant.
+82%). The home PantryBot return-standby PostgreSQL is Ready on
+`minecraftmachine`; its non-secret state copy contains 275 users and 1,700
+inventory rows. Oracle is the current writable authority. These readings are
+a point-in-time observation and do not authorize adding workloads to the
+Minecraft node or declaring the database automatically redundant.
 
 ## GCP evidence boundary
 
