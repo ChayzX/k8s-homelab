@@ -12,6 +12,29 @@ caller must still prove that the old PostgreSQL writer is stopped or rejects
 writes before promoting a new writer. Automatic failover remains disabled
 until that proof exists.
 
+## Minecraft-safe PantryBot writer fence
+
+`fence-pantry-postgres.sh` is the source-side fence contract for the home
+PantryBot database. It scales down and force-removes only the named PantryBot
+PostgreSQL StatefulSets, verifies that their services have no endpoints, and
+fails closed if the Kubernetes API or any database pod remains reachable. It
+does not stop `k3s`, `k3s-agent`, containerd, a node, or Minecraft. The
+repository contract test is `test_pantry_postgres_fence.py`.
+
+Install it on the home host as the exact command used by the GCP forced-command
+path:
+
+```sh
+sudo install -o root -g root -m 0755 \
+  observability/failover-witness/fence-pantry-postgres.sh \
+  /usr/local/sbin/fence-pantry-postgres
+```
+
+The command is destructive fencing, not a health check. `--help` is the only
+non-mutating invocation. Do not test the fence through production SSH until a
+maintenance window has recorded the expected standby restore and stale-writer
+proof in GitHub Issues #147 and #191.
+
 The service listens on localhost only. Each site can reach it through an
 outbound SSH local-forward to GCP; no public application port or paid load
 balancer is required. The shared secret belongs in a root-owned environment
