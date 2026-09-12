@@ -4,6 +4,16 @@
 
 This is the initial capacity gate for the free active-active design. It is an observation record, not an authorization to deploy production failover.
 
+## Latest live recheck
+
+Read-only recheck on 2026-09-12: `minecraftmachine` is Ready and reports
+965m CPU / 10,950Mi memory (6% / 88%); `chasebot` remains NotReady with no
+current metrics; Oracle `pantry-bot-oracle` is Ready and reports 278m CPU /
+3,458Mi memory (13% / 28%) with 34GiB free on `/`. PantryBot PostgreSQL is
+currently writable on Oracle while home is in recovery and receiving WAL. This
+is the active failover state; do not infer that home is primary from the older
+baseline rows below, and do not force return-home during an active stream.
+
 ## Observed hosts
 
 | Host | CPU | Memory | Disk | Current observation | Gate |
