@@ -4,7 +4,7 @@ index a82b18f..bfb6fe5 100644
 +++ b/src/main/java/com/jagrosh/jmusicbot/JMusicBot.java
 @@ -30,6 +30,8 @@ import com.jagrosh.jmusicbot.utils.OtherUtil;
  import com.jagrosh.jmusicbot.utils.TeeOutputStream;
- 
+
  import java.io.PrintStream;
 +import java.nio.file.Files;
 +import java.nio.file.Path;
@@ -13,7 +13,7 @@ index a82b18f..bfb6fe5 100644
  import net.dv8tion.jda.api.exceptions.ErrorResponseException;
 @@ -44,6 +46,7 @@ import org.slf4j.LoggerFactory;
   */
- public class JMusicBot 
+ public class JMusicBot
  {
 +    private static final Path OWNERSHIP_MARKER = Path.of("/musicbot/.jmusicbot-lease-owner");
      public final static Logger LOG = LoggerFactory.getLogger(JMusicBot.class);
@@ -22,7 +22,7 @@ index a82b18f..bfb6fe5 100644
 @@ -200,6 +203,32 @@ public class JMusicBot
          healthServer.start();
          bot.setHealthServer(healthServer);
- 
+
 +        WitnessOwnership ownership;
 +        try
 +        {
@@ -51,7 +51,7 @@ index a82b18f..bfb6fe5 100644
 +
          // TrackLoadingMonitor is configured via Bot.getAudioLoadWrapper() (DI pattern).
          VoiceConnectionMonitor.setEnabled(guiEnabled);
- 
+
 @@ -230,6 +259,19 @@ public class JMusicBot
          {
              JDA jda = DiscordService.createJDA(config, bot, waiter, client, userInteraction);
