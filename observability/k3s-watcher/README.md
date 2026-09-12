@@ -40,6 +40,9 @@ workload failing wherever it's scheduled, but say nothing if the node itself
 cluster before its pods are evicted. Node alerts always go to the primary
 `DISCORD_USER_ID` only, never `EXTRA_ALERT_RECIPIENTS` — a node outage isn't
 namespace-scoped the way a workload failure is.
+Known intentionally retired nodes may be listed in the host-only
+`IGNORED_NODES` comma-separated setting; they are excluded from node alerts
+until removed from that setting.
 
 The Discord token, user ID, Loki URL, kubeconfig, and systemd unit remain
 host-local secrets/configuration. Install this directory on the host and

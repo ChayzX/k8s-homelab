@@ -41,6 +41,11 @@ WATCH_NAMESPACES = [
     for ns in os.environ.get("WATCH_NAMESPACES", "jmusicbot,pantry-bot").split(",")
     if ns.strip()
 ]
+IGNORED_NODES = {
+    name.strip()
+    for name in os.environ.get("IGNORED_NODES", "").split(",")
+    if name.strip()
+}
 FUNCTIONAL_HEALTH_URLS = {}
 for entry in os.environ.get("FUNCTIONAL_HEALTH_URLS", "").split(","):
     entry = entry.strip()
@@ -912,6 +917,8 @@ def check_node_health():
     active_event_keys = set()
     for node in json.loads(result.stdout).get("items", []):
         name = node.get("metadata", {}).get("name", "unknown")
+        if name in IGNORED_NODES:
+            continue
         conditions = {
             c.get("type"): c for c in node.get("status", {}).get("conditions", [])
         }
