@@ -429,6 +429,20 @@ try:
     watcher.sweep_workload_recoveries({"workload:" + "e" * 64})
     assert len(watcher._active_workload_alerts) == 1
     watcher.send_discord_alert.assert_not_called()
+
+    # A missed/slow collection pass must not clear a recently observed
+    # condition and re-arm its notification latch.
+    slow_key = "workload:" + "g" * 64
+    watcher._active_workload_alerts[slow_key] = {
+        "namespace": "pantry-bot",
+        "workload": "pantry-bot",
+        "pod": None,
+        "last_seen": watcher.time.time(),
+        "recovery_message": "still down",
+    }
+    watcher.sweep_workload_recoveries(set())
+    assert slow_key in watcher._active_workload_alerts
+    watcher.send_discord_alert.assert_not_called()
 finally:
     watcher.queue_operations_alert = original_queue
     watcher.send_discord_alert = original_discord
