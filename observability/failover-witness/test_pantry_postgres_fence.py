@@ -39,6 +39,12 @@ def test_fence_script_has_a_non_mutating_help_path() -> None:
     assert "do not use it as a health check" in text
 
 
+def test_fence_script_requires_explicit_confirmation() -> None:
+    text = SCRIPT.read_text()
+    assert '"--confirm"' in text
+    assert "explicit_confirmation_required" in text
+
+
 if __name__ == "__main__":
     test_fence_script_exists_and_targets_only_pantry_postgres()
     test_fence_script_never_stops_the_k3s_writer_domain()

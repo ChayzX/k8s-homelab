@@ -33,6 +33,11 @@ USAGE
   exit 0
 fi
 
+[[ "${1:-}" == "--confirm" && "$#" == 1 ]] || {
+  echo "fence_status=failed reason=explicit_confirmation_required" >&2
+  exit 2
+}
+
 fail() {
   echo "fence_status=failed reason=$1" >&2
   exit 1

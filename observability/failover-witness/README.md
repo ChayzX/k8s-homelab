@@ -21,8 +21,10 @@ fails closed if the Kubernetes API or any database pod remains reachable. It
 does not stop `k3s`, `k3s-agent`, containerd, a node, or Minecraft. The
 repository contract test is `test_pantry_postgres_fence.py`.
 
-Install it on the home host as the exact command used by the GCP forced-command
-path:
+Install it only on the source-writer host that owns the local PostgreSQL
+authority (currently ChaseBot during normal home-primary operation). Do not
+install this command on MinecraftMachine; Minecraft shares its control plane
+with the home standby and is intentionally excluded from the fence target:
 
 ```sh
 sudo install -o root -g root -m 0755 \
@@ -31,9 +33,12 @@ sudo install -o root -g root -m 0755 \
 ```
 
 The command is destructive fencing, not a health check. `--help` is the only
-non-mutating invocation. Do not test the fence through production SSH until a
-maintenance window has recorded the expected standby restore and stale-writer
-proof in GitHub Issues #147 and #191.
+non-mutating invocation. The existing GCP reverse-SSH endpoint is a forced
+operation on ChaseBot and currently rejects arguments; inspect or replace
+that forced operation only through the ChaseBot maintenance path. Do not test
+the fence through production SSH until a maintenance window has recorded the
+expected standby restore and stale-writer proof in GitHub Issues #147 and
+#191.
 
 The service listens on localhost only. Each site can reach it through an
 outbound SSH local-forward to GCP; no public application port or paid load
