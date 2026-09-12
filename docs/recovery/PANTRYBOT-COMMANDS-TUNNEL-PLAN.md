@@ -1,11 +1,16 @@
 # PantryBot commands-only Cloudflare Tunnel plan
 
-Status: repository preparation complete; live Cloudflare cutover blocked on an
-authenticated Cloudflare mutation capability. This is the safe routing plan
-for moving the viewer-facing commands site without changing the existing
-shared tunnel or any private/Minecraft route.
+Status: live cutover complete. The dedicated `PantryBot-Commands` tunnel is
+active on home and Oracle, and `commands.greeniespantry.uk` now points to it.
+The shared tunnel retains the other routes but no longer contains the
+commands hostname. The cutover is not the remaining blocker for issue #148;
+the unchecked work is external site-loss and rollback evidence.
 
-## Read-only evidence captured 2026-09-11
+## Historical pre-cutover evidence captured 2026-09-11
+
+The observations below are retained to explain why this plan existed. They
+must not be read as current state: the commands hostname was subsequently
+migrated to the dedicated tunnel and re-verified on 2026-09-12.
 
 - The live shared, remotely-managed tunnel UUID is
   `59569621-7067-4146-a0e8-5ed84b7f9538`.
@@ -16,7 +21,7 @@ shared tunnel or any private/Minecraft route.
   `mods` hostnames, followed by an HTTP 404 catch-all. The live log also shows
   the `bead` route still points at the retired Scotty service; that unrelated
   issue is deliberately out of scope here.
-- `commands.greeniespantry.uk` currently points at the legacy PantryBot
+- Before cutover, `commands.greeniespantry.uk` pointed at the legacy PantryBot
   service. Fresh external checks returned:
   - `/` -> HTTP 200, legacy PantryBot HTML, SHA-256
     `09d499e39606aa70428b3b0d037d6123be8ba1b470fa8bdd3586e5eff1149089`
@@ -26,27 +31,45 @@ shared tunnel or any private/Minecraft route.
     `d714f8102e93fa1d52ac0f3e68564641bdb7e04f4031d9ab0c8b08adb2500c41`
   - `oauth.greeniespantry.uk/login/broadcaster` -> HTTP 200
   - `mods.greeniespantry.uk/mod/` -> HTTP 302 to `/login/mod`
-- The home `pantry-commands-site` Service is internal ClusterIP only and has
+- Before cutover, the home `pantry-commands-site` Service was internal
+  ClusterIP only and had
   two ready pods. A direct Service port-forward returned HTTP 200 from `/` and
   `/api/public/commands`, with 13 command items, and HTTP 404 from
   `/login/broadcaster`. The independent Oracle environment previously passed
   the same Deployment/Service contract with two ready ARM64 replicas; its
   current management SSH key was not available to this session for a fresh
   read-only recheck.
-- The authenticated tool inventory exposed GitHub issue mutation, but no
-  Cloudflare tunnel create, tunnel configuration, token, DNS, or Access
-  mutation. No Cloudflare, DNS, tunnel, Secret, connector, or production route
-  mutation was performed. The checked-in connector is
-  `pantry-bot/62-deployment-commands-cloudflared.yaml`.
+- The checked-in connector is `pantry-bot/62-deployment-commands-cloudflared.yaml`.
 
-The UUID and route inventory above came from the live `cloudflared` log and
-Kubernetes read-only inspection, not from a tunnel token. The token was never
-read or printed.
+## Current cutover evidence — 2026-09-12
+- The dedicated tunnel UUID is
+  `c0015a8b-3f9e-4af9-b172-a97b882b4b28`; Cloudflare reports it healthy with
+  eight active edge connections spanning home and Oracle.
+- Its ingress contains only `commands.greeniespantry.uk` and the HTTP 404
+  catch-all. DNS points to its `cfargotunnel.com` target, and the shared
+  tunnel has no commands ingress.
+- Both home and Oracle have one Ready `commands-cloudflared` pod using the
+  same independently provisioned Secret. External checks returned HTTP 200
+  for `/` and `/api/public/commands`.
 
-## Target configuration
+## Remaining blocker for PantryBot issue #148
 
-Create a new remotely-managed tunnel named `pantrybot-commands-only` (or an
-equivalent unique name). It must have exactly one published application route:
+The implementation and live route cutover are complete. The only unchecked
+acceptance work is to periodically verify the route during a site loss and to
+record an externally observed DNS/tunnel rollback and recovery exercise. That
+requires a controlled Cloudflare/DNS operation and live two-site failure
+window; it cannot be completed by repository-only changes or by adding another
+manifest. Do not create a second tunnel or re-run the cutover to satisfy this
+gate.
+
+The original UUID and route inventory came from read-only inspection; the
+cutover was performed through the authenticated Cloudflare API. The tunnel
+token was never printed or committed.
+
+## Applied target configuration
+
+The applied remotely-managed tunnel named `pantrybot-commands-only` (or an
+equivalent unique name) has exactly one published application route:
 
 ```json
 {
@@ -73,7 +96,13 @@ The same tunnel token may be stored as
 cluster. Each connector resolves the same service name inside its own local
 cluster; no private ClusterIP is published to DNS.
 
-## Safe preparation and cutover order
+## Completed cutover record
+
+The following procedure was executed on 2026-09-12. It remains as the
+rollback/reconstruction record; do not create a second tunnel or repoint DNS
+again unless intentionally rolling back.
+
+## Safe preparation and cutover order (historical reference)
 
 1. Using an authenticated, least-privilege Cloudflare OAuth/MCP capability,
    create the new remotely-managed tunnel but do not change DNS or the shared

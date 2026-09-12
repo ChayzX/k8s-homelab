@@ -4,24 +4,14 @@
 
 This is the initial capacity gate for the free active-active design. It is an observation record, not an authorization to deploy production failover.
 
-## Latest live recheck
-
-Read-only recheck on 2026-09-12: `minecraftmachine` is Ready and reports
-965m CPU / 10,950Mi memory (6% / 88%); `chasebot` remains NotReady with no
-current metrics; Oracle `pantry-bot-oracle` is Ready and reports 278m CPU /
-3,458Mi memory (13% / 28%) with 34GiB free on `/`. PantryBot PostgreSQL is
-currently writable on Oracle while home is in recovery and receiving WAL. This
-is the active failover state; do not infer that home is primary from the older
-baseline rows below, and do not force return-home during an active stream.
-
 ## Observed hosts
 
 | Host | CPU | Memory | Disk | Current observation | Gate |
 |---|---:|---:|---:|---|---|
 | `minecraftmachine` | 16 logical CPUs | 15 GiB total, 8 GiB available | Root 3.4 TiB free; `/mnt/nvme` 188 GiB free | Home control plane and Minecraft host; Minecraft excluded from this project | Do not alter Minecraft placement |
-| `pantry-bot-oracle` | 2 vCPU; 2 allocatable k3s CPU | 11,932 MiB total, 8,743 MiB available; k3s currently 19% CPU / 29% memory | 36 GiB free | Independent arm64 Oracle k3s Ready; PantryBot stateless/API/overlay capacity plus the physical PostgreSQL standby Ready | Keep resource limits explicit; recheck with side-effect roles and egress |
+| `pantry-bot-oracle` | 2 vCPU; 2 allocatable k3s CPU | 11,932 MiB total, 10,164 MiB available; k3s currently 4% CPU / 15% memory | 40 GiB free | Independent arm64 Oracle k3s Ready; PantryBot stateless/API/overlay capacity plus the physical PostgreSQL standby Ready | Keep resource limits explicit; recheck with side-effect roles and egress |
 | `discordmusicbot` | 2 vCPU | 969 MiB total, 578 MiB available at check | 3.3 GiB free | x86_64 observer host; no swap, k3s, or Docker active; OS Login SSH and passwordless sudo verified | Observer-only; any coordination witness must be lightweight and pass a measured memory/network test |
-| `chasebot` | 2 allocatable CPU | 2,026 MiB currently used (60% of node memory); 594m CPU (29%) | Local-path storage only; current PVCs are RWO and node-local | Ready second home k3s node; hosts PantryBot stateless/API/overlay capacity and the live PostgreSQL primary | Use for stateless replicas and the home primary only; do not treat it as an independent site |
+| `chasebot` | 2 allocatable CPU | 1,807 MiB currently used (54% of node memory); 433m CPU (21%) | Local-path storage only; current PVCs are RWO and node-local | Ready second home k3s node; hosts PantryBot stateless/API/overlay capacity and the live PostgreSQL primary | Use for stateless replicas and the home primary only; do not treat it as an independent site |
 
 ## Current home-to-Oracle network observation
 
@@ -43,32 +33,28 @@ capacity inside the home failure domain, not independent state redundancy.
 Oracle k3s is also currently a single Ready arm64 control-plane node with 2
 allocatable CPU and 11,932 MiB total memory. After deploying the stateless
 PantryBot public/private UI, API, and overlay capacity plus the persistent
-physical standby, the live host check reports 388m CPU (19%) and 3,555Mi
-memory (29%), with 36GiB free on the root filesystem.
-The standby is streaming with equal receive/replay LSNs. The old disposable
-`pantry-bot-db-rehearsal` namespace was removed after this measurement. The
-source-fencing rehearsal passed, and the side-effecting gateway, worker, and
-dispatcher deployments now run at their declared home/Oracle capacity; the
-legacy SQLite `pantry-bot` Deployment remains scaled to zero. This confirms
-available free-tier application/database-standby capacity, not automatic
-cross-site failover.
+physical standby, the live host check reports 91m CPU (4%) and 1,835Mi memory
+(15%), with 40GiB free on the root filesystem. The standby is streaming with
+equal receive/replay LSNs. The old disposable `pantry-bot-db-rehearsal`
+namespace was removed after this measurement. The side-effecting gateway,
+worker, and dispatcher deployments remain at zero replicas pending
+source-fencing proof. This confirms available free-tier application/database-
+standby capacity, not automatic cross-site failover.
 
-The latest point-in-time home check reports `chasebot` at 594m CPU and
-2,026Mi memory (29% and 60%) and `minecraftmachine` at 615m CPU and 9,658Mi
-memory (4% and 78%). The home PantryBot PostgreSQL authority is Ready and
-writable on `chasebot`; the legacy SQLite deployment is scaled to zero. These
-readings do not authorize adding workloads to the Minecraft node or declaring
-the database multi-primary.
+The home cluster currently reports `chasebot` at 433m CPU and 1,807Mi memory
+(21% and 54%) and `minecraftmachine` at 573m CPU and 10,180Mi memory (3% and
+82%). The home PantryBot PostgreSQL authority is Ready on `chasebot`; its
+non-secret state copy contains 275 users and 1,700 inventory rows, while the
+legacy SQLite deployment remains the active writer. These readings are a
+point-in-time observation and do not authorize adding workloads to the
+Minecraft node or declaring the database redundant.
 
 ## GCP evidence boundary
 
 OS Login SSH access to `discordmusicbot` was verified on 2026-09-10 as
 `chasepdrsn_gmail_com` using the existing operator key. The host reports 2
 vCPUs, 969 MiB RAM, 3.3 GiB free root disk, x86_64, no swap, and no active
-k3s or Docker service. Read-only Compute Engine metadata confirms project
-`dave-487602`, instance `discordmusicbot`, machine type `e2-micro`, and zone
-`us-central1-a`; the boot disk is persistent. Passwordless sudo is available
-for the monitor service.
+k3s or Docker service. Passwordless sudo is available for the monitor service.
 This confirms a lightweight observer host, not a database or general-purpose
 application site.
 
@@ -87,13 +73,14 @@ coordination candidate.
   America to eligible destinations. This is an observer-sized allowance, not
   a safe assumption for PostgreSQL, k3s, or active application capacity.
   Source: <https://docs.cloud.google.com/free/docs/free-cloud-features>.
-- Oracle Always Free currently documents 2 total Ampere A1 OCPUs and 12 GB
-  memory, 200 GB combined block volume, and possible reclaim of idle compute
+- Oracle Always Free currently documents the first 3,000 OCPU-hours and 18,000
+  GB-hours monthly for Ampere A1, equivalent to 4 total OCPUs and 24 GB of
+  memory, plus 200 GB combined block volume. Idle compute may be reclaimed
   when CPU/network (and A1 memory) remain below 20% at the 95th percentile for
   seven days. The current Oracle host measurement fits the practical second
   application-site role, but tenancy limits and reclamation status still need
   account-level verification. Source:
-  <https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm>.
+  <https://docs.public.content.oci.oraclecloud.com/iaas/Content/FreeTier/resourceref.htm>.
 - Cloudflare R2 Standard currently includes 10 GB-month storage, 1 million
   Class A operations, 10 million Class B operations, and free egress monthly;
   Infrequent Access is not covered by that free tier. Source:
@@ -124,8 +111,4 @@ The design must stop before a paid service, instance resize, quota increase, or 
 
 ## Access gap
 
-Direct ChaseBot SSH management is now recovered through the configured
-`cpederson` account and `/home/chase/.ssh/mini-pc`; the node remains reachable
-over wired LAN at `192.168.40.200`. This access is operational evidence only:
-ChaseBot is still part of the home failure domain and its local-path volumes do
-not provide cross-site state redundancy.
+The local key `/home/chase/.ssh/mini-pc` did not authenticate as `chase@192.168.40.200` during the original measurement. Kubernetes now confirms the node is reachable and Ready, but direct SSH identity/key validation remains a management-access follow-up. This is not a reason to change the active architecture; the existing GitHub issue for ChaseBot access/recovery should record the correct username/key path before any direct host migration.
