@@ -7,10 +7,14 @@ Authentik installation, or make Authentik a prerequisite for recovery access.
 
 ## Current boundary
 
-- Authentik server, worker, and PostgreSQL are home-only and run on the
-  `minecraftmachine` k3s control-plane host.
-- PostgreSQL uses a local-path, single-writer PVC. There is no Oracle replica,
-  promotion target, or old-writer fencing proof.
+- Authentik server and worker are home-primary on the `minecraftmachine` k3s
+  control-plane host. Oracle application replicas remain scaled to zero while
+  promotion and session/provider gates are open.
+- PostgreSQL uses a local-path, single-writer PVC on home. Oracle now has a
+  freshly reseeded 10Gi physical streaming standby through the private
+  `auth-postgresql-transport` NodePort; the latest check showed both sides at
+  `streaming` with matching LSNs. This is replication freshness evidence, not
+  promotion or old-writer fencing proof.
 - The tracked LDAP outpost is `auth/50-ldap-outpost.yaml`. It is intentionally
   one replica and uses only the `ldap-outpost-token` Secret; its pod does not
   need a Kubernetes service-account token.
@@ -29,6 +33,11 @@ Authentik installation, or make Authentik a prerequisite for recovery access.
 - The current backup and restore procedure is documented in
   `docs/recovery/RESTORE-REHEARSAL.md` and
   `scripts/authentik-postgres-backup.sh`.
+- The Oracle standby was reseeded after an earlier rehearsal left it on a
+  higher PostgreSQL timeline; the stale standby PVC was replaced from the
+  current home writer. The source Service selector is tracked in
+  `auth/60-postgresql-transport.yaml` so future changes cannot silently point
+  replication at the retired ChaseBot standby.
 
 These facts establish restore/readiness evidence, not HA or login acceptance.
 

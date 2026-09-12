@@ -1,0 +1,25 @@
+# Private cross-site replication transport for the current home Authentik
+# PostgreSQL writer. This is not an application endpoint and must not be used
+# as a public database service. The fixed NodePort is consumed only by the
+# Oracle standby over the private overlay path.
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-postgresql-transport
+  namespace: auth
+  labels:
+    app.kubernetes.io/name: auth-postgresql
+    app.kubernetes.io/part-of: homelab
+    homelab/transport: encrypted
+spec:
+  type: NodePort
+  externalTrafficPolicy: Cluster
+  selector:
+    app.kubernetes.io/component: primary
+    app.kubernetes.io/instance: auth
+    app.kubernetes.io/name: postgresql
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      nodePort: 30433
