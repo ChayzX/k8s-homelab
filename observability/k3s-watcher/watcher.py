@@ -461,7 +461,17 @@ def sweep_workload_recoveries(active_event_keys):
     """
     for key, info in list(_active_workload_alerts.items()):
         if key in active_event_keys:
+            info["last_seen"] = time.time()
             continue
+        # A slow or partially stalled collection pass must not be treated as
+        # recovery. Require the condition to be absent for a full confirmation
+        # window before clearing its notification latch.
+        if time.time() - info.get("last_seen", 0) < WORKLOAD_CONFIRMATION_SECONDS:
+            continue
+        print(
+            f"[k3s-watcher] clearing tracked condition {key}; "
+            f"present_active_keys={len(active_event_keys)}"
+        )
         _active_workload_alerts.pop(key, None)
         _active_notification_keys.discard(key)
         recovery_message = info.get(
@@ -742,6 +752,7 @@ def check_workload_health():
                             f"(was {reason})."
                         ),
                     })
+                    _active_workload_alerts[key]["last_seen"] = time.time()
 
         deployments_result = subprocess.run(
             ["kubectl", "get", "deployments", "-n", namespace, "-o", "json"],
@@ -764,6 +775,8 @@ def check_workload_health():
             key = _event_key("workload", identity)
             active = desired > 0 and available < desired and not namespace_has_waiting_failure
             if not persistent_workload_condition(key, active):
+                if not active and key in _active_workload_alerts:
+                    _active_workload_alerts[key]["last_seen"] = 0
                 continue
             active_event_keys.add(key)
             message = (
@@ -795,15 +808,20 @@ def check_workload_health():
                     f"Deployment {namespace}/{name} is back up (was unavailable)."
                 ),
             })
+            _active_workload_alerts[key]["last_seen"] = time.time()
 
         health_url = FUNCTIONAL_HEALTH_URLS.get(namespace)
         if health_url:
             healthy, health_message = functional_health_check(namespace, health_url)
             key = _event_key("functional", namespace)
             if not persistent_workload_condition(key, not healthy):
+                if healthy and key in _active_workload_alerts:
+                    _active_workload_alerts[key]["last_seen"] = 0
                 continue
             if healthy:
                 active_event_keys.discard(key)
+                if key in _active_workload_alerts:
+                    _active_workload_alerts[key]["last_seen"] = 0
                 continue
             active_event_keys.add(key)
             queue_operations_alert({
@@ -829,6 +847,7 @@ def check_workload_health():
                 "pod": None,
                 "recovery_message": f"{namespace} functional health check is passing again.",
             })
+            _active_workload_alerts[key]["last_seen"] = time.time()
     return collection_complete, active_event_keys
 
 
@@ -844,6 +863,8 @@ def check_external_health():
         healthy, health_message = functional_health_check("external/" + name, url)
         key = _event_key("external", name)
         if healthy:
+            if key in _active_workload_alerts:
+                _active_workload_alerts[key]["last_seen"] = 0
             continue
         if not persistent_workload_condition(key, True):
             continue
@@ -868,6 +889,7 @@ def check_external_health():
             "pod": None,
             "recovery_message": f"Public route {name} is responding again.",
         })
+        _active_workload_alerts[key]["last_seen"] = time.time()
     return True, active_event_keys
 
 
@@ -897,6 +919,8 @@ def check_node_health():
         is_ready = ready_condition.get("status") == "True"
         key = _event_key("node", name)
         if not persistent_workload_condition(key, not is_ready):
+            if is_ready and key in _active_workload_alerts:
+                _active_workload_alerts[key]["last_seen"] = 0
             continue
         active_event_keys.add(key)
         reason = ready_condition.get("reason", "Unknown")
@@ -925,6 +949,7 @@ def check_node_health():
             "pod": None,
             "recovery_message": f"Node {name} is Ready again.",
         })
+        _active_workload_alerts[key]["last_seen"] = time.time()
     return True, active_event_keys
 
 
