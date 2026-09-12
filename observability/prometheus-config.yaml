@@ -79,7 +79,10 @@ data:
       # already bare-metal-correct.
       - job_name: node
         static_configs:
-          - targets: ["192.168.40.208:9100", "node-exporter-oracle.observability.svc.cluster.local:9100", "node-exporter-chasebot.observability.svc.cluster.local:9100"]
+          # Site-local only. Oracle has its own Prometheus collector and a
+          # home collector must not turn a remote-site outage into a local
+          # scrape-down storm; ChaseBot is covered when its agent is healthy.
+          - targets: ["192.168.40.208:9100"]
 
       # >>> TO BE REMOVED AT PHASE 5 <<<
       # docker_desktop_exporter.py measures the Docker Desktop qemu VM's
@@ -169,14 +172,11 @@ data:
         static_configs:
           - targets: ["kube-state-metrics.observability.svc.cluster.local:8080"]
 
-      # Pantry Bot application counters. The service is ClusterIP-only, so
-      # this stays inside the cluster and is not exposed through the public
-      # OAuth/tunnel hostname. Counters are intentionally process-local; use
-      # increase()/rate() in dashboards so a bot restart is handled safely.
-      - job_name: pantry-bot
-        metrics_path: /metrics
-        static_configs:
-          - targets: ["pantry-bot.pantry-bot.svc.cluster.local:3000"]
+      # The retired single-process pantry-bot Service is intentionally scaled
+      # to zero. Do not scrape it: a permanent `up == 0` target would create
+      # false outage alerts while the HA roles are healthy. The HA roles are
+      # covered by Kubernetes readiness/restart metrics until each role has a
+      # stable application metrics contract.
 
       # ---------------------------------------------------------------
       # The observability stack scraping itself
