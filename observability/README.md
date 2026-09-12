@@ -322,3 +322,18 @@ with a Grafana Explore query against Loki:
 
 should return only genuinely error-level lines, once at least one app is
 producing some.
+
+## Grafana Cloud ingestion check
+
+Grafana Cloud is the production observability destination. The retained local
+Grafana UI is rollback-only. To verify the site-local Prometheus push path
+without requiring a Cloud query credential, run from the repository root:
+
+```
+scripts/check-grafana-cloud-ingestion.sh
+```
+
+The check fails on any non-zero remote-write failure counter. A non-zero
+pending queue is reported but is expected during WAL catch-up; dashboard and
+Explore verification still requires Grafana Cloud UI access or a separate
+`metrics:read` credential.
