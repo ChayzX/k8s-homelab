@@ -53,6 +53,9 @@ RESTART_THRESHOLD = int(os.environ.get("RESTART_THRESHOLD", "3"))
 RESTART_WINDOW_SECONDS = int(os.environ.get("RESTART_WINDOW_SECONDS", "600"))
 COOLDOWN_SECONDS = int(os.environ.get("ALERT_COOLDOWN_SECONDS", "900"))
 WATCHER_LOCK_PATH = os.environ.get("WATCHER_LOCK_PATH", "/run/user/1000/k3s-watcher.lock")
+ALERT_STATE_PATH = os.environ.get(
+    "ALERT_STATE_PATH", "/home/chase/.cache/k3s-watcher-alert-state.json"
+)
 ROLLOUT_SUPPRESSION_SECONDS = int(os.environ.get("ROLLOUT_SUPPRESSION_SECONDS", "180"))
 ROLLOUT_POST_SUPPRESSION_SECONDS = int(
     os.environ.get("ROLLOUT_POST_SUPPRESSION_SECONDS", "180")
@@ -106,7 +109,8 @@ CLOUDFLARED_BENIGN_PATTERNS = os.environ.get(
     "CLOUDFLARED_BENIGN_PATTERNS",
     r"failed to run the datagram handler.*context canceled|"
     r"failed to serve tunnel connection.*accept stream listener encountered a failure|"
-    r"failed to accept incoming stream requests.*no recent network activity",
+    r"failed to accept incoming stream requests.*no recent network activity|"
+    r"precheck component=\"UDP Connectivity\".*details=\"QUIC connection failed\".*status=fail",
 )
 CLOUDFLARED_BENIGN_RE = re.compile(CLOUDFLARED_BENIGN_PATTERNS, re.IGNORECASE)
 
@@ -139,6 +143,39 @@ _reconciliation_warmup_seconds = max(
     RESTART_WINDOW_SECONDS, ERROR_CONFIRMATION_SECONDS + ERROR_PENDING_GAP_SECONDS
 )
 _operations_ingest_key_cache = None
+
+
+def _load_alert_state():
+    """Restore cooldown timestamps so a watcher restart cannot replay a storm."""
+    try:
+        with open(ALERT_STATE_PATH, encoding="utf-8") as state_file:
+            state = json.load(state_file)
+        if isinstance(state, dict):
+            return {
+                str(key): float(value)
+                for key, value in state.items()
+                if isinstance(value, (int, float))
+            }
+    except (FileNotFoundError, OSError, TypeError, ValueError, json.JSONDecodeError):
+        pass
+    return {}
+
+
+def _save_alert_state():
+    """Persist only non-sensitive alert timestamps, atomically."""
+    try:
+        parent = os.path.dirname(ALERT_STATE_PATH)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        temporary = f"{ALERT_STATE_PATH}.tmp"
+        with open(temporary, "w", encoding="utf-8") as state_file:
+            json.dump(_last_alert_time, state_file, sort_keys=True)
+        os.replace(temporary, ALERT_STATE_PATH)
+    except OSError as exc:
+        print(f"[k3s-watcher] Could not persist alert cooldowns: {exc}")
+
+
+_last_alert_time.update(_load_alert_state())
 
 
 def _operations_ingest_key():
@@ -359,6 +396,7 @@ def cooldown_ok(key):
     now = time.time()
     if now - _last_alert_time.get(key, 0) >= COOLDOWN_SECONDS:
         _last_alert_time[key] = now
+        _save_alert_state()
         return True
     return False
 
