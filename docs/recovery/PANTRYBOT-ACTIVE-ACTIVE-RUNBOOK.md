@@ -1,8 +1,28 @@
 # PantryBot active-active runbook
 
-This runbook is the operational contract for the split PantryBot roles. It is
-written before production cutover and does not authorize applying the
-rehearsal manifests. Minecraft is not part of this runbook.
+This runbook is the operational contract for the split PantryBot roles.
+Minecraft is not part of this runbook.
+
+## Current live state (2026-09-12)
+
+The production split-role deployment is live at both sites. The public
+commands-only Cloudflare route is served by a dedicated connector in home and
+Oracle; the private API/site, workers, overlay delivery, gateway, and
+dispatcher are also Ready at both sites. The native PantryBot suite currently
+passes 121 test files and 617 tests.
+
+The current database recovery window is Oracle-primary: Oracle's PostgreSQL is
+writable and owns the external-side-effect leases, while the home
+`postgres-authority-home-return-0` instance is a caught-up read-only standby.
+Do not promote home, change the application database Secret, or reseed Oracle
+until the current Oracle writer is fenced and the controlled return-home
+sequence is recorded in GitHub Issues #147 and #191. This is a deliberate
+recovery state, not permission for an uncontrolled two-writer deployment.
+
+The dedicated commands hostname is intentionally OAuth-free: its public site
+and `/api/public/commands` are available, while `/login/*`, `/oauth/*`,
+`/mod/*`, and private `/api/*` paths return 404. OAuth, moderator, and overlay
+routes remain on their separate hostnames.
 
 ## Target topology
 
@@ -48,8 +68,10 @@ The current home `local-path` PVCs and the Oracle application host are not by
 themselves a database HA solution. Authentik's PostgreSQL is a separate
 workstream and must not be reused for PantryBot rehearsal or production state.
 
-Until a live isolated database rehearsal passes, keep the existing SQLite
-deployment recoverable and do not set `PANTRY_DATABASE_URL` in production.
+The legacy SQLite deployment remains scaled to zero and recoverable for
+rollback reference only. Production roles use the PostgreSQL authority
+described above; the database endpoint must not be changed outside the
+controlled promotion/failback procedure.
 
 ## Normal operation
 
@@ -108,15 +130,13 @@ guarantee. The allowed RPO for this design therefore remains the replication
 lag at the failure boundary until a promotion controller and fencing test are
 proven.
 
-The physical PostgreSQL transport has now also been exercised against the live
-home authority. A dedicated replication role is admitted only from chasebot's
-NodePort path; the home service reverse-forwards that NodePort through GCP
-loopback, and Oracle's independent GCP tunnel exposes a node-local standby
-endpoint. A disposable Oracle standby streamed the live state, replayed a
-sentinel round-trip, and promoted in 4 seconds. The standby was deleted after
-the check. This proves transport and database promotion mechanics, but the
-home writer was not fenced and no automatic or application failover is
-enabled.
+The physical PostgreSQL transport was first exercised against the live home
+authority with a disposable Oracle standby. That historical rehearsal proved
+transport and promotion mechanics, but did not fence the home writer. The
+current production state has since been deliberately returned to an
+Oracle-primary/home-standby recovery window; the remaining gate is a fresh
+controlled return-home rehearsal proving the source fence and application
+fence against the live authority.
 
 The application-side promotion check is reproducible from the PantryBot
 worktree with `npm run rehearsal:promotion`. Set
