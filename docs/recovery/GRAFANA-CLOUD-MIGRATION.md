@@ -1,7 +1,8 @@
 # Grafana Cloud migration
 
-Status: Cloud ingestion and dashboard migration are complete for the home
-collector; local Grafana/Loki remain online during the validation window.
+Status: Cloud ingestion and dashboard migration are complete for the home and
+Oracle collectors; local Grafana/Loki remain online during the validation
+window.
 
 This migration changes only observability collectors and dashboard placement;
 it does not touch PantryBot.
@@ -41,10 +42,10 @@ datasources. The temporary migrated `Prometheus` and `Loki` datasources that
 pointed at in-cluster URLs were removed after confirming no dashboard or alert
 rule referenced them.
 
-The home Prometheus collector now remote-writes to the Cloud Prometheus
-endpoint using the `grafana-cloud-metrics` Secret. The live verification
-observed accepted samples and zero failed samples. The token is not stored in
-the repository.
+The home and Oracle Prometheus collectors now remote-write to the Cloud
+Prometheus endpoint using site-local `grafana-cloud-metrics` Secrets. The
+live verification observed accepted samples and zero failed samples from both
+collectors. The token is not stored in the repository.
 
 ## Secret contract
 
@@ -61,14 +62,18 @@ GitHub issues, and shell history.
 
 ## Cutover gates
 
-1. Verify
-   `prometheus_remote_storage_samples_pending` returns to zero.
+1. Verify each collector's
+   `prometheus_remote_storage_samples_pending` queue drains after its initial
+   WAL replay. A non-zero transient queue is expected during catch-up, but a
+   sustained increase or any non-zero
+   `prometheus_remote_storage_samples_failed_total` requires investigation.
 2. Verify logs and metrics from the home site in Cloud Explore for one retention
    interval.
-3. Oracle now has a separately deployed, Oracle-labeled Prometheus collector
-   using its own 8Gi local buffer, with node-exporter, kube-state-metrics,
-   kubelet, and cAdvisor targets healthy. Verify its remote-write queue drains
-   to zero after the initial WAL replay before reducing local retention.
+3. Oracle has a separately deployed, Oracle-labeled Prometheus collector using
+   its own 8Gi local buffer, with node-exporter, kube-state-metrics, kubelet,
+   and cAdvisor targets healthy. Its remote-write queue is active with zero
+   failed samples; continue monitoring convergence before reducing local
+   retention.
 4. Only then reduce local Grafana/Loki/Prometheus retention. Keep local
    collectors as an outage buffer and retain external monitoring/UptimeRobot.
 
