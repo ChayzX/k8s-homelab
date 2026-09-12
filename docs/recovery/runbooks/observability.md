@@ -14,6 +14,15 @@ configuration are in `observability/k3s-watcher/`; it checks Loki, Kubernetes
 workloads/nodes, and configured public routes. External monitoring remains
 important because an in-cluster evaluator can disappear with the home site.
 
+## Tracking and evidence
+
+Record alert continuity, Grafana Cloud ingestion, duplicate suppression, and
+route evidence in [homelab #203](https://github.com/ChayzX/k8s-homelab/issues/203).
+Record cross-service capacity, free-tier usage, and RTO/RPO evidence in
+[homelab #191](https://github.com/ChayzX/k8s-homelab/issues/191). Include the
+alert fingerprint and UTC evidence; a healthy local collector does not close
+an incident.
+
 ## Normal health check
 
 ```bash
@@ -30,13 +39,31 @@ Use Prometheus `/api/v1/targets`, `/-/ready`, Loki `/ready`, and Grafana Cloud
 Explore/API with credentials supplied through their configured Secret or local
 environment. Never print Grafana Cloud tokens or webhook URLs.
 
+## Read-only triage
+
+Confirm the cluster and inspect both sites before restarting a collector or
+silencing an alert:
+
+```bash
+kubectl config current-context
+kubectl cluster-info
+kubectl get nodes -o wide
+kubectl -n observability get deploy,ds,sts,pods,svc,pvc -o wide
+kubectl -n observability get events --sort-by=.lastTimestamp | tail -80
+```
+
+Then query target labels, remote-write backlog, Loki readiness, Grafana Cloud
+ingestion, and `k3s-watcher.service` logs without printing credentials. Missing
+home data during a site/WAN event is not proof that Oracle collection or the
+alert contract failed.
+
 ## Scenario SOPs
 
 | Scenario | Detection | Safe diagnosis | Restore / promotion and fencing | Verification and gate |
 |---|---|---|---|---|
 | Process or pod crash | Deployment/DaemonSet gaps, probes, `up` series, remote-write backlog | Events, logs, target list, WAL/PVC status; identify home vs Oracle label before acting | Restart/roll back only the affected collector. Promtail can be restarted; preserve positions and local WAL unless corruption is proven. | Collector ready, targets healthy, remote-write pending queue drains, and Grafana Cloud receives fresh labeled samples/logs. |
-| Node loss | Node condition, node-exporter disappearance, missing Promtail | Check which signals are lost and whether the other site's collector remains live; do not interpret missing data as service outage without labels | Recreate the node-local DaemonSet workload when the node returns. External checks and Cloud history remain authoritative during the gap. | Both site labels observed after recovery, no duplicate alert storm, and gap duration recorded. |
-| Home outage/WAN loss | Local observability disappears or Cloud ingestion stops from home | Query Grafana Cloud and external monitors; verify Oracle collector and Cloudflare independently | Do not promote local history or run two alert evaluators without dedupe. Oracle collector may continue remote-write; use external monitoring for detection. | Alerts still arrive through external path, Oracle metrics/logs are visible, and no unbounded backlog after WAN return. |
+| Node/site loss | Node condition, site management loss, node-exporter disappearance, or missing Promtail | Check which signals are lost and whether the other site's collector remains live; do not interpret missing data as outage without site labels | Recreate node-local DaemonSet work when the node returns. External checks and Cloud history remain authoritative; do not promote local history. | Both site labels observed after recovery, no duplicate alert storm, and gap duration recorded. |
+| WAN partition | One site's remote-write/log path or public checks fail while local collectors may be healthy | Query Grafana Cloud, external monitors, both site-local readiness endpoints, and watcher state independently | Keep collection running where possible; do not run two alert evaluators or silence alerts without a dedupe decision. | Alerts still arrive through the surviving path, Oracle metrics/logs are visible, and no unbounded backlog after WAN return. |
 | Oracle outage | Oracle-labeled targets/logs absent | Verify home collector and Cloud ingestion; check only Oracle resources | Keep home collection running; repair/redeploy Oracle collectors after node recovery. | Home and external observations remain healthy; Oracle gap is annotated. |
 | Split-brain/duplicate alert evaluators | Repeated Discord alerts, two watcher processes, duplicate Grafana notifications | Compare `systemctl`, pod lists, alert fingerprints, cooldown state, and watcher logs. Do not suppress all errors to quiet symptoms. | Keep one designated host watcher/evaluator per alert contract; stop duplicate instance and preserve cooldown state. Cloudflared readiness suppression applies only to exact known healthy connector messages. | One alert per incident/cooldown, real readiness/origin errors still alert, and controlled test reaches both Discord/Operations paths if configured. |
 | TSDB/Loki/PVC corruption | Prometheus mmap/WAL errors, Loki index/chunk errors, Grafana panels empty | Stop or scale the affected stateful process only after recording logs/PVC; query Grafana Cloud before deleting local history | Restore local data from its backup/retention procedure or recreate a bounded local store. Grafana Cloud is the long-lived source for migrated data, not proof that local history can be rebuilt automatically. | Cloud queries return fresh data, local `/-/ready` returns, and dashboard selectors show the intended site/namespace. |
@@ -65,6 +92,25 @@ sudo systemctl is-active k3s-watcher.service
 Do not disable all alerting or suppress generic timeout, DNS, dial, or origin
 errors. Run `PYTHONPATH=observability/k3s-watcher python3 observability/k3s-watcher/test_watcher.py`
 after source changes.
+
+## Promotion and failback gates
+
+Observability has active collector capacity at both sites, but local Prometheus,
+Loki, and Grafana history is not multi-primary. Promotion means continuing the
+Cloud collection path and, only where the alert contract permits, selecting one
+watcher/evaluator owner; it does not promote a local history database. Prove
+the surviving site, external monitoring, Cloud ingestion, exact dedupe state,
+and stale-evaluator shutdown before changing ownership. Failback restores the
+original owner only after the replacement collector is healthy and its
+duplicate path is stopped.
+
+## Verification checklist
+
+Record in #203 and #191: labeled samples/logs from each available site;
+Prometheus/Loki readiness and target state; Grafana Cloud raw-query evidence;
+remote-write convergence; one controlled alert with no duplicate; public-route
+observation; capacity/free-tier impact; and rollback/failback behavior. A green
+pod, empty dashboard, or quiet Discord channel alone is not verification.
 
 ## Known gates
 
