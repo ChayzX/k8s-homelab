@@ -147,6 +147,7 @@ _pending_errors = {}
 _pending_workload_conditions = {}
 _active_workload_alerts = {}
 _active_log_events = {}
+_active_notification_keys = set()
 _operations_pending = OrderedDict()
 _operations_active_events = set()
 _reconciliation_started_at = time.time()
@@ -412,6 +413,16 @@ def cooldown_ok(key):
     return False
 
 
+def active_alert_ok(key):
+    """Allow one notification per active condition, not one every cooldown."""
+    if key in _active_notification_keys:
+        return False
+    if cooldown_ok(key):
+        _active_notification_keys.add(key)
+        return True
+    return False
+
+
 def persistent_error(key, now=None):
     """Require a fingerprint to recur continuously before it can alert."""
     now = time.time() if now is None else now
@@ -452,6 +463,7 @@ def sweep_workload_recoveries(active_event_keys):
         if key in active_event_keys:
             continue
         _active_workload_alerts.pop(key, None)
+        _active_notification_keys.discard(key)
         recovery_message = info.get(
             "recovery_message", "Workload is back up (was unavailable)."
         )
@@ -588,7 +600,10 @@ def check_restart_loops():
                         "message": message,
                         "occurredAt": _utc_now(),
                     })
-                if len(events) >= RESTART_THRESHOLD and cooldown_ok(f"restart_loop_{key}"):
+                restart_key = f"restart_loop_{key}"
+                if len(events) < RESTART_THRESHOLD:
+                    _active_notification_keys.discard(restart_key)
+                if len(events) >= RESTART_THRESHOLD and active_alert_ok(restart_key):
                     send_discord_alert(
                         "🔁 Restart loop detected",
                         f"{key} restarted {len(events)} times in {RESTART_WINDOW_SECONDS / 60:.0f} minutes.",
@@ -712,7 +727,7 @@ def check_workload_health():
                         "message": message,
                         "occurredAt": _utc_now(),
                     })
-                    if cooldown_ok(key):
+                    if active_alert_ok(key):
                         send_discord_alert(
                             f"🚨 {namespace} image/container unavailable",
                             message,
@@ -766,7 +781,7 @@ def check_workload_health():
                 "message": message,
                 "occurredAt": _utc_now(),
             })
-            if cooldown_ok(key):
+            if active_alert_ok(key):
                 send_discord_alert(
                     f"🚨 {namespace}/{name} unavailable",
                     message,
@@ -802,7 +817,7 @@ def check_workload_health():
                 "message": health_message,
                 "occurredAt": _utc_now(),
             })
-            if cooldown_ok(key):
+            if active_alert_ok(key):
                 send_discord_alert(
                     f"🚨 {namespace} functional health check failed",
                     health_message,
@@ -845,7 +860,7 @@ def check_external_health():
             "message": message,
             "occurredAt": _utc_now(),
         })
-        if cooldown_ok(key):
+        if active_alert_ok(key):
             send_discord_alert(f"🚨 Public route {name} failed", message)
         _active_workload_alerts.setdefault(key, {
             "namespace": "external",
@@ -902,7 +917,7 @@ def check_node_health():
             "message": message,
             "occurredAt": _utc_now(),
         })
-        if cooldown_ok(key):
+        if active_alert_ok(key):
             send_discord_alert(f"🚨 Node {name} NotReady", message)
         _active_workload_alerts.setdefault(key, {
             "namespace": "cluster",
@@ -979,7 +994,7 @@ def check_log_errors():
                 "message": f"{container} repeatedly matched log pattern: {match.group(0)}",
                 "occurredAt": _utc_now(),
             })
-            if cooldown_ok(key):
+            if active_alert_ok(key):
                 send_discord_alert(
                     f"⚠️ {container} log alert",
                     f"Matched pattern: `{match.group(0)}`\n\n{line}",
@@ -991,6 +1006,7 @@ def check_log_errors():
             active_event_keys.add(key)
         else:
             _active_log_events.pop(key, None)
+            _active_notification_keys.discard(key)
     return True, active_event_keys
 
 
