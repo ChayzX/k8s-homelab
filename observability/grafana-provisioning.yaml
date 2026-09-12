@@ -9,15 +9,14 @@
 # subdirectory from its own ConfigMap gives the right tree AND leaves the
 # image's other provisioning subdirectories intact.
 #
-# The alerting ConfigMap (grafana-provisioning-alerting) below is mounted
-# by grafana.yaml at /etc/grafana/provisioning/alerting. Alerting
-# provisioning files are read ONCE, at Grafana startup -- they are not
-# watched. See SECRETS.md in this directory for the Discord webhook Secret
-# that the alerting file references by env var.
+# The alerting ConfigMap (grafana-provisioning-alerting) below is retained,
+# but is temporarily not mounted by grafana.yaml because its Discord webhook
+# Secret is absent. Re-enable the mount and env var together after restoring
+# the real Secret. Alerting provisioning files are read ONCE at startup.
 #
 # The DASHBOARD JSON itself is NOT here. It lives in a separate ConfigMap
 # named `grafana-dashboards`, generated from
-# /home/chase/k8s-homelab/dashboards/ by a separate agent, and is mounted
+# /home/chase/k8s-homelab/dashboards/ and is mounted
 # at /etc/grafana/dashboards -- the path the provider below points at.
 # See README.md for the generate command.
 apiVersion: v1
@@ -33,9 +32,9 @@ data:
   datasources.yaml: |
     apiVersion: 1
 
-    # The uids MUST stay "Prometheus" and "Loki". Every existing
-    # dashboard JSON references datasources by uid; changing them
-    # detaches every panel.
+    # The local Grafana instance keeps these UIDs for rollback. The migrated
+    # Grafana Cloud dashboards use grafanacloud-prom and grafanacloud-logs
+    # instead; see docs/recovery/GRAFANA-CLOUD-MIGRATION.md.
     datasources:
       - name: Prometheus
         uid: Prometheus
@@ -90,9 +89,9 @@ data:
 # Grafana Alerting provisioning -- Pantry-bot / Twitch-bot alerts to a
 # Discord DM.
 #
-# Mounted by grafana.yaml at /etc/grafana/provisioning/alerting. Read ONCE
-# at Grafana startup (not watched): after changing this file you must
-# restart the grafana pod for it to take effect.
+# Retained for a future local-alerting restoration, but currently not mounted
+# by grafana.yaml because the Discord webhook Secret is absent. If re-enabled,
+# it is read ONCE at Grafana startup (not watched).
 #
 # What this delivers, and what it deliberately does NOT:
 #   * A Discord contact point whose webhook posts where user
@@ -105,7 +104,7 @@ data:
 #     that contact point IN ADDITION to the existing root receiver
 #     (continue: true), matched on the grafana_folder label (rules kept in
 #     a "pantry-bot"/"twitch"-named folder) or on an app label.
-#   * NO alert rules. Grafana 11.4's DB (grafana.db, inspected 2026-08-12)
+#   * NO alert rules. Grafana 12.4's DB (grafana.db, inspected 2026-09-12)
 #     contains zero alert rules -- there were no Twitch rules to reproduce,
 #     so none are shipped here. Create your rules in the UI and put them in
 #     a pantry-bot/Twitch folder (or add an app=~"pantry-bot" label); this

@@ -1,6 +1,7 @@
 # Grafana Cloud migration
 
-Status: feasible; staged, not yet cut over.
+Status: Cloud ingestion and dashboard migration are complete for the home
+collector; local Grafana/Loki remain online during the validation window.
 
 This migration changes only observability collectors and dashboard placement;
 it does not touch PantryBot.
@@ -24,7 +25,7 @@ to be measured before removing local retention. See the official
 [metrics remote-write guide](https://grafana.com/docs/grafana-cloud/observe-and-act/send-data/metrics/metrics-prometheus/prometheus-config-examples/integration-guide/)
 and [current pricing](https://grafana.com/pricing/).
 
-## Already complete
+## Completed
 
 `observability/promtail-config.yaml` already sends logs to both the local Loki
 service and the Grafana Cloud Loki endpoint. The credential is mounted from
@@ -34,42 +35,41 @@ until Cloud Explore verifies logs from MinecraftMachine and Oracle.
 The tracked dashboards are portable JSON under `dashboards/`; no local
 Grafana database migration is required for the dashboard definitions.
 
-## Remaining operator input
+Grafana Cloud now contains the homelab dashboards, with their datasource
+variables mapped to the managed `grafanacloud-prom` and `grafanacloud-logs`
+datasources. The temporary migrated `Prometheus` and `Loki` datasources that
+pointed at in-cluster URLs were removed after confirming no dashboard or alert
+rule referenced them.
 
-Create a Grafana Cloud access policy with `metrics:write`, then obtain these
-non-secret values from the stack's Prometheus details page:
+The home Prometheus collector now remote-writes to the Cloud Prometheus
+endpoint using the `grafana-cloud-metrics` Secret. The live verification
+observed accepted samples and zero failed samples. The token is not stored in
+the repository.
 
-- Prometheus remote-write URL, such as `https://prometheus-prod-<region>.grafana.net/api/prom/push`
-- Prometheus instance/user ID
+## Secret contract
 
-Keep the access-policy token secret. Create this Secret separately in both the
-home and Oracle `observability` namespaces:
+The home cluster Secret currently contains these keys:
 
-```bash
-kubectl -n observability create secret generic grafana-cloud-metrics \
-  --from-literal=grafana-cloud-metrics-password='<access-policy-token>'
-```
+- `remote-write-url`
+- `username`
+- `password` (the `metrics:write` access-policy token)
 
-The migration will mount that key as
-`/etc/prometheus/secrets/grafana-cloud-metrics-password` and use Prometheus'
-native `remote_write` queue. Do not put the token in a ConfigMap, dashboard,
-GitHub issue, or shell history.
+The Prometheus manifest mounts the password at
+`/etc/prometheus/secrets/password`; the endpoint and username are configured
+in `prometheus-config.yaml`. Keep the token out of ConfigMaps, dashboards,
+GitHub issues, and shell history.
 
 ## Cutover gates
 
-1. Add the remote-write block and password-file mount to both site Prometheus
-   manifests, with distinct external labels (`site=home` and `site=oracle`).
-2. Apply to one site at a time and verify
+1. Verify
    `prometheus_remote_storage_samples_pending` returns to zero.
-3. Import the tracked dashboards and point them at the Cloud Prometheus and
-   Loki data sources.
-4. Verify logs and metrics from both sites in Cloud Explore for one retention
+2. Verify logs and metrics from the home site in Cloud Explore for one retention
    interval.
-5. Only then reduce local Grafana/Loki/Prometheus retention. Keep local
+3. Add a separately deployed Oracle collector before claiming multi-site
+   observability coverage; Oracle is not currently sending Prometheus metrics
+   through this home Deployment.
+4. Only then reduce local Grafana/Loki/Prometheus retention. Keep local
    collectors as an outage buffer and retain external monitoring/UptimeRobot.
 
-## Current blocker
-
-The repository has the Grafana Cloud Loki credential but no metrics endpoint
-or metrics token. The migration is prepared, but remote-write configuration is
-intentionally not applied until those values exist.
+The local Grafana UI remains available for rollback and comparison. Do not
+decommission local Grafana or Loki until the validation window is complete.

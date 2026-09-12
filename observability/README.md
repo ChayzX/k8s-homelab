@@ -19,7 +19,7 @@ Node LAN IP: `192.168.40.208`. StorageClass: `local-path`.
 | `prometheus.yaml` | Prometheus SA, ClusterRole/Binding (API access for `kubernetes_sd_configs`), PVC (20Gi), Deployment, ClusterIP Service (9090). |
 | `prometheus-config.yaml` | ConfigMap: Prometheus' `prometheus.yml`, rewritten scrape config. |
 | `grafana.yaml` | Grafana SA, PVC (2Gi), Deployment, primary `LoadBalancer` Service (3002). |
-| `grafana-provisioning.yaml` | ConfigMaps: `grafana-provisioning-datasources`, `grafana-provisioning-dashboards`, `grafana-provisioning-alerting`, and a placeholder `grafana-dashboards`. **See "Grafana dashboard ConfigMap" below before applying.** |
+| `grafana-provisioning.yaml` | ConfigMaps: `grafana-provisioning-datasources`, `grafana-provisioning-dashboards`, and the retained `grafana-provisioning-alerting` definition. **See "Grafana dashboard ConfigMap" below before applying.** |
 | `grafana-verify-nodeport.yaml` | **Verification only.** NodePort 30002. |
 | `promtail.yaml` | promtail SA, ClusterRole/Binding (API access for pod discovery), DaemonSet, ClusterIP Service (9080, metrics only). |
 | `promtail-config.yaml` | ConfigMap: promtail's config, incl. severity-extraction `pipeline_stages`. |
@@ -42,24 +42,20 @@ explicit about the split, since it's easy to end up with two conflicting
   `grafana-provisioning-dashboards`, and `grafana-provisioning-alerting`,
   all defined in `grafana-provisioning.yaml`. These are mounted by
   `grafana.yaml` at
-  `/etc/grafana/provisioning/{datasources,dashboards,alerting}`. This is the
+  `/etc/grafana/provisioning/{datasources,dashboards}`; the alerting definition
+  is retained but currently not mounted until its Secret is restored. This is the
   wiring the migration plan calls out explicitly (rev. 2, "Grafana
   manifest dropped the `dashboards` mount that the provisioning config
   references") -- getting it wrong yields a Grafana with zero
   dashboards and no obvious error, so treat these ConfigMaps as
   authoritative and don't duplicate them elsewhere.
 
-- **A separate agent, writing into `/home/chase/k8s-homelab/dashboards/`,
-  owns the dashboard *content*.** As of this writing that directory
-  contains the raw dashboard JSON (`cluster-overview.json`,
-  `pods-and-workloads.json`, `logs.json`) but no ConfigMap YAML yet.
-  `grafana.yaml` already mounts a ConfigMap named **`grafana-dashboards`**
-  at `/etc/grafana/dashboards` (the placeholder version in
-  `grafana-provisioning.yaml` is there just so `kubectl apply -f
-  observability/` produces a working, if dashboard-less, Grafana before
-  that lands). **The dashboards agent's generated ConfigMap must be named
-  `grafana-dashboards`** -- that's the contract both agents were given.
-  When it lands, replace the placeholder:
+- **The dashboard content is owned by `/home/chase/k8s-homelab/dashboards/`.**
+  That directory contains the raw dashboard JSON and the generated
+  `dashboards-configmap.yaml`. `grafana.yaml` mounts the generated ConfigMap
+  named **`grafana-dashboards`** at `/etc/grafana/dashboards`.
+  Regenerate it only when a source dashboard changes, then validate it with
+  `scripts/validate-grafana-dashboards.sh`.
 
   ```bash
   kubectl -n observability create configmap grafana-dashboards \
@@ -69,10 +65,10 @@ explicit about the split, since it's easy to end up with two conflicting
     --dry-run=client -o yaml | kubectl apply -f -
   ```
 
-  If the dashboards agent instead ships its own
-  `dashboards-configmap.yaml` that already defines a ConfigMap named
-  `grafana-dashboards`, apply that file directly and skip the command
-  above -- just don't apply both for the same ConfigMap name.
+  The checked-in `dashboards/dashboards-configmap.yaml` is the source for
+  deployment. Because the object is large, replace it rather than using a
+  normal `kubectl apply` if the existing last-applied annotation exceeds the
+  Kubernetes annotation limit.
 
   **If the dashboards agent also produced a
   `grafana-provisioning-configmap.yaml`** (a provisioning ConfigMap, as
@@ -109,10 +105,8 @@ kubectl apply -f promtail-config.yaml
 kubectl apply -f loki.yaml
 kubectl apply -f prometheus.yaml
 
-# grafana.yaml REQUIRES the grafana-discord-webhooks Secret to exist first
-# (see SECRETS.md in this directory) -- the alerting contact point env var
-# is a required secretKeyRef. Without it the pod sits in
-# CreateContainerConfigError.
+# Local Discord alerting provisioning is disabled until its real Secret is
+# restored; see SECRETS.md before re-enabling the mount and env var.
 kubectl apply -f grafana.yaml
 
 # Cluster-facing collectors/exporters. No PVCs, no data migration.
@@ -166,9 +160,9 @@ but cannot safely implement or deploy it; the next watcher-source change
 should add unit tests for healthy and unhealthy `/ready` responses plus a
 fail-open timeout case.
 
-`grafana-provisioning.yaml` carries a `grafana-provisioning-alerting`
-ConfigMap (mounted by `grafana.yaml` at
-`/etc/grafana/provisioning/alerting`) that provisions:
+`grafana-provisioning.yaml` carries a retained `grafana-provisioning-alerting`
+ConfigMap that can provision when the real webhook Secret and mount are
+restored:
 
 - a **Discord contact point** (`discord-pantry-twitch-dm`) whose webhook URL
   is interpolated from the `PANTY_TWITCH_DISCORD_WEBHOOK_URL` env var (never
@@ -273,7 +267,7 @@ PROM_DIR=$(kubectl get pv "$PROM_PV" -o jsonpath='{.spec.local.path}')
 sudo cp -a /home/chase/docker/observability/prometheus-data/. "$PROM_DIR"/
 sudo chown -R 65534:65534 "$PROM_DIR"
 
-# Grafana  (grafana/grafana:11.4.0 runs as 472:472)
+# Grafana  (grafana/grafana:12.4.2 runs as 472:472)
 GRAF_PV=$(kubectl -n observability get pvc grafana-data -o jsonpath='{.spec.volumeName}')
 GRAF_DIR=$(kubectl get pv "$GRAF_PV" -o jsonpath='{.spec.local.path}')
 sudo cp -a /home/chase/docker/observability/grafana-data/. "$GRAF_DIR"/

@@ -147,7 +147,7 @@ migrates; don't stop it early.
 |---|---|---|---|---|---|---|
 | `loki` (Deployment, Recreate) | `grafana/loki:3.3.2` | 3100 (http), 9095 (grpc) | 50m/500m CPU, 128Mi/512Mi mem | `10001:10001` | `loki-sa`, no | `loki-data` (20Gi) |
 | `prometheus` (Deployment, Recreate) | `prom/prometheus:v3.1.0` | 9090 | 100m/1000m CPU, 512Mi/1Gi mem | `65534:65534` (nobody) | `prometheus-sa`, **yes** (`kubernetes_sd_configs`, scrapes kubelet/cAdvisor) | `prometheus-data` (20Gi) |
-| `grafana` (Deployment, Recreate) | `grafana/grafana:11.4.0` | 3000→3002 externally | 50m/500m CPU, 128Mi/512Mi mem | `472:472` | `grafana-sa`, no | `grafana-data` (2Gi) |
+| `grafana` (Deployment, Recreate) | `grafana/grafana:12.4.2` | 3000→3002 externally | 50m/500m CPU, 128Mi/512Mi mem | `472:472` | `grafana-sa`, no | `grafana-data` (2Gi) |
 | `promtail` (**DaemonSet**, not Deployment — log shipper needs one pod per node) | `grafana/promtail:3.3.2` | 9080 | 50m/200m CPU, 64Mi/256Mi mem | `0:0` (root, required — container logs under `/var/log/pods` are root-owned) | `promtail-sa`, **yes** (`kubernetes_sd_configs`, role: pod) | none (hostPath positions file at `/var/lib/promtail` instead) |
 | `kube-state-metrics` (Deployment, RollingUpdate — stateless) | `registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.13.0` | 8080, 8081 | 10m/100m CPU, 32Mi/128Mi mem | `65534:65534` | `kube-state-metrics-sa`, **yes** (lists/watches nearly every object type, read-only) | none |
 
@@ -170,7 +170,7 @@ Final capability set: `add: ["CHOWN", "FOWNER", "SETUID", "SETGID", "DAC_OVERRID
 
 `observability/README.md` has the full apply order, the verification-only-file list, the 3001/3002 cutover sequence, and all four `chown` command blocks paired with their `cp -a`/PV-path-lookup steps.
 
-**ConfigMap ownership, resolved**: `observability/grafana-provisioning.yaml` is authoritative for the two provisioning ConfigMaps (`grafana-provisioning-datasources`, `grafana-provisioning-dashboards`) — these are what `grafana.yaml`'s volume mounts reference. Dashboard *content* is a separate ConfigMap, contractually named `grafana-dashboards`, owned by whatever lands in `dashboards/dashboards-configmap.yaml` `[PENDING]`. Until that lands, `grafana-provisioning.yaml` ships a placeholder empty `grafana-dashboards` ConfigMap so `kubectl apply -f observability/` produces a working (if dashboard-less) Grafana rather than a broken mount — the README has the exact replacement command for swapping the placeholder for the real one.
+**ConfigMap ownership, resolved**: `observability/grafana-provisioning.yaml` is authoritative for the two provisioning ConfigMaps (`grafana-provisioning-datasources`, `grafana-provisioning-dashboards`) — these are what `grafana.yaml`'s volume mounts reference. Dashboard *content* is the generated ConfigMap `grafana-dashboards`, sourced from the checked-in `dashboards/dashboards-configmap.yaml`; the source JSON and generated copy are validated together by `scripts/validate-grafana-dashboards.sh`.
 
 ### `minecraft` namespace
 

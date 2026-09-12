@@ -10,17 +10,14 @@ applied. A Deployment whose Secret does not exist yet will sit in
 
 ## 1. `grafana-discord-webhooks` — Discord webhook for Pantry-bot / Twitch alerting
 
-Consumed by the grafana Deployment as the env var
-`PANTY_TWITCH_DISCORD_WEBHOOK_URL`, which the provisioned alerting contact
-point (`grafana-provisioning-alerting` ConfigMap → `alerting.yaml`, in
-`grafana-provisioning.yaml`) interpolates into its Discord webhook URL.
+The alerting ConfigMap still contains the Discord contact-point definition,
+but it is currently not mounted by the Grafana Deployment because the Secret
+was absent during the Grafana Cloud migration. Existing alert state remains
+in Grafana's database; this Secret is needed before re-enabling that
+provisioner.
 
-**This Secret MUST exist before `grafana.yaml` is applied.** It is a required
-`secretKeyRef`, deliberately not `optional: true`: if the env var is unset the
-provisioning interpolation yields an empty webhook URL, the Discord contact
-point fails its provisioning validation and Grafana refuses to start. A missing
-Secret instead fails loudly as `CreateContainerConfigError` before anything
-alerting-related can break silently.
+Do not create a placeholder value. An empty or invalid webhook makes Grafana's
+alerting provisioner fail at startup.
 
 ```bash
 kubectl -n observability create secret generic grafana-discord-webhooks \
@@ -105,26 +102,21 @@ done here.
 
 ---
 
-## Checklist before applying the Deployments
-
-```bash
-kubectl -n observability get secret grafana-discord-webhooks
-```
-
-Must exist before `grafana.yaml` is applied. Never commit it, never
-`kubectl get -o yaml` it into a paste.
+Never commit this Secret or paste its YAML. When the real webhook is restored,
+the alerting mount and environment variable must be re-enabled together.
 
 ## 4. `grafana-cloud-metrics` — Grafana Cloud Prometheus remote-write token
 
-This Secret is staged for the Grafana Cloud metrics migration. It is not used
-until the Prometheus remote-write endpoint and username are added to
-`prometheus-config.yaml` and the Secret exists in both sites.
+This Secret is consumed by the home Prometheus remote-write configuration.
+Oracle does not currently have a corresponding active collector Deployment.
 
 ```bash
 kubectl -n observability create secret generic grafana-cloud-metrics \
-  --from-literal=grafana-cloud-metrics-password='<metrics:write access-policy-token>'
+  --from-literal=remote-write-url='https://prometheus-prod-<region>.grafana.net/api/prom/push' \
+  --from-literal=username='<metrics-instance-id>' \
+  --from-literal=password='<metrics:write access-policy-token>'
 ```
 
-The key must be exactly `grafana-cloud-metrics-password`; use a token with
-only the `metrics:write` scope. See
+The keys must be exactly `remote-write-url`, `username`, and `password`; use a
+token with only the `metrics:write` scope. See
 `docs/recovery/GRAFANA-CLOUD-MIGRATION.md` for the staged cutover gates.

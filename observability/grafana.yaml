@@ -3,7 +3,7 @@
 # ============================================================
 # MANUAL STEP REQUIRED AFTER COPYING DATA INTO THE PVC
 # ============================================================
-# grafana/grafana:11.4.0 runs as UID/GID 472:472. The existing data
+# grafana/grafana:12.4.2 runs as UID/GID 472:472. The existing data
 # directory (/home/chase/docker/observability/grafana-data, which holds
 # grafana.db plus the installed plugins) is owned 1000:1000.
 #
@@ -90,7 +90,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: grafana
-          image: grafana/grafana:11.4.0
+          image: grafana/grafana:12.4.2
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -110,23 +110,6 @@ spec:
                   name: grafana-admin
                   key: admin-password
                   optional: true
-            # Discord webhook URL for the pantry-bot/Twitch alerting contact
-            # point (grafana-provisioning-alerting ConfigMap -> alerting.yaml
-            # interpolates $PANTY_TWITCH_DISCORD_WEBHOOK_URL from this env
-            # var). Created imperatively -- see SECRETS.md in this directory.
-            # Deliberately NOT optional: with the var unset the interpolation
-            # is empty, the provisioned Discord contact point fails its
-            # validation and Grafana refuses to start. A missing Secret is a
-            # loud CreateContainerConfigError instead. Create the Secret
-            # BEFORE applying this file:
-            #   kubectl -n observability create secret generic \
-            #     grafana-discord-webhooks \
-            #     --from-literal=pantry-twitch-webhook-url='https://discord.com/api/webhooks/REPLACE/ME'
-            - name: PANTY_TWITCH_DISCORD_WEBHOOK_URL
-              valueFrom:
-                secretKeyRef:
-                  name: grafana-discord-webhooks
-                  key: pantry-twitch-webhook-url
             - name: GF_PATHS_PROVISIONING
               value: /etc/grafana/provisioning
             - name: GF_ANALYTICS_REPORTING_ENABLED
@@ -180,9 +163,6 @@ spec:
             - name: provisioning-dashboards
               mountPath: /etc/grafana/provisioning/dashboards
               readOnly: true
-            - name: provisioning-alerting
-              mountPath: /etc/grafana/provisioning/alerting
-              readOnly: true
             - name: dashboards
               mountPath: /etc/grafana/dashboards
               readOnly: true
@@ -195,9 +175,6 @@ spec:
         - name: provisioning-dashboards
           configMap:
             name: grafana-provisioning-dashboards
-        - name: provisioning-alerting
-          configMap:
-            name: grafana-provisioning-alerting
         - name: dashboards
           configMap:
             name: grafana-dashboards
