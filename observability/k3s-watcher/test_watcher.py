@@ -11,6 +11,17 @@ assert watcher.cooldown_ok("k") is False
 watcher._last_alert_time["k"] -= 901
 assert watcher.cooldown_ok("k") is True
 
+# A condition that remains active must notify once, even after its ordinary
+# cooldown expires.  Recovery clears the active key so a later incident can
+# notify again.
+watcher._active_notification_keys.clear()
+watcher._last_alert_time.pop("active-condition", None)
+assert watcher.active_alert_ok("active-condition") is True
+watcher._last_alert_time["active-condition"] -= watcher.COOLDOWN_SECONDS + 1
+assert watcher.active_alert_ok("active-condition") is False
+watcher._active_notification_keys.discard("active-condition")
+assert watcher.active_alert_ok("active-condition") is True
+
 # A single transient line is not enough; recurrence for five minutes is
 # required, and a quiet gap resets the pending incident.
 watcher._pending_errors.clear()
