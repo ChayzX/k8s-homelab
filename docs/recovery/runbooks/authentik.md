@@ -17,6 +17,14 @@ replication transport, not an application endpoint. Use
 `docs/recovery/AUTHENTIK-HA-READINESS.md` and `docs/recovery/RESTORE-REHEARSAL.md`
 as the authority for promotion decisions.
 
+## Tracking and evidence
+
+Record Authentik recovery evidence in [homelab #198](https://github.com/ChayzX/k8s-homelab/issues/198)
+and session/restore evidence in [homelab #202](https://github.com/ChayzX/k8s-homelab/issues/202).
+Record cross-service RTO/RPO, capacity, and recovery-path evidence in
+[homelab #191](https://github.com/ChayzX/k8s-homelab/issues/191). A healthy pod
+or streaming receiver does not close a promotion gate.
+
 ## Normal health check
 
 ```bash
@@ -32,13 +40,31 @@ expected states are home `pg_stat_replication=streaming` and Oracle
 `pg_stat_wal_receiver=streaming`, with comparable LSNs. Do not print passwords,
 connection strings containing passwords, or Secret data.
 
+## Read-only triage
+
+Run this before any restart, scale, promotion, PVC action, or route change:
+
+```bash
+kubectl config current-context
+kubectl cluster-info
+kubectl get nodes -o wide
+kubectl -n auth get deploy,sts,pods,svc,endpoints,pvc -o wide
+kubectl -n auth get events --sort-by=.lastTimestamp | tail -80
+kubectl -n auth get secret -o name
+kubectl -n auth logs deploy/auth-authentik-server --since=30m --tail=150
+```
+
+Use sanitized `pg_is_in_recovery()`, timeline, replication/WAL receiver, and
+LSN queries to identify the writer. A failed HTTP request or replication
+timeout is not proof that a writer is fenced.
+
 ## Scenario SOPs
 
 | Scenario | Detection | Safe diagnosis | Restore / promotion and fencing | Verification and gate |
 |---|---|---|---|---|
 | Process or pod crash | Deployment availability, pod restarts, `/-/health/ready/`, LDAP bind failures | Events, previous logs, image/config references, and `kubectl get secret -o name`; keep the DB untouched | Restart or roll back the affected Deployment. For LDAP, apply the tracked outpost manifest only after its token key exists. Do not start Oracle Authentik against a standby. | Authentik ready, a synthetic login/provider check succeeds where applicable, LDAP/LDAPS bind works, and direct emergency SSH still works. |
-| Home node loss | Node `Ready` false; home Authentik and DB disappear | Determine whether the DB PVC is still attached and whether the control plane can act; do not force-detach a local-path volume | Keep Oracle standby read-only until home DB writer is fenced. A controlled promotion must stop/fence home PostgreSQL and start Oracle DB as the sole writer before starting Oracle apps. | New writer writable, old home writer rejects writes, Authentik session/provider test passes, routing converges, and rollback path is recorded. |
-| Home outage or WAN loss | Auth URL and LDAP external checks fail; Oracle receiver may stop receiving WAL | Separate home failure from Cloudflare/LDAP network failure; verify independent Oracle management and last replay LSN | Do not promote on network timeout alone. Use a neutral decision and an authoritative fence. If home cannot be fenced, use the isolated restore procedure, not a second live writer. | Emergency SSH/monitoring path works without Authentik; RPO is measured; one writer and one route are documented. |
+| Home node/site loss | Node `Ready` false, site management unavailable, or home Authentik and DB disappear | Determine whether the DB PVC is still attached and whether the control plane can act; do not force-detach a local-path volume | Keep Oracle standby read-only until home DB writer is fenced. A controlled promotion must stop/fence home PostgreSQL and start Oracle DB as the sole writer before starting Oracle apps. If home cannot be fenced, use the isolated restore procedure, not a second live writer. | New writer writable, old home writer rejects writes, Authentik session/provider test passes, routing converges, and rollback path is recorded. |
+| WAN partition | Auth URL/LDAP checks fail while either site may remain healthy; Oracle receiver may stop WAL | Separate route/Cloudflare/LDAP network failure from loss of the home writer; verify independent Oracle management and last replay LSN | Do not promote on network timeout alone. Keep the current writer if authoritative; promote only after the old writer is fenced. | Emergency SSH/monitoring works without Authentik; RPO is measured; one writer and one route are documented. |
 | Oracle outage | Standby receiver/Oracle node unavailable while home remains healthy | Verify home `pg_stat_replication` and home application; do not stop home services | Keep home primary. Repair/reseed Oracle from the current home backup/WAL path; do not route users to a stopped standby. | Home login, LDAP, and monitoring stay healthy; Oracle catches up before being considered standby again. |
 | Split brain or stale writer | Two writable PostgreSQL instances, timeline mismatch, unexpected commits, provider/session inconsistency | Stop Authentik writers and record `pg_is_in_recovery`, timelines, LSNs, and pod/PVC identities. Never delete a PVC during diagnosis. | Fence the stale host at the database and host/site level. Keep the newest authoritative writer; re-seed the other PVC from it. Do not rely on k3s scale-down as a fence. | Old writer commit test fails; exactly one writable DB; Authentik migrations/provider state consistent; stale sessions are handled by the documented rollback decision. |
 | PostgreSQL database-storage/PVC corruption or bad restore | PostgreSQL crash recovery, checksum/WAL errors, PVC mount failure, `pg_restore` errors | Stop applications and preserve the PVC/snapshot. Select a known dump/WAL generation and checksum from the recovery inventory. | Restore into an isolated PostgreSQL target first using the procedure in `RESTORE-REHEARSAL.md`. Production replacement requires a reviewed backup/failover window and a fresh Secret/provider reconstruction. | `pg_restore --list`, schema/data sanity, Authentik readiness, synthetic login, LDAP provider test, and no production route enabled during rehearsal. |
@@ -67,6 +93,19 @@ reconstruction is a separate gate.
    Oracle server, worker, or LDAP.
 6. Start Oracle apps, validate readiness/login/LDAP, then change routing.
 7. Record RTO/RPO and retain home artifacts for reverse promotion.
+
+Promotion is gated, not automatic: independent recovery access, known replay
+position, a proven old-writer fence, reconstructed secrets/providers, and a
+planned route change are required. Failback uses the same gates in reverse:
+fence Oracle, verify home is caught up and writable, start home apps, then
+switch the route. Never run both Authentik databases writable.
+
+## Verification checklist
+
+Record in #198/#202 and #191: writer/standby state and LSN/RPO; old-writer
+rejection; readiness; synthetic login and provider callback; LDAP/LDAPS bind
+and SSSD `getent`/`id`; external route convergence; and rollback/failback.
+Keep emergency access independent of Authentik.
 
 ## Known gates
 

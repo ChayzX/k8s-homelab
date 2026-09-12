@@ -44,11 +44,19 @@ proof that the old writer is fenced.
 ## Common incident record
 
 Record all recovery work in the applicable GitHub Issue, principally homelab
-#191 (cross-service recovery), #198/#202 (Authentik), #201 (Operations), #203
-(observability), #204 (CI tunnel), and PantryBot #147/#148. Include UTC
-detection, diagnosis, failure boundary, current owner/epoch, source backup or
-replication position, promotion/fencing timestamps, RTO/RPO, route convergence,
-duplicate-side-effect result, rollback result, and exact sanitized commands.
+[#191](https://github.com/ChayzX/k8s-homelab/issues/191) (cross-service
+recovery), [#198](https://github.com/ChayzX/k8s-homelab/issues/198)/[#202](https://github.com/ChayzX/k8s-homelab/issues/202)
+(Authentik), [#201](https://github.com/ChayzX/k8s-homelab/issues/201)
+(Operations), [#203](https://github.com/ChayzX/k8s-homelab/issues/203)
+(observability), [#204](https://github.com/ChayzX/k8s-homelab/issues/204) (CI
+tunnel), [#200](https://github.com/ChayzX/k8s-homelab/issues/200) (Opsbot), and
+[#262](https://github.com/ChayzX/k8s-homelab/issues/262) (JMusicBot). PantryBot
+tracking remains in PantryBot #147/#148 and its own runbook; these edits do not
+modify PantryBot documentation. Include UTC detection, diagnosis, failure
+boundary, current owner/epoch, source backup or replication position,
+promotion/fencing timestamps, RTO/RPO, route convergence, duplicate-side-effect
+result, rollback result, and exact sanitized commands. Minecraft and Cartwise
+are outside this runbook set.
 Never record token/password/private-key values.
 
 ## Runbook index
