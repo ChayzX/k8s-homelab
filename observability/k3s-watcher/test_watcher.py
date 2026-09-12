@@ -1,5 +1,11 @@
 import tempfile
+import os
 from unittest.mock import Mock
+
+# Never let tests read or overwrite the live systemd watcher's cooldown file.
+test_state = tempfile.NamedTemporaryFile(prefix="k3s-watcher-test-", delete=False)
+test_state.close()
+os.environ["ALERT_STATE_PATH"] = test_state.name
 
 import watcher
 
