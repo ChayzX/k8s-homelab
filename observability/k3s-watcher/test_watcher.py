@@ -516,4 +516,27 @@ finally:
     watcher._pending_workload_conditions.clear()
     watcher._active_workload_alerts.clear()
 
+# Explicitly retired nodes are not incidents. Other nodes remain monitored.
+original_ignored_nodes = watcher.IGNORED_NODES
+watcher.subprocess.run = Mock(return_value=node_response)
+watcher.send_discord_alert = Mock()
+try:
+    watcher.IGNORED_NODES = {"chasebot"}
+    node_response.stdout = watcher.json.dumps({
+        "items": [{
+            "metadata": {"name": "chasebot"},
+            "status": {"conditions": [
+                {"type": "Ready", "status": "Unknown", "reason": "NodeStatusUnknown"}
+            ]},
+        }]
+    })
+    complete, active = watcher.check_node_health()
+    assert complete is True
+    assert active == set()
+    watcher.send_discord_alert.assert_not_called()
+finally:
+    watcher.IGNORED_NODES = original_ignored_nodes
+    watcher.subprocess.run = original_subprocess_run
+    watcher.send_discord_alert = original_discord
+
 print("test_watcher: all assertions passed")
