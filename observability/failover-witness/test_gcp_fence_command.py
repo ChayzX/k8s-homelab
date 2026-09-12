@@ -12,7 +12,7 @@ def test_relay_uses_strict_local_forward_and_explicit_confirmation() -> None:
     assert "StrictHostKeyChecking=yes" in text
     assert "-p 2223" in text
     assert "root@127.0.0.1" in text
-    assert "fence-pantry-postgres\n" in text
+    assert "fence-pantry-postgres --confirm\n" in text
 
 
 def test_relay_does_not_stop_k3s() -> None:
