@@ -4031,15 +4031,15 @@ data:
         {
           "id": 1,
           "type": "stat",
-          "title": "Bot Pod Uptime",
-          "description": "Age of the current pantry-bot pod, from kube_pod_start_time. Resets to 0 on every restart — a young age here IS the restart signal. With strategy: Recreate and a single RWO SQLite PVC, the old pod fully terminates before the new one mounts, so every reset means real downtime.",
+          "title": "HA workload uptime (oldest pod)",
+          "description": "Age of the oldest live PantryBot HA workload pod. The retired single-bot Deployment is intentionally excluded.",
           "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "targets": [
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "time() - max(kube_pod_start_time{namespace=\"pantry-bot\", pod=~\"pantry-bot-.*\"})",
+              "expr": "time() - min(kube_pod_start_time{namespace=\"pantry-bot\", pod=~\"pantry-.*\"})",
               "legendFormat": "uptime"
             }
           ],
@@ -4392,7 +4392,7 @@ data:
         {
           "id": 9,
           "type": "logs",
-          "title": "Live Logs (bot + cloudflared)",
+          "title": "PantryBot HA Logs",
           "description": "All pantry-bot logs, filtered by the Pod and Severity variables: {namespace=\"pantry-bot\", pod=~\"$pod\", level=~\"$level\"}. Node.js console format for the bot container; cloudflared has its own plain-text format. Click a line to expand its labels.",
           "gridPos": { "h": 13, "w": 24, "x": 0, "y": 25 },
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
@@ -5437,3 +5437,4 @@ data:
 kind: ConfigMap
 metadata:
   name: grafana-dashboards
+  namespace: observability
