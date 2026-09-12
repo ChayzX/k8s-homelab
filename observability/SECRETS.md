@@ -105,6 +105,27 @@ done here.
 
 ---
 
+## 4. `grafana-cloud-metrics` — Grafana Cloud Prometheus push credential
+
+Consumed by each site-local Prometheus as the remote-write credential. The
+Secret must contain exactly `remote-write-url`, `username`, and `password`:
+
+```bash
+kubectl -n observability create secret generic grafana-cloud-metrics \
+  --from-literal=remote-write-url='https://prometheus-prod-XX.grafana.net/api/prom/push' \
+  --from-literal=username='<metrics instance ID>' \
+  --from-literal=password='<metrics:write access-policy token>'
+```
+
+This is a **push-only** credential. It is intentionally not expected to
+authenticate Grafana Cloud's query API; verifying dashboards in Explore
+requires logging into Grafana Cloud or provisioning a separate credential
+with the appropriate `metrics:read` scope. Never replace this Secret with a
+migration or UI token without first proving that it retains `metrics:write`
+and checking the local Prometheus remote-write failure counter.
+
+---
+
 ## Checklist before applying the Deployments
 
 ```bash
