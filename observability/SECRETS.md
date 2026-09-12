@@ -113,3 +113,18 @@ kubectl -n observability get secret grafana-discord-webhooks
 
 Must exist before `grafana.yaml` is applied. Never commit it, never
 `kubectl get -o yaml` it into a paste.
+
+## 4. `grafana-cloud-metrics` — Grafana Cloud Prometheus remote-write token
+
+This Secret is staged for the Grafana Cloud metrics migration. It is not used
+until the Prometheus remote-write endpoint and username are added to
+`prometheus-config.yaml` and the Secret exists in both sites.
+
+```bash
+kubectl -n observability create secret generic grafana-cloud-metrics \
+  --from-literal=grafana-cloud-metrics-password='<metrics:write access-policy-token>'
+```
+
+The key must be exactly `grafana-cloud-metrics-password`; use a token with
+only the `metrics:write` scope. See
+`docs/recovery/GRAFANA-CLOUD-MIGRATION.md` for the staged cutover gates.
