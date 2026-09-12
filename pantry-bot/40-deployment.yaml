@@ -47,8 +47,11 @@ metadata:
     app.kubernetes.io/part-of: homelab
     app.kubernetes.io/component: bot
 spec:
-  replicas: 1
-  # Recreate: still only one writer allowed on the SQLite WAL file at a time.
+  # Retired legacy single-process bot. The split PostgreSQL-backed roles in
+  # 61-66 are the production application; keep this object declaratively
+  # stopped so a broad apply cannot resurrect the old SQLite path.
+  replicas: 0
+  # Recreate remains documented for isolated restore/recovery use only.
   # Originally this guarded against two pods sharing one RWO PVC; as of STEP B
   # (data now lives on an emptyDir restored from R2 on every start, not a
   # PVC -- see the restore-db initContainer and k8s-homelab-0br's follow-up)

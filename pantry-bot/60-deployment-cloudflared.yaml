@@ -54,13 +54,11 @@ metadata:
   # No keel.sh annotations. The connector release is pinned below so an
   # upstream tag move cannot silently change the public failover path.
 spec:
-  # 2, not 1: as of the Oracle node joining as a second k3s agent
-  # (pantry-bot-infra), one replica per node via the anti-affinity rule
-  # below gives HTTP-surface redundancy for free — Cloudflare's edge already
-  # knows how to route to whichever connector of a tunnel is alive, no
-  # coordination needed on this side. Until the Oracle node actually exists
-  # and is Ready, the second replica sits Pending — expected, not a bug.
-  replicas: 2
+  # Retired shared connector. Production traffic uses the dedicated
+  # app-cloudflared and commands-cloudflared connectors, each independently
+  # deployed at both sites. Keep this object stopped so a broad apply cannot
+  # resurrect the stale mixed-origin route.
+  replicas: 0
   # maxSurge: 0 / maxUnavailable: 1, NOT the more common maxSurge: 1 /
   # maxUnavailable: 0 -- deliberately, after hitting a real deadlock with the
   # latter. The one-per-node anti-affinity rule below caps this cluster at 2
