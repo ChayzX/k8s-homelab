@@ -35,10 +35,10 @@ sudo install -o root -g root -m 0755 \
 The command is destructive fencing, not a health check. `--help` is the only
 non-mutating invocation. The existing GCP reverse-SSH endpoint is a forced
 operation on ChaseBot and currently rejects arguments; inspect or replace
-that forced operation only through the ChaseBot maintenance path. Do not test
-the fence through production SSH until a maintenance window has recorded the
-expected standby restore and stale-writer proof in GitHub Issues #147 and
-#191.
+the forced operation accepts only the exact `fence-pantry-postgres --confirm`
+invocation through the ChaseBot maintenance path. Do not test the fence
+through production SSH until a maintenance window has recorded the expected
+standby restore and stale-writer proof in GitHub Issues #147 and #191.
 
 The service listens on localhost only. Each site can reach it through an
 outbound SSH local-forward to GCP; no public application port or paid load
