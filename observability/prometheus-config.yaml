@@ -42,6 +42,22 @@ data:
         cluster: minecraftmachine
         node: minecraftmachine
 
+    # Long-term metrics storage in Grafana Cloud. The access-policy token is
+    # mounted from the grafana-cloud-metrics Secret by prometheus.yaml.
+    remote_write:
+      - url: https://prometheus-prod-56-prod-us-east-2.grafana.net/api/prom/push
+        basic_auth:
+          username: "3548270"
+          password_file: /etc/prometheus/secrets/password
+        queue_config:
+          capacity: 2500
+          max_shards: 10
+          min_shards: 1
+          max_samples_per_send: 500
+          batch_send_deadline: 5s
+          min_backoff: 30ms
+          max_backoff: 5s
+
     scrape_configs:
       # ---------------------------------------------------------------
       # Self
