@@ -11,9 +11,11 @@ backup API and uploads under the documented R2 recovery prefix.
 Oracle has a recovery/read-only overlay in
 `deploy/oracle-active-active-readonly/` and a zero-replica recovery manifest in
 `docs/recovery/operations-oracle-standby/replicas-zero.yaml`. It is not a
-second SQLite writer. The current Operations image is AMD64-only, so an Oracle
-promotion requires an AMD64-compatible placement or a rebuilt multi-architecture
-image. Authentik-independent emergency access is a separate required gate.
+second SQLite writer. The Operations CI publish workflow builds a
+multi-architecture image for `linux/amd64` and `linux/arm64`, so image
+architecture is no longer the Oracle blocker. Oracle remains zero-replica until
+the writable restore, Authentik-independent emergency access, SQLite writer
+fencing, routing, and rollback gates pass.
 
 ## Normal health check
 
