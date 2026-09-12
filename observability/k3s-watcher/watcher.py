@@ -113,6 +113,10 @@ CLOUDFLARED_BENIGN_PATTERNS = os.environ.get(
     r"precheck component=\"UDP Connectivity\".*details=\"QUIC connection failed\".*status=fail",
 )
 CLOUDFLARED_BENIGN_RE = re.compile(CLOUDFLARED_BENIGN_PATTERNS, re.IGNORECASE)
+CLOUDFLARED_HTTP2_FALLBACK_RE = re.compile(
+    r'precheck component="UDP Connectivity".*details="QUIC connection failed".*status=fail',
+    re.IGNORECASE,
+)
 
 EXTRA_RECIPIENTS = {}
 for entry in os.environ.get("EXTRA_ALERT_RECIPIENTS", "").split(","):
@@ -475,7 +479,9 @@ def cloudflared_ready(session=requests):
 
 
 def cloudflared_teardown_suppressed(line, ready):
-    """Suppress only known QUIC teardown lines when the connector is healthy."""
+    """Suppress known teardown lines only when healthy, plus explicit HTTP/2 fallback."""
+    if CLOUDFLARED_HTTP2_FALLBACK_RE.search(line):
+        return True
     return bool(ready and CLOUDFLARED_BENIGN_RE.search(line))
 
 
