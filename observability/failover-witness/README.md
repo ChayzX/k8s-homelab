@@ -12,6 +12,34 @@ caller must still prove that the old PostgreSQL writer is stopped or rejects
 writes before promoting a new writer. Automatic failover remains disabled
 until that proof exists.
 
+## Minecraft-safe PantryBot writer fence
+
+`fence-pantry-postgres.sh` is the source-side fence contract for the home
+PantryBot database. It scales down and force-removes only the named PantryBot
+PostgreSQL StatefulSets, verifies that their services have no endpoints, and
+fails closed if the Kubernetes API or any database pod remains reachable. It
+does not stop `k3s`, `k3s-agent`, containerd, a node, or Minecraft. The
+repository contract test is `test_pantry_postgres_fence.py`.
+
+Install it only on the source-writer host that owns the local PostgreSQL
+authority (currently ChaseBot during normal home-primary operation). Do not
+install this command on MinecraftMachine; Minecraft shares its control plane
+with the home standby and is intentionally excluded from the fence target:
+
+```sh
+sudo install -o root -g root -m 0755 \
+  observability/failover-witness/fence-pantry-postgres.sh \
+  /usr/local/sbin/fence-pantry-postgres
+```
+
+The command is destructive fencing, not a health check. `--help` is the only
+non-mutating invocation. The existing GCP reverse-SSH endpoint is a forced
+operation on ChaseBot and currently rejects arguments; inspect or replace
+that forced operation only through the ChaseBot maintenance path. Do not test
+the fence through production SSH until a maintenance window has recorded the
+expected standby restore and stale-writer proof in GitHub Issues #147 and
+#191.
+
 The service listens on localhost only. Each site can reach it through an
 outbound SSH local-forward to GCP; no public application port or paid load
 balancer is required. The shared secret belongs in a root-owned environment
@@ -28,11 +56,8 @@ does not silently send coordination traffic across the home pair.
 The relay listens on the node's Kubernetes internal address at port 18766 and
 forwards only to that node's loopback tunnel. It adds no authentication: callers still need
 the witness Bearer secret, and the relay is intended only for the private home
-network. The same relay manifest may also be applied to the independent Oracle
-k3s cluster; its Oracle node selector creates one node-local relay there,
-backed by Oracle's own host tunnel. This keeps Opsbot and other site-local
-workloads on the same private witness contract without routing them through
-the home cluster.
+network. The Oracle tunnel remains a node-address listener until an equivalent
+Oracle relay is deployed.
 
 Before enabling the unit, create its unprivileged account once:
 
@@ -85,11 +110,6 @@ authority:
   forwards the ClusterIP authority to GCP loopback port `25432`.
 - `pantry-bot-postgres-oracle-forward.service` runs on Oracle and forwards its
   node-local `100.78.181.15:25432` to that GCP loopback port.
-
-The same pair carries Authentik's PostgreSQL authority on port `25433` from
-the home `auth-postgresql-transport` NodePort. It is transport only: Oracle
-must use the current fenced authority and must not start a second writable
-Authentik database.
 
 The two SSH identities remain site-local. This is encrypted transport for a
 standby rehearsal, not database replication, promotion, or writer fencing.

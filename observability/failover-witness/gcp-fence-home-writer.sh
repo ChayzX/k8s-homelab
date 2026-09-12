@@ -1,9 +1,8 @@
-#!/bin/sh
+#!/usr/bin/env sh
 set -eu
 
-# Installed root-owned on the GCP witness. The Oracle promoter invokes this
-# through the existing OS Login SSH connection. The private key never leaves
-# GCP, and the home key is a forced-command key with no shell access.
+# Installed root-owned on the GCP witness. The private key never leaves GCP;
+# the reverse SSH destination is the home host's root command path.
 exec /usr/bin/ssh \
   -i /etc/failover-witness/home-fence \
   -o BatchMode=yes \
