@@ -44,6 +44,15 @@ open gate. The monitor persists an `active_alerts` map with stable
 does not create a second notification for the same check; a newly failed check
 or a recovered check gets its own transition.
 
+On 2026-09-12, a persistent `mods` failure was traced to the monitor probing
+the hostname root (`/`) while the real moderator surface is `/mod/`; the
+corrected probe returned HTTP 200 and the persisted state returned to healthy
+with zero failures. A separate Discord repeat-page incident was traced to a
+stale user-level `k3s-watcher.service` existing alongside the system-level
+watcher. The user unit was disabled and the system unit retained as the sole
+evaluator; its per-condition cooldown is now 24 hours while new fingerprints
+remain alertable.
+
 On 2026-09-10, the monitor independently observed a short public-edge
 degradation: Grafana failed on three consecutive 60-second checks, with the
 other public checks failing on the first two cycles. The monitor transitioned
