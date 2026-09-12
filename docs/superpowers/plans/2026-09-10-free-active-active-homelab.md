@@ -219,6 +219,10 @@
 
 ### Task 7: Apply the portable pattern to non-Minecraft services
 
+Cartwise is explicitly out of scope and is not a target of this task. Its
+older planning references are historical only; do not create or execute
+Cartwise migration or HA work under this project.
+
 **Files:**
 - Modify: service-specific manifests and runbooks only after service issue approval.
 - Create: `docs/recovery/SERVICE-ACTIVE-ACTIVE-MATRIX.md`
