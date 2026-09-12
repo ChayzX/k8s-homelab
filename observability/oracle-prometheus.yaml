@@ -1,0 +1,174 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus-oracle-sa
+  namespace: observability
+  labels:
+    app: prometheus-oracle
+    app.kubernetes.io/part-of: observability
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: observability-prometheus-oracle
+  labels:
+    app: prometheus-oracle
+    app.kubernetes.io/part-of: observability
+rules:
+  - apiGroups: [""]
+    resources: [nodes, nodes/proxy, services, endpoints, pods]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [nodes/metrics]
+    verbs: [get]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: [endpointslices]
+    verbs: [get, list, watch]
+  - nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: observability-prometheus-oracle
+  labels:
+    app: prometheus-oracle
+    app.kubernetes.io/part-of: observability
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: observability-prometheus-oracle
+subjects:
+  - kind: ServiceAccount
+    name: prometheus-oracle-sa
+    namespace: observability
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-oracle-data
+  namespace: observability
+  labels:
+    app: prometheus-oracle
+    app.kubernetes.io/part-of: observability
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 8Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-oracle
+  namespace: observability
+  labels:
+    app: prometheus-oracle
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/part-of: observability
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: prometheus-oracle
+  template:
+    metadata:
+      labels:
+        app: prometheus-oracle
+        app.kubernetes.io/name: prometheus
+        app.kubernetes.io/part-of: observability
+    spec:
+      serviceAccountName: prometheus-oracle-sa
+      automountServiceAccountToken: true
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        fsGroup: 65534
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.1.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=7d
+            - --storage.tsdb.retention.size=6GB
+            - --web.enable-lifecycle
+          ports:
+            - name: http
+              containerPort: 9090
+          startupProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+              readOnly: true
+            - name: grafana-cloud-metrics
+              mountPath: /etc/prometheus/secrets
+              readOnly: true
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-oracle-config
+        - name: grafana-cloud-metrics
+          secret:
+            secretName: grafana-cloud-metrics
+        - name: data
+          persistentVolumeClaim:
+            claimName: prometheus-oracle-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-oracle
+  namespace: observability
+  labels:
+    app: prometheus-oracle
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/part-of: observability
+spec:
+  selector:
+    app: prometheus-oracle
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http

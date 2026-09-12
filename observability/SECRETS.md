@@ -107,8 +107,9 @@ the alerting mount and environment variable must be re-enabled together.
 
 ## 4. `grafana-cloud-metrics` — Grafana Cloud Prometheus remote-write token
 
-This Secret is consumed by the home Prometheus remote-write configuration.
-Oracle does not currently have a corresponding active collector Deployment.
+This Secret is consumed by both the home Prometheus Deployment and the
+Oracle-specific `prometheus-oracle` Deployment. The same Cloud token is
+mounted independently in each cluster; it is never committed to the repo.
 
 ```bash
 kubectl -n observability create secret generic grafana-cloud-metrics \

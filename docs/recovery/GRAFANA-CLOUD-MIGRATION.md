@@ -65,9 +65,10 @@ GitHub issues, and shell history.
    `prometheus_remote_storage_samples_pending` returns to zero.
 2. Verify logs and metrics from the home site in Cloud Explore for one retention
    interval.
-3. Add a separately deployed Oracle collector before claiming multi-site
-   observability coverage; Oracle is not currently sending Prometheus metrics
-   through this home Deployment.
+3. Oracle now has a separately deployed, Oracle-labeled Prometheus collector
+   using its own 8Gi local buffer, with node-exporter, kube-state-metrics,
+   kubelet, and cAdvisor targets healthy. Verify its remote-write queue drains
+   to zero after the initial WAL replay before reducing local retention.
 4. Only then reduce local Grafana/Loki/Prometheus retention. Keep local
    collectors as an outage buffer and retain external monitoring/UptimeRobot.
 

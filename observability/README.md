@@ -17,6 +17,9 @@ Node LAN IP: `192.168.40.208`. StorageClass: `local-path`.
 | `loki-config.yaml` | ConfigMap: Loki's `loki-config.yaml`. |
 | `loki-external-nodeport.yaml` | **Migration-window only.** NodePort 31100 so the old Docker-side promtail can keep pushing to the new Loki. |
 | `prometheus.yaml` | Prometheus SA, ClusterRole/Binding (API access for `kubernetes_sd_configs`), PVC (20Gi), Deployment, ClusterIP Service (9090). |
+| `oracle-prometheus.yaml` | Lightweight Oracle Prometheus collector with an 8Gi local buffer and Grafana Cloud remote-write. Apply to the independent Oracle k3s cluster, not home. |
+| `oracle-prometheus-config.yaml` | Oracle-only scrape configuration with `site=oracle` external labels. |
+| `node-exporter-oracle.yaml` | Oracle host metrics DaemonSet and Service. |
 | `prometheus-config.yaml` | ConfigMap: Prometheus' `prometheus.yml`, rewritten scrape config. |
 | `grafana.yaml` | Grafana SA, PVC (2Gi), Deployment, primary `LoadBalancer` Service (3002). |
 | `grafana-provisioning.yaml` | ConfigMaps: `grafana-provisioning-datasources`, `grafana-provisioning-dashboards`, and the retained `grafana-provisioning-alerting` definition. **See "Grafana dashboard ConfigMap" below before applying.** |
@@ -113,6 +116,17 @@ kubectl apply -f grafana.yaml
 kubectl apply -f kube-state-metrics.yaml
 kubectl apply -f promtail.yaml
 ```
+
+## Oracle collector
+
+Oracle is an independent k3s cluster, so the Oracle collector manifests must
+be applied with Oracle's kubeconfig or directly on that host. Create the
+`grafana-cloud-metrics` Secret there using the same three-key contract in
+`SECRETS.md`, then apply `node-exporter-oracle.yaml`,
+`kube-state-metrics.yaml`, `oracle-prometheus-config.yaml`, and
+`oracle-prometheus.yaml`. The Oracle collector uses `site=oracle` and
+`cluster=pantry-bot-oracle` labels so its metrics are distinguishable from
+home in Grafana Cloud. It has no local Grafana or Loki dependency.
 
 `grafana.yaml` contains the Grafana Deployment/PVC/SA block and a **primary
 Service** on port 3002 that will sit `EXTERNAL-IP <pending>` until the
