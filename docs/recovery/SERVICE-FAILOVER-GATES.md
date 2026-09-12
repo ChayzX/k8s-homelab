@@ -143,26 +143,11 @@ home-primary, Oracle standby/recovery.
   check, health/routing validation, RTO/RPO capture, and rollback. Preserve the
   existing R2-backed recovery path throughout.
 
-## Cartwise
+## Explicit exclusions
 
-Current model: home-only stateful application; Oracle placement is not eligible
-until the state, hostPath, and background-job gates pass.
-
-- Capacity gate: remove the home hostPath dependency, pin a reproducible image,
-  define resource limits, and run an Oracle replica that can start with only
-  its approved secrets and local dependencies.
-- State gate: identify every PostgreSQL table, file, cache, session, and upload
-  that is authoritative; establish backup freshness and either a portable
-  shared transactional authority or a tested single-writer promotion path.
-  Verify stale PostgreSQL writers are fenced.
-- Side-effect gate: inventory email, payment, webhook, queue, scheduled-job,
-  and other outbound effects; assign each job lane a durable idempotency key,
-  retry/reconciliation policy, and one ownership epoch. A second web pod is
-  not sufficient while jobs can run twice.
-- Failure gate: run a synthetic read/write plus background-job replay through
-  home loss and Oracle promotion, prove no duplicate external effect, measure
-  RTO/RPO, validate routing, and roll back. Track all evidence in homelab
-  issue #205 before adding Oracle production capacity.
+Cartwise is outside this project. Do not add Oracle placement, failover gates,
+or production HA changes for it here; any future Cartwise work requires a
+separate scope decision and tracking issue.
 
 ## Common evidence record
 
