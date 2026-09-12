@@ -9,8 +9,13 @@ cloudflared stream is matched and the connector's `/ready` endpoint responds
 successfully. Readiness failures, DNS errors, dial errors, origin failures,
 and generic timeouts remain alertable. Alert keys normalize volatile
 `connIndex`, `event`, and `ip` fields. A fingerprint must recur continuously
-for five minutes before its first alert, and then uses a 15-minute cooldown;
-the pending incident resets after 90 seconds without a matching line.
+for five minutes before its first alert. While that same condition remains
+active, it is suppressed after the first notification; the active gate is
+cleared only when the condition recovers (or its pending log window expires),
+so a persistent outage does not page every 15 minutes. A later recurrence is
+alertable again. The pending incident resets after 90 seconds without a
+matching line, while the 15-minute cooldown remains the guard for restart
+protection and watcher-startup/recovery notifications.
 For the host service, set `CLOUDFLARED_READY_URL` to the current Cloudflared
 Service ClusterIP because host processes cannot resolve cluster DNS; the
 source default is suitable for an in-cluster run. During a detected Deployment
