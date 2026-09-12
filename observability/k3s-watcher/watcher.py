@@ -48,6 +48,13 @@ for entry in os.environ.get("FUNCTIONAL_HEALTH_URLS", "").split(","):
         namespace, url = entry.split("=", 1)
         if namespace.strip() and url.strip():
             FUNCTIONAL_HEALTH_URLS[namespace.strip()] = url.strip()
+EXTERNAL_HEALTH_URLS = {}
+for entry in os.environ.get("EXTERNAL_HEALTH_URLS", "").split(","):
+    entry = entry.strip()
+    if entry:
+        name, url = entry.split("=", 1)
+        if name.strip() and url.strip():
+            EXTERNAL_HEALTH_URLS[name.strip()] = url.strip()
 POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "30"))
 RESTART_THRESHOLD = int(os.environ.get("RESTART_THRESHOLD", "3"))
 RESTART_WINDOW_SECONDS = int(os.environ.get("RESTART_WINDOW_SECONDS", "600"))
@@ -810,6 +817,45 @@ def check_workload_health():
     return collection_complete, active_event_keys
 
 
+def check_external_health():
+    """Check public routes from the home host and page on sustained failure.
+
+    UptimeRobot remains the independent outside-home observer. These checks
+    add route-specific Discord/Operations context while this host is alive,
+    which catches a broken dedicated tunnel route before a stream is affected.
+    """
+    active_event_keys = set()
+    for name, url in EXTERNAL_HEALTH_URLS.items():
+        healthy, health_message = functional_health_check("external/" + name, url)
+        key = _event_key("external", name)
+        if healthy:
+            continue
+        if not persistent_workload_condition(key, True):
+            continue
+        active_event_keys.add(key)
+        message = health_message or f"Public route {name} failed its HTTP health check."
+        queue_operations_alert({
+            "source": "k3s-watcher",
+            "eventKey": key,
+            "eventType": "externalHealth",
+            "severity": "critical",
+            "namespace": "external",
+            "workload": name,
+            "pod": None,
+            "message": message,
+            "occurredAt": _utc_now(),
+        })
+        if cooldown_ok(key):
+            send_discord_alert(f"🚨 Public route {name} failed", message)
+        _active_workload_alerts.setdefault(key, {
+            "namespace": "external",
+            "workload": name,
+            "pod": None,
+            "recovery_message": f"Public route {name} is responding again.",
+        })
+    return True, active_event_keys
+
+
 def check_node_health():
     """Alert when a cluster node (e.g. the Oracle failover node) goes NotReady.
 
@@ -958,6 +1004,8 @@ def run_checks_once():
     workload_keys = set()
     node_keys = set()
     log_keys = set()
+    external_complete = False
+    external_keys = set()
     try:
         restart_complete, restart_keys = check_restart_loops()
     except Exception as exc:
@@ -974,18 +1022,22 @@ def run_checks_once():
         log_complete, log_keys = check_log_errors()
     except Exception as exc:
         print(f"[k3s-watcher] Log-error check error: {exc}")
+    try:
+        external_complete, external_keys = check_external_health()
+    except Exception as exc:
+        print(f"[k3s-watcher] External health check error: {exc}")
     # _active_workload_alerts is shared by check_workload_health and
     # check_node_health, so the recovery sweep must see the union of both
     # passes' keys -- sweeping with only one's keys would misread the
     # other's still-active conditions as recovered.
-    if workload_complete and node_complete:
-        sweep_workload_recoveries(workload_keys | node_keys)
+    if workload_complete and node_complete and external_complete:
+        sweep_workload_recoveries(workload_keys | node_keys | external_keys)
     try:
         flush_operations_alerts()
     except Exception as exc:
         print(f"[k3s-watcher] Unexpected Operations delivery error: {exc}")
-    if restart_complete and workload_complete and node_complete and log_complete:
-        active_keys = restart_keys | workload_keys | node_keys | log_keys
+    if restart_complete and workload_complete and node_complete and log_complete and external_complete:
+        active_keys = restart_keys | workload_keys | node_keys | log_keys | external_keys
         finish_operations_lifecycle(active_keys)
         if time.time() - _reconciliation_started_at < _reconciliation_warmup_seconds:
             return
