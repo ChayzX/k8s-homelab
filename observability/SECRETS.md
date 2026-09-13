@@ -10,17 +10,14 @@ applied. A Deployment whose Secret does not exist yet will sit in
 
 ## 1. `grafana-discord-webhooks` — Discord webhook for Pantry-bot / Twitch alerting
 
-Consumed by the grafana Deployment as the env var
-`PANTY_TWITCH_DISCORD_WEBHOOK_URL`, which the provisioned alerting contact
-point (`grafana-provisioning-alerting` ConfigMap → `alerting.yaml`, in
-`grafana-provisioning.yaml`) interpolates into its Discord webhook URL.
+The alerting ConfigMap still contains the Discord contact-point definition,
+but it is currently not mounted by the Grafana Deployment because the Secret
+was absent during the Grafana Cloud migration. Existing alert state remains
+in Grafana's database; this Secret is needed before re-enabling that
+provisioner.
 
-**This Secret MUST exist before `grafana.yaml` is applied.** It is a required
-`secretKeyRef`, deliberately not `optional: true`: if the env var is unset the
-provisioning interpolation yields an empty webhook URL, the Discord contact
-point fails its provisioning validation and Grafana refuses to start. A missing
-Secret instead fails loudly as `CreateContainerConfigError` before anything
-alerting-related can break silently.
+Do not create a placeholder value. An empty or invalid webhook makes Grafana's
+alerting provisioner fail at startup.
 
 ```bash
 kubectl -n observability create secret generic grafana-discord-webhooks \
@@ -105,47 +102,33 @@ done here.
 
 ---
 
-## 4. `grafana-cloud-metrics` — Grafana Cloud Prometheus push credential
+Never commit this Secret or paste its YAML. When the real webhook is restored,
+the alerting mount and environment variable must be re-enabled together.
 
-Consumed by each site-local Prometheus as the remote-write credential. The
-Secret must contain exactly `remote-write-url`, `username`, and `password`:
+## 4. `grafana-cloud-metrics` — Grafana Cloud Prometheus remote-write credentials
 
-```bash
-kubectl -n observability create secret generic grafana-cloud-metrics \
-  --from-literal=remote-write-url='https://prometheus-prod-XX.grafana.net/api/prom/push' \
-  --from-literal=username='<metrics instance ID>' \
-  --from-literal=password='<metrics:write access-policy token>'
-```
-
-This is a **push-only** credential. It is intentionally not expected to
-authenticate Grafana Cloud's query API; verifying dashboards in Explore
-requires logging into Grafana Cloud or provisioning a separate credential
-with the appropriate `metrics:read` scope. Never replace this Secret with a
-migration or UI token without first proving that it retains `metrics:write`
-and checking the local Prometheus remote-write failure counter.
-
----
-
-## Checklist before applying the Deployments
-
-```bash
-kubectl -n observability get secret grafana-discord-webhooks
-```
-
-Must exist before `grafana.yaml` is applied. Never commit it, never
-`kubectl get -o yaml` it into a paste.
-
-## 4. `grafana-cloud-metrics` — Grafana Cloud Prometheus remote-write token
-
-This Secret is staged for the Grafana Cloud metrics migration. It is not used
-until the Prometheus remote-write endpoint and username are added to
-`prometheus-config.yaml` and the Secret exists in both sites.
+This Secret is consumed by both the home Prometheus Deployment and the
+Oracle-specific `prometheus-oracle` Deployment. The same Cloud token is
+mounted independently in each cluster; it is never committed to the repo.
 
 ```bash
 kubectl -n observability create secret generic grafana-cloud-metrics \
-  --from-literal=grafana-cloud-metrics-password='<metrics:write access-policy-token>'
+  --from-literal=password='<metrics:write access-policy-token>'
 ```
 
-The key must be exactly `grafana-cloud-metrics-password`; use a token with
-only the `metrics:write` scope. See
+The current manifests require the `password` key; the documented Secret
+contract contains only that remote-write credential. Use a token with only the
+`metrics:write` scope. The remote-write URL and username are
+configured in the tracked Prometheus ConfigMaps, not read from this Secret.
+This Secret is for Prometheus remote write only. It does not contain, and must
+not be used as, the separate `metrics:read` credentials used to query Grafana
+Cloud.
+
+For query access, use the read credentials and query endpoint supplied by the
+Grafana Cloud portal for the stack's Prometheus data source. The query
+endpoint is portal-provided; do not derive it from the remote-write URL or
+from `/api/prom/push`. That path is the write destination configured for
+Prometheus in this repository.
+
+See
 `docs/recovery/GRAFANA-CLOUD-MIGRATION.md` for the staged cutover gates.
