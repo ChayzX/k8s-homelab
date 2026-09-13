@@ -104,6 +104,15 @@ rehearsal; it confirms the approved JMusicBot R2 prefix, lease-gated sync,
 five-minute sync interval, and exclusions for mutable config, backup churn,
 and the lease marker.
 
+The source-level fencing contract must also pass before building or publishing
+an image. It verifies that a lost witness lease stops renewal, removes the
+R2-owner marker, shuts down Discord, and only then releases the local instance
+lock. This is repository-only and does not contact Discord, Kubernetes, or R2:
+
+```bash
+bash tests/jmusicbot-ownership-source-contract-test.sh
+```
+
 Provision the two Secrets through the approved secret store, using the names
 and keys documented in `jmusicbot/SECRETS.md`; never put their values in Git or
 the migration issue. Apply the checked-in Deployment without changing its
