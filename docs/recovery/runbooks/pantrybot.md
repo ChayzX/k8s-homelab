@@ -99,6 +99,11 @@ The required Cloudflare origins are recorded in
 Git. Confirm endpoints before blaming Cloudflare: an origin with no endpoints
 produces a tunnel error even when the connector itself is healthy.
 
+The same read-only redemption check is available as
+`scripts/pantrybot-redemption-outbox-check.sh` from the homelab checkout. It
+returns non-zero when any of the ten most recent redemptions is missing a
+completed required route.
+
 ## Scenario SOPs
 
 | Scenario | Detection | Safe diagnosis | Restore / promotion and fencing | Verification and gate |
