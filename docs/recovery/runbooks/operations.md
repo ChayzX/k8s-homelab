@@ -8,10 +8,12 @@ on the `operations-data` PVC. The daily backup is
 `k8s-homelab/scripts/operations-db-backup.sh`, which uses SQLite's online
 backup API and uploads under the documented R2 recovery prefix.
 
-Oracle has a recovery/read-only overlay in
-`deploy/oracle-active-active-readonly/` and a zero-replica recovery manifest in
-`docs/recovery/operations-oracle-standby/replicas-zero.yaml`. It is not a
-second SQLite writer. The Operations CI publish workflow builds a
+Oracle has a continuously running recovery/read-only overlay in
+`deploy/oracle-active-active-readonly/`. It is not a second SQLite writer:
+`OPERATIONS_MUTATION_MODE=disabled` removes mutation capability while the
+read/API health surface remains available. The zero-replica manifest in
+`docs/recovery/operations-oracle-standby/replicas-zero.yaml` is retained for
+an emergency state where even read capacity must be stopped. The Operations CI publish workflow builds a
 multi-architecture image for `linux/amd64` and `linux/arm64`, so image
 architecture is no longer the Oracle blocker. Oracle remains zero-replica until
 the writable restore, Authentik-independent emergency access, SQLite writer
