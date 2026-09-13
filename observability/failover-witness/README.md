@@ -116,6 +116,12 @@ standby rehearsal, not database replication, promotion, or writer fencing.
 Install and test these units independently before creating a replication role;
 do not expose port `25432` publicly or route application traffic through it.
 
+After home failback, the direct home-to-Oracle return transport is provided by
+`pantry-bot-postgres-home-return-tunnel.service`. It binds only Oracle's
+loopback `127.0.0.1:25432` and forwards to the home PostgreSQL replication
+NodePort `127.0.0.1:30432`; Oracle's standby Secret must use `PRIMARY_HOST`
+`127.0.0.1`, `PRIMARY_PORT` `25432`, and slot `pantry_oracle_return`.
+
 The repository also includes the home-side tunnel unit. Install it only on a
 site that has its own SSH identity authorized on GCP; never copy the home
 private key to Oracle:

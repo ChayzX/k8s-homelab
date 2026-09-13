@@ -1,0 +1,27 @@
+[Unit]
+Description=Direct reverse SSH transport for the PantryBot Oracle standby
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=chase
+ExecStart=/usr/bin/ssh -NT \
+  -o BatchMode=yes \
+  -o ExitOnForwardFailure=yes \
+  -o ServerAliveInterval=30 \
+  -o ServerAliveCountMax=3 \
+  -o StrictHostKeyChecking=yes \
+  -o UserKnownHostsFile=/home/chase/.ssh/known_hosts \
+  -i /home/chase/.ssh/pantry-bot-oracle \
+  -R 127.0.0.1:25432:127.0.0.1:30432 \
+  ubuntu@100.78.181.15
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target
