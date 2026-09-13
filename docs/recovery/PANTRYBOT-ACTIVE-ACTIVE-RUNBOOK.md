@@ -233,6 +233,17 @@ PostgreSQL promotion command; those must be supplied by adapters that can
 prove fencing even when the old site is unreachable. This is an executable
 ordering guard, not evidence that a witness or provider adapter is configured.
 
+`scripts/pantrybot-auto-failover-oracle.sh` supplies the conservative detector
+boundary for Oracle. It requires a private, site-specific home-primary probe,
+three-or-more operator-selected consecutive failures, and the coupled
+promotion command with both home fence adapters. It locks concurrent runs and
+fails closed when the probe recovers. It must not use a public hostname, since
+active-active Cloudflare routing can keep public traffic healthy while home is
+down. The contract test is
+`tests/pantrybot-auto-failover-gate-test.sh`; production enablement remains
+gated on deploying and measuring that private probe and running the failure
+matrix below.
+
 GCP is now a verified lightweight external observer: OS Login SSH works as
 `chasepdrsn_gmail_com`, passwordless sudo is available for the monitor unit,
 and the persisted monitor state is healthy for the public and protected
