@@ -34,8 +34,9 @@ home-primary operation:
 - Home `postgres-authority-home-return-0` reports `pg_is_in_recovery() = true`
   and is intentionally not selected by the production application endpoint.
 - Oracle currently owns the Twitch ingress, Twitch outbound, and overlay lease
-  rows. Home application capacity may remain Ready, but it must not acquire a
-  second external-side-effect owner.
+  rows. Home split application capacity is also Ready against the Oracle
+  writer; its gateway and dispatcher remain lease-fenced and do not send while
+  Oracle owns those lanes.
 
 Do not switch the application Secret, promote the home standby, or reseed
 Oracle from home until the current Oracle writer is fenced, the home standby
