@@ -111,8 +111,9 @@ freshness-monitor gate because the credential is still a workload credential.
   temporary namespace. The pinned Operations image reached `/readyz` and
   `/livez` with HTTP 200, and SQLite integrity check returned `ok`; the
   temporary namespace was deleted afterward. The current Operations image is
-  AMD64-only, so any Oracle ARM64 deployment requires a multi-architecture
-  image or an explicit AMD64 placement constraint.
+  published for both `linux/amd64` and `linux/arm64`, so Oracle architecture is
+  no longer the capacity blocker. Writable restore, emergency access, SQLite
+  writer fencing, routing, and rollback remain separate open gates.
 
 ## Management-path remediation
 

@@ -110,4 +110,6 @@ authorized mutation with its audit row; and rollback/failback evidence.
   promotion, routing, writer fencing, RTO/RPO, or rollback.
 - A shared transactional database is required before Operations can be called
   two-site writable active-active.
-- The current image's AMD64-only constraint applies to Oracle.
+- The current image is published for both `linux/amd64` and `linux/arm64`;
+  Oracle architecture is no longer a capacity blocker. The writable restore,
+  emergency-access, fencing, routing, and rollback gates remain open.
