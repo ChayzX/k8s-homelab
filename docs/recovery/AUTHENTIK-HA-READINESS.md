@@ -19,6 +19,14 @@ Authentik installation, or make Authentik a prerequisite for recovery access.
 - The tracked LDAP outpost is `auth/50-ldap-outpost.yaml`. It is intentionally
   one replica and uses only the `ldap-outpost-token` Secret; its pod does not
   need a Kubernetes service-account token.
+- The base Helm values remain external because they contain secrets. Sanitized
+  placement fragments are tracked in
+  `auth/authentik-home-values.example.yaml` and
+  `auth/authentik-oracle-values.example.yaml`. Home Authentik server/worker
+  must remain on `minecraftmachine`; Oracle server/worker must remain on
+  `pantry-bot-oracle`. `chasebot` is not a valid Authentik application target
+  until its private route to the active Authentik PostgreSQL authority is
+  independently proven.
 - Oracle and ChaseBot have resolved the Authentik LDAP identity `chase` and the
   `posix-admins` group through SSSD. This proves NSS/group lookup only, not
   password authentication or an interactive SSH/PAM login.
@@ -76,6 +84,7 @@ read secret values or modify production:
 
 ```bash
 bash tests/authentik-manifest-test.sh
+bash tests/authentik-placement-contract-test.sh
 kubectl -n auth get deploy,sts,svc,pvc -o wide
 kubectl -n auth get secret -o name
 ```

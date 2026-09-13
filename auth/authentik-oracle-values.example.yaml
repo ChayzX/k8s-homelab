@@ -1,0 +1,11 @@
+# Sanitized Helm values fragment for the Oracle Authentik application tier.
+# Oracle connects to the current fenced PostgreSQL authority.
+server:
+  nodeSelector:
+    kubernetes.io/hostname: pantry-bot-oracle
+worker:
+  nodeSelector:
+    kubernetes.io/hostname: pantry-bot-oracle
+
+# Resource requests/limits await an Oracle budget review and staged startup
+# measurement recorded in issue #198.

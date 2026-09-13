@@ -1,0 +1,11 @@
+# Sanitized Helm values fragment for the home Authentik application tier.
+# Base Helm values live outside this repository because they contain secrets.
+server:
+  nodeSelector:
+    kubernetes.io/hostname: minecraftmachine
+worker:
+  nodeSelector:
+    kubernetes.io/hostname: minecraftmachine
+
+# Do not copy the failed low-limit experiment into production. Authentik
+# startup and migration bursts must be measured before limits are introduced.
