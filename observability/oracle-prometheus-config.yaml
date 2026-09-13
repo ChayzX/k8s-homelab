@@ -24,12 +24,14 @@ data:
           password_file: /etc/prometheus/secrets/password
         queue_config:
           capacity: 1500
-          max_shards: 8
+          max_shards: 2
           min_shards: 1
-          max_samples_per_send: 500
-          batch_send_deadline: 5s
+          max_samples_per_send: 2000
+          batch_send_deadline: 10s
           min_backoff: 30ms
           max_backoff: 5s
+        metadata_config:
+          send: false
         # Keep the local Prometheus complete, but send only operationally
         # useful series to the free Grafana Cloud stack. The kubelet and
         # cAdvisor endpoints are intentionally retained locally; their full
