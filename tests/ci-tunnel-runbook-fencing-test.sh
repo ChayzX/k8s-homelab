@@ -11,6 +11,6 @@ grep -Fq 'expected site identity' "$runbook"
 grep -Fq 'exactly Oracle and nowhere else' "$runbook"
 grep -Fq 'ci-tunnel-token-oracle' "$setup"
 grep -Fq 'independently named Oracle Cloudflare tunnel' "$setup"
-grep -Fq 'do not reuse `ci-tunnel-token`' "$setup"
+grep -Fq 'Never reuse `ci-tunnel-token`' "$setup"
 
 echo 'ci-tunnel-runbook-fencing-test=passed'
