@@ -28,7 +28,7 @@ def test_fence_script_never_stops_the_k3s_writer_domain() -> None:
 def test_fence_script_fails_closed_and_verifies_zero_replicas() -> None:
     text = SCRIPT.read_text()
     assert "set -Eeuo pipefail" in text
-    assert "--replicas=0" in text
+    assert '"replicas":0' in text
     assert "fence_status=passed" in text
     assert "fence_status=failed" in text
 

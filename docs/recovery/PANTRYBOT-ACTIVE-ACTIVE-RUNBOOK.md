@@ -3,7 +3,7 @@
 This runbook is the operational contract for the split PantryBot roles.
 Minecraft is not part of this runbook.
 
-## Current live state (2026-09-12)
+## Current live state (2026-09-13)
 
 The production split-role deployment is live at both sites. The public
 commands-only Cloudflare route is served by a dedicated connector in home and
@@ -11,18 +11,37 @@ Oracle; the private API/site, workers, overlay delivery, gateway, and
 dispatcher are also Ready at both sites. The native PantryBot suite currently
 passes 121 test files and 617 tests.
 
-The current database recovery window is Oracle-primary: Oracle's PostgreSQL is
-writable and owns the external-side-effect leases, while the home
-`postgres-authority-home-return-0` instance is a caught-up read-only standby.
-Do not promote home, change the application database Secret, or reseed Oracle
-until the current Oracle writer is fenced and the controlled return-home
-sequence is recorded in GitHub Issues #147 and #191. This is a deliberate
-recovery state, not permission for an uncontrolled two-writer deployment.
+The current controlled failover state is Oracle-primary: Oracle's PantryBot and
+Authentik PostgreSQL instances are writable and Oracle owns all external-side-
+effect leases. Home PantryBot and Authentik database StatefulSets are fenced at
+zero replicas with zero Service endpoints. Home Authentik HTTP capacity remains
+available against the Oracle writer so the home CI tunnel can serve the identity
+hostname. This is a deliberate single-writer recovery state, not uncontrolled
+multi-primary database operation.
 
 The dedicated commands hostname is intentionally OAuth-free: its public site
 and `/api/public/commands` are available, while `/login/*`, `/oauth/*`,
 `/mod/*`, and private `/api/*` paths return 404. OAuth, moderator, and overlay
 routes remain on their separate hostnames.
+
+## Controlled failover evidence — 2026-09-13
+
+The live rehearsal acquired witness epoch 19, fenced home PantryBot PostgreSQL
+through GCP -> ChaseBot using the least-privilege `pantry-postgres-fencer`
+ServiceAccount, promoted Oracle, switched the Oracle Service to the primary
+pod, and verified PantryBot readiness. Home Authentik capacity was then stopped,
+home Authentik PostgreSQL was fenced through the corresponding restricted
+fencer, Oracle Authentik PostgreSQL was promoted, and home Authentik HTTP
+capacity was restored against the Oracle NodePort writer. External checks
+returned 200 for commands, the public commands API, OAuth, and Authentik routes.
+Oracle holds the gateway, dispatcher, and overlay leases.
+
+The rehearsal exposed and corrected two adapter defects: multi-argument SSH
+fence commands were initially treated as one executable, and the ChaseBot
+forced-command wrapper did not accept GCP's explicit `--confirm` suffix. The
+replacement adapter is committed in homelab commits `560151d` and `dd8dd04`.
+Return-home, synthetic-event proof, and automatic daemon enablement remain
+separate gates.
 
 ## Target topology
 

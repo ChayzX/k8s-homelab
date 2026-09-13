@@ -9,15 +9,16 @@ and `auth/60-postgresql-transport.yaml`. Current normal authority is:
 - home `auth-authentik-server` and `auth-authentik-worker`;
 - home `auth-postgresql-0` on a local-path PVC;
 - home `ldap-outpost` (one replica, Service ports 389/636); and
-- Oracle `auth-postgresql-standby-0` as a physical, read-only standby; Oracle
-  Authentik server/worker/LDAP capacity is now running against the home writer
-  over `auth-postgresql-transport`.
+- Oracle `auth-postgresql-standby-0` as a physical standby, with Oracle
+  Authentik server/worker/LDAP capacity available at both sites. In the current
+  failover state Oracle's database is writable and home Authentik HTTP capacity
+  connects to it over a restricted NodePort; home `auth-postgresql-0` is fenced.
 
-Oracle's local database remains recovery-only until a controlled promotion;
-the Oracle application pods are active capacity, not independent database
-writers. On home loss, fence home first, promote Oracle, then switch the
-Oracle Authentik Secret to `auth-postgresql-standby`. `auth-postgresql-transport`
-is a private application/replication path, not a public endpoint. Use
+In normal operation Oracle's local database remains recovery-only and its
+application pods are active capacity, not independent writers. On home loss,
+fence home first, promote Oracle, then switch the Authentik Secret to
+`auth-postgresql-standby`. `auth-postgresql-transport` is a private
+application/replication path, not a public endpoint. Use
 `docs/recovery/AUTHENTIK-HA-READINESS.md` and `docs/recovery/RESTORE-REHEARSAL.md`
 as the authority for promotion decisions.
 

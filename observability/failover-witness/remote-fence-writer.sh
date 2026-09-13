@@ -14,6 +14,10 @@ case "${SSH_ORIGINAL_COMMAND:-}" in
     exec env KUBECONFIG=/etc/failover-witness/pantry-postgres-fencer.kubeconfig \
       /usr/local/lib/failover-witness/fence-pantry-postgres.sh --confirm
     ;;
+  "fence-auth-postgres --confirm")
+    exec env KUBECONFIG=/etc/failover-witness/auth-postgres-fencer.kubeconfig \
+      /usr/local/lib/failover-witness/fence-auth-postgres.sh --confirm
+    ;;
   *)
     echo "unsupported remote fence operation" >&2
     exit 64
