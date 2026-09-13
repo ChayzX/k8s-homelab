@@ -1,0 +1,55 @@
+// Grafana Alloy template for a Windows 11 host outside the homelab LAN.
+// Store the Grafana Cloud metrics-write token in
+// C:\\ProgramData\\GrafanaLabs\\Alloy\\grafana-cloud-token and grant
+// read access only to the Alloy service account.
+
+prometheus.exporter.windows "host" {
+  // Keep the default low-cardinality host collectors only.
+  enabled_collectors = ["cpu", "logical_disk", "net", "os", "system"]
+}
+
+prometheus.scrape "host" {
+  targets         = prometheus.exporter.windows.host.targets
+  scrape_interval = "30s"
+  forward_to      = [prometheus.relabel.host.receiver]
+}
+
+prometheus.relabel "host" {
+  rule {
+    source_labels = ["instance"]
+    target_label  = "host"
+    action        = "replace"
+  }
+  rule {
+    target_label = "site"
+    replacement  = "remote"
+    action       = "replace"
+  }
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = "https://prometheus-prod-56-prod-us-east-2.grafana.net/api/prom/push"
+
+    basic_auth {
+      username      = "3548270"
+      password_file = "C:\\ProgramData\\GrafanaLabs\\Alloy\\grafana-cloud-token"
+    }
+
+    // Windows exporter uses windows_* metric names rather than node_*.
+    write_relabel_config {
+      source_labels = ["__name__"]
+      regex = "up|windows_cpu_time_total|windows_memory_available_bytes|windows_memory_physical_total_bytes|windows_logical_disk_free_bytes|windows_logical_disk_size_bytes|windows_net_bytes_received_total|windows_net_bytes_sent_total|windows_system_boot_time_timestamp"
+      action = "keep"
+    }
+
+    queue_config {
+      capacity             = 500
+      max_shards           = 2
+      min_shards           = 1
+      max_samples_per_send = 200
+      batch_send_deadline  = "10s"
+    }
+  }
+}
