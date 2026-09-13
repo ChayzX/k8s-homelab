@@ -6,6 +6,13 @@ entries and the live split. `commands.greeniespantry.uk` is served by the
 dedicated active-active commands tunnel; the remaining private/OAuth routes
 stay on the shared tunnel.
 
+Stateful interactive routes are not equal active-active origins. During normal
+operation `auth.greeniespantry.uk`, `oauth.greeniespantry.uk`,
+`grafana.greeniespantry.uk`, and `operations.greeniespantry.uk` are Home-owned;
+Oracle becomes their origin only after Authentik PostgreSQL promotion and
+readiness validation. The PantryBot commands route remains independently
+active-active.
+
 ## Viewer command guide
 
 Hostname: `commands.greeniespantry.uk`

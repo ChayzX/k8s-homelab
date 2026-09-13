@@ -7,8 +7,9 @@ make Authentik a prerequisite for recovery.
 ## Current boundary
 
 - Authentik server, worker, and LDAP outpost run with application capacity on
-  both home and Oracle. This is active-active application capacity, not
-  multi-primary database operation.
+  both home and Oracle. Home is the normal interactive site; Oracle capacity
+  is not an equal public origin while its local PostgreSQL is a standby. This
+  is active-active application capacity, not multi-primary database operation.
 - Authentik PostgreSQL has one writer per fencing epoch. The current live
   authority is Oracle (`pg_is_in_recovery() = false`); home has no active
   Authentik PostgreSQL writer. Promotion and old-writer fencing are not yet
@@ -16,6 +17,10 @@ make Authentik a prerequisite for recovery.
 - Oracle and ChaseBot use SSSD over LDAPS and resolve `chase` and
   `posix-admins` (UID/GID 2018/27557).
 - Local SSH/key recovery remains independent of Authentik.
+
+Normal interactive route ownership is recorded in
+`INTERACTIVE-ROUTE-OWNERSHIP.md`; Oracle receives those routes only after
+controlled database promotion and local Authentik readiness validation.
 
 ## Live validation
 
