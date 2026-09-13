@@ -62,6 +62,38 @@ curl --max-time 15 -fsS -o /dev/null -w '%{http_code}\n' https://mods.greeniespa
 curl --max-time 15 -fsS -I https://overlay.greeniespantry.uk/
 ```
 
+For a channel-point redemption, verify the durable path at the database
+boundary before debugging the browser overlay. A recent redemption must have
+completed `overlay`, `twitch.channel_points`, and `twitch.chat` outbox rows;
+the latter is the chat announcement and is independent of overlay delivery.
+Inspect only identifiers, timestamps, targets, statuses, and errors—never
+print tokens or encrypted authorization data. A compact query from a worker
+pod is:
+
+```bash
+kubectl -n pantry-bot exec deploy/pantry-chat-worker -- node - <<'NODE'
+const { Pool } = require("pg");
+const pool = new Pool({ connectionString: process.env.PANTRY_DATABASE_URL });
+(async () => {
+  const result = await pool.query(`
+    SELECT e.event_id, e.created_at, e.status AS event_status,
+           o.target, o.status AS outbox_status, o.attempts, o.last_error
+    FROM pantry_events e
+    LEFT JOIN pantry_outbox o ON o.event_id = e.event_id
+    WHERE e.event_type = 'channel.channel_points_custom_reward_redemption.add'
+    ORDER BY e.created_at DESC
+    LIMIT 12
+  `);
+  console.table(result.rows);
+  await pool.end();
+})().catch((error) => { console.error(error.message); process.exit(1); });
+NODE
+```
+
+The unauthenticated OAuth-protected route is expected to return HTTP `302` to
+the Authentik outpost; use `curl -L` only when deliberately checking the
+resulting login page.
+
 The required Cloudflare origins are recorded in
 `docs/recovery/PANTRYBOT-PUBLIC-ROUTING.md`; tunnel tokens are in Secrets, not
 Git. Confirm endpoints before blaming Cloudflare: an origin with no endpoints
