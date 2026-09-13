@@ -1,3 +1,4 @@
+# RETIRED — preserved for rollback reference; do not apply.
 # ClusterIP Service for pantry-bot.
 #
 # Under Compose, cloudflared reached the bot via Docker's embedded DNS on the
