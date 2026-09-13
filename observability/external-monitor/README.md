@@ -39,6 +39,12 @@ reachable independently of the operator OAuth hostname. HTTP success and
 redirect responses are accepted because the monitor tests origin availability,
 not authenticated browser state.
 
+The monitor is a singleton evaluator for its state ledger. Each cycle takes a
+non-blocking advisory lock beside `state.json`; an overlapping process exits
+with `MONITOR_LOCKED` without probing or notifying. State is replaced
+atomically after a cycle, so a process interruption cannot leave truncated
+JSON that would cause a replayed transition on restart.
+
 Do not commit this file or put its values in Kubernetes manifests. The monitor
 logs state transitions and writes the latest result to
 `/var/lib/homelab-monitor/state.json`. UptimeRobot is the external monitor for

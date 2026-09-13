@@ -1,4 +1,5 @@
 import json
+import fcntl
 import importlib.util
 import subprocess
 import sys
@@ -64,6 +65,26 @@ assert next(item for item in monitor.CHECKS if item.name == "overlay").url == "h
 # single aggregate transition or lose the identity across process restarts.
 assert monitor.alert_identity("commands") == "external-monitor:commands"
 assert monitor.alert_identity("commands") == monitor.alert_identity("commands")
+
+# A duplicate evaluator must not race the durable ledger and emit a second
+# notification for the same transition.  This simulates another evaluator
+# holding the advisory lock while this evaluator attempts a cycle.
+original_state_file = monitor.STATE_FILE
+original_notify = monitor.notify
+try:
+    with tempfile.TemporaryDirectory() as directory:
+        monitor.STATE_FILE = Path(directory) / "state.json"
+        lock_path = monitor.monitor_lock_path()
+        with lock_path.open("a+") as held_lock:
+            fcntl.flock(held_lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            notifications = []
+            monitor.notify = notifications.append
+            monitor.run_once()
+            assert notifications == []
+            assert not monitor.STATE_FILE.exists()
+finally:
+    monitor.STATE_FILE = original_state_file
+    monitor.notify = original_notify
 
 original_checks = monitor.CHECKS
 original_check = monitor.check

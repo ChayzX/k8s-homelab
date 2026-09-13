@@ -3,6 +3,9 @@ paper.jar
 *.pyc
 __pycache__/
 
+# Host-local watcher credentials; keep only watcher.env.example in Git.
+observability/k3s-watcher/watcher.env
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db

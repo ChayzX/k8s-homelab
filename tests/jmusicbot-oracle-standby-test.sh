@@ -20,6 +20,31 @@ deployment = next(
     if "kind: Deployment" in document and "name: jmusicbot" in document
 )
 assert "replicas: 1" in deployment, "Oracle active-active overlay must render one live process"
+
+# The witness settings are container inputs, not PodSpec fields.  A plain
+# kubectl client dry-run does not reject an unknown PodSpec key, so keep this
+# placement contract here: if the block is accidentally dedented, the pod can
+# render while silently losing the lease configuration at admission/runtime.
+assert "\n      env:\n" not in deployment, "witness env must not be a PodSpec field"
+assert "\n        env:\n" in deployment, "witness env must be under the JMusicBot container"
+for variable in (
+    "JMUSICBOT_SITE",
+    "JMUSICBOT_WITNESS_URL",
+    "JMUSICBOT_WITNESS_SECRET",
+    "JMUSICBOT_WITNESS_RESOURCE",
+    "JMUSICBOT_LEASE_SECONDS",
+):
+    assert f"name: {variable}" in deployment, f"missing witness variable {variable}"
+
+assert "type: Recreate" in deployment, "Oracle must never overlap Discord writers"
+assert "path: /health" in deployment, "readiness must reflect Discord ownership/readiness"
+assert "path: /live" in deployment, "liveness must remain independent of Discord readiness"
+assert "if [ -f /musicbot/.jmusicbot-lease-owner ]; then" in deployment, (
+    "R2 sync must be lease-marker gated"
+)
+assert "--exclude '.jmusicbot-lease-owner'" in deployment, (
+    "R2 restore/sync must never copy the ownership marker"
+)
 PY
 
 echo "jmusicbot-oracle-active-active-test: all assertions passed"

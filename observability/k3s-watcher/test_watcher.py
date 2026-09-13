@@ -14,7 +14,7 @@ runtime_config = subprocess.run(
         "bash",
         "-c",
         (
-            "set -a; . ./watcher.env; "
+            "set -a; . ./watcher.env.example; "
             "exec python3 -c 'import json, watcher; "
             "print(json.dumps({\"watch_namespaces\": watcher.WATCH_NAMESPACES, "
             "\"functional_health_urls\": watcher.FUNCTIONAL_HEALTH_URLS}))'"

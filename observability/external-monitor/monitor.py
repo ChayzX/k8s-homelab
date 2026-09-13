@@ -8,6 +8,7 @@ Discord webhook alert. It does not use Kubernetes credentials or Authentik.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import hashlib
 import hmac
@@ -221,6 +222,33 @@ def load_state() -> dict[str, object]:
         return {}
 
 
+def monitor_lock_path() -> Path:
+    """Return the lock path, kept beside the durable monitor ledger."""
+    configured = os.environ.get("MONITOR_LOCK_FILE", "").strip()
+    return Path(configured) if configured else STATE_FILE.with_name("monitor.lock")
+
+
+def acquire_monitor_lock():
+    """Acquire the external evaluator lock, or return None if already running."""
+    lock_path = monitor_lock_path()
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_file = lock_path.open("a+", encoding="utf-8")
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock_file.close()
+        return None
+    return lock_file
+
+
+def write_state(state: dict[str, object]) -> None:
+    """Replace the ledger atomically so a crash cannot leave partial JSON."""
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = STATE_FILE.with_name(f".{STATE_FILE.name}.tmp")
+    temporary.write_text(json.dumps(state, indent=2) + "\n")
+    os.replace(temporary, STATE_FILE)
+
+
 def notify(message: str) -> dict[str, object]:
     """Send an alert and return provider-acceptance metadata, never its body."""
     if not WEBHOOK:
@@ -266,6 +294,18 @@ def notify(message: str) -> dict[str, object]:
 
 
 def run_once() -> None:
+    lock_file = acquire_monitor_lock()
+    if lock_file is None:
+        print("MONITOR_LOCKED", flush=True)
+        return
+    try:
+        _run_once_locked()
+    finally:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        lock_file.close()
+
+
+def _run_once_locked() -> None:
     checks = {item.name: check(item) for item in CHECKS}
     if API_URL:
         checks["kubernetes-api"] = check(
@@ -305,8 +345,7 @@ def run_once() -> None:
         receipt = notify(f"Alert `{previous_active[name]}` recovered") or {}
         notification_receipts.append(_receipt_record(previous_active[name], "recovered", receipt))
     state["notification_receipts"] = notification_receipts[-MAX_NOTIFICATION_RECEIPTS:]
-    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    STATE_FILE.write_text(json.dumps(state, indent=2) + "\n")
+    write_state(state)
     if failed:
         print(f"CHECK_FAILURE count={failure_count}/{FAILURE_THRESHOLD} failed={','.join(failed)}", flush=True)
     else:

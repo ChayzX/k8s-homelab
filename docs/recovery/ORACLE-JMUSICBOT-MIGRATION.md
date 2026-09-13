@@ -24,6 +24,27 @@ bounded, not used to power the service off. Ownership transfer is an explicit,
 fenced operation: the new site acquires the next witness epoch and the old
 process must lose renewal and shut down before the new site connects.
 
+## Oracle standby contract
+
+The recovery overlay is a warm-capacity overlay, not a second Discord writer.
+Its single replica is expected to be `Running` but `NotReady` while home owns
+the `jmusicbot` witness lease. In that state the `/health` probe returns 503,
+the health Service has no endpoint, and the application must not log Discord
+`READY` or create the ownership marker. `/live` remains independent and is
+used only to distinguish a live, fenced process from a dead process. The R2
+sidecar may restore state, but it syncs only while the marker exists and never
+copies the marker itself.
+
+The repository contract for these invariants is executable and non-live:
+
+```bash
+bash tests/jmusicbot-oracle-standby-test.sh
+```
+
+Do not “fix” an expected standby `NotReady` by bypassing the witness or by
+making readiness depend on `/live`; investigate only when the lease state,
+Discord logs, marker, or sidecar behavior contradicts this contract.
+
 ## Gates before touching Oracle
 
 - [x] Root access is available on `minecraftmachine` and Oracle.
