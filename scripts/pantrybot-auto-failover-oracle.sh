@@ -102,6 +102,14 @@ lock_path=${AUTO_FAILOVER_LOCK_PATH:-/run/lock/pantrybot-auto-failover-oracle.lo
 exec 9>"$lock_path"
 flock -n 9 || { echo 'automatic failover skipped: another supervisor is running' >&2; exit 0; }
 
+# Oracle may already be the authority while the home target is deliberately
+# fenced or offline. Check the local authority first so expected home-target
+# failures do not fill the journal or alert pipeline every timer tick.
+if "${oracle_primary_probe_command[@]}" >/dev/null 2>&1; then
+  echo oracle_already_primary
+  exit 0
+fi
+
 for attempt in $(seq 1 "$HOME_FAILURE_THRESHOLD"); do
   probe_status=0
   if [[ -n "$HOME_PRIMARY_PROBE_COMMAND" ]]; then
@@ -119,9 +127,5 @@ for attempt in $(seq 1 "$HOME_FAILURE_THRESHOLD"); do
 done
 
 echo home_probe=failed threshold_reached
-if "${oracle_primary_probe_command[@]}" >/dev/null 2>&1; then
-  echo oracle_already_primary
-  exit 0
-fi
 export HOME_FENCE_COMMAND AUTH_HOME_FENCE_COMMAND
 exec "${promotion_command[@]}"
