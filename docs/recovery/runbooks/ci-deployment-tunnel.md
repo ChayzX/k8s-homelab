@@ -87,6 +87,26 @@ Oracle-targeted jobs and connector authority first, restores the known-good
 home route/credential, and repeats the single-target test. Two connected
 Cloudflare connectors are not active-active deployment authority.
 
+The repository-side credential-fencing contract is deliberately four-part:
+
+1. The Oracle connector uses a distinct tunnel token Secret and a distinct
+   Cloudflare tunnel/hostname or Access route; it must never reuse the home
+   connector token or route.
+2. The workflow uses a separately scoped Oracle Access service token and
+   least-privilege Oracle kubeconfig; neither credential is copied into the
+   home cluster or committed to Git.
+3. The selected kubeconfig is checked for the expected site identity before
+   any apply, restart, or rollback. A missing or cross-site identity must
+   fail closed.
+4. Promotion is not considered proven until a harmless Oracle-targeted run
+   and rollback are observed in exactly Oracle and nowhere else. A rendered
+   zero-replica overlay proves capacity and isolation only; it is not live
+   failover evidence.
+
+These are repository-verifiable prerequisites. Route creation, token issuance,
+kubeconfig provisioning, and the live single-target observation remain
+external gates and must be recorded in Issue #204 without secret values.
+
 ## Verification checklist
 
 Record in #204 and #191: connector readiness and connection/origin; workflow

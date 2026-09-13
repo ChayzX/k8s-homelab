@@ -97,3 +97,23 @@ confirm connections are only ever coming from the two workflow runs you
 trigger, not from anywhere else — an unexpected caller here means the Access
 policy is misconfigured (e.g. accidentally "Everyone" instead of the service
 token).
+
+## 8. Oracle standby credential fence
+
+The Oracle connector must be provisioned from the repository's separate
+`ci-tunnel-oracle/` overlay, not by scaling the home `cloudflared` Deployment.
+Before enabling it, require all of the following in Issue #204:
+
+- an independently named Oracle Cloudflare tunnel and API hostname/Access
+  application;
+- a separate Oracle tunnel token stored only as
+  `ci-tunnel-token-oracle` in the Oracle cluster;
+- a separately scoped Oracle Access service token and least-privilege Oracle
+  kubeconfig in GitHub Actions; and
+- a non-production target-identity and rollback run that proves the selected
+  credentials can mutate Oracle and cannot mutate home.
+
+Never reuse `ci-tunnel-token`, the home Access service token, or the home
+kubeconfig for Oracle. Route creation and token issuance are external to this
+repository; record only their identifiers and verification results, never
+secret values.
