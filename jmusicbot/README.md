@@ -76,7 +76,7 @@ Before applying either environment, run the repository-only R2 contract
 preflight against the rendered Deployment:
 
 ```bash
-kubectl kustomize jmusicbot | scripts/jmusicbot-r2-contract-check.sh
+cat jmusicbot/*.yaml | scripts/jmusicbot-r2-contract-check.sh
 ```
 
 This does not contact R2 or start a workload. It verifies the approved state

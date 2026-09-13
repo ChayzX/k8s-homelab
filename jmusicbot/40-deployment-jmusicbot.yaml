@@ -127,7 +127,7 @@ spec:
           command:
             - sh
             - -c
-            - rclone copy r2:pantry-bot-backups/jmusicbot/ /musicbot/ --exclude '.jmusicbot-lease-owner' --config=/dev/null
+            - rclone copy r2:pantry-bot-backups/jmusicbot/ /musicbot/ --exclude '.jmusicbot-lease-owner' --exclude 'config.txt' --exclude 'config.txt.bak*' --config=/dev/null
           env: &r2-env
             - name: RCLONE_CONFIG_R2_TYPE
               value: s3
@@ -257,8 +257,7 @@ spec:
                 if [ -f /musicbot/.jmusicbot-lease-owner ]; then
                   rclone sync /musicbot r2:pantry-bot-backups/jmusicbot/ \
                     --exclude 'config.txt' --exclude 'config.txt.bak*' \
-                    --exclude '.jmusicbot-lease-owner' \
-                    --config=/dev/null --quiet
+                    --exclude '.jmusicbot-lease-owner' --config=/dev/null --quiet
                 fi
                 sleep 300
               done

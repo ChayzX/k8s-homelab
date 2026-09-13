@@ -7,7 +7,13 @@ rendered="$(mktemp)"
 invalid="$(mktemp)"
 trap 'rm -f "$rendered" "$invalid"' EXIT
 
-kubectl kustomize "$root/jmusicbot" >"$rendered"
+if [[ -f "$root/jmusicbot/kustomization.yaml" || -f "$root/jmusicbot/kustomization.yml" ]]; then
+  kubectl kustomize "$root/jmusicbot" >"$rendered"
+else
+  # This repository's JMusicBot manifests are intentionally ordered raw YAML;
+  # preserve filename order when constructing the contract input.
+  cat "$root"/jmusicbot/*.yaml >"$rendered"
+fi
 "$checker" <"$rendered"
 
 # Removing the lease guard must invalidate the contract: an unowned pod must
