@@ -173,6 +173,7 @@ spec:
             # Allows `curl -XPOST /-/reload` after editing the ConfigMap
             # instead of restarting (and re-replaying the WAL).
             - --web.enable-lifecycle
+            - --web.enable-remote-write-receiver
             - --web.console.libraries=/usr/share/prometheus/console_libraries
             - --web.console.templates=/usr/share/prometheus/consoles
           ports:
