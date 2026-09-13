@@ -67,6 +67,16 @@ data:
             action: keep
 
     scrape_configs:
+      # Additional non-kubernetes hosts on the trusted LAN. The target list
+      # is a separate ConfigMap key so it can be changed and reloaded without
+      # editing this scrape configuration. Keep these targets LAN-only; do
+      # not publish node_exporter or Prometheus through the internet.
+      - job_name: external-host
+        file_sd_configs:
+          - files:
+              - /etc/prometheus/external-hosts.yml
+            refresh_interval: 30s
+
       # ---------------------------------------------------------------
       # Self
       # ---------------------------------------------------------------
@@ -218,3 +228,11 @@ data:
       #       once containers stop being Docker containers. Container
       #       network I/O comes from kubernetes-cadvisor instead.
       # ---------------------------------------------------------------
+
+  external-hosts.yml: |
+    # Add LAN-only node_exporter targets here. Example:
+    # - targets: ["192.168.40.250:9100"]
+    #   labels:
+    #     host: office-pc
+    #     site: home
+    []

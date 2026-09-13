@@ -28,6 +28,28 @@ Node LAN IP: `192.168.40.208`. StorageClass: `local-path`.
 | `promtail-config.yaml` | ConfigMap: promtail's config, incl. severity-extraction `pipeline_stages`. |
 | `kube-state-metrics.yaml` | kube-state-metrics SA, ClusterRole/Binding, Deployment, headless Service (8080/8081). |
 
+## Additional host metrics
+
+Prometheus has an `external-host` file-based scrape job for trusted-LAN PCs
+that are not k3s nodes. The target list is the `external-hosts.yml` key in
+`prometheus-config`; it starts empty so an accidental or stale host is never
+scraped. Add one target with a stable LAN address and a human-readable host
+label:
+
+```yaml
+- targets: ["192.168.40.250:9100"]
+  labels:
+    host: office-pc
+    site: home
+```
+
+Install Prometheus `node_exporter` on a Linux PC and allow TCP 9100 only from
+the Prometheus host (`192.168.40.208`). Do not port-forward 9100 or expose it
+through Cloudflare. The `host-pc` and cluster dashboards discover the new
+machine from `node_uname_info`; the existing remote-write allowlist forwards
+the selected host series to Grafana Cloud automatically. After updating the
+ConfigMap, reload Prometheus with `POST /-/reload` (or restart its pod).
+
 Every stateful app (loki, prometheus, grafana) is a
 `Deployment` with `strategy: Recreate` and a `ReadWriteOnce` PVC -- never
 a StatefulSet, never `RollingUpdate`. promtail is a DaemonSet (no PVC).
