@@ -97,3 +97,25 @@ confirm connections are only ever coming from the two workflow runs you
 trigger, not from anywhere else — an unexpected caller here means the Access
 policy is misconfigured (e.g. accidentally "Everyone" instead of the service
 token).
+
+## 8. Oracle connector overlay (prepared, inactive)
+
+The Oracle capacity is represented by `../ci-tunnel-oracle`. It is intentionally
+rendered with zero replicas and a different Deployment/Service identity, so it
+cannot become a second live connector merely because someone applies the
+overlay. It also requires a separate Secret name and pins the pod to
+`pantry-bot-oracle`.
+
+Before enabling it, create an independently scoped Cloudflare tunnel token and
+place it in the Oracle cluster only:
+
+```bash
+kubectl --context <oracle-context> -n ci-tunnel create secret generic \
+  ci-tunnel-token-oracle --from-literal=TUNNEL_TOKEN='<oracle-token>'
+kubectl --context <oracle-context> apply -k ci-tunnel-oracle
+kubectl --context <oracle-context> -n ci-tunnel scale deployment/cloudflared-oracle --replicas=1
+```
+
+The separate token and explicit scale-up are required gates; do not reuse
+`ci-tunnel-token` or enable this overlay before the Cloudflare Access route is
+configured for the surviving connector.

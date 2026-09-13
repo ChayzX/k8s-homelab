@@ -1,0 +1,6 @@
+- op: replace
+  path: /metadata/name
+  value: cloudflared-oracle
+- op: replace
+  path: /spec/selector/app.kubernetes.io~1name
+  value: ci-tunnel-oracle
