@@ -51,7 +51,11 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$TUNNEL_TOKEN"
-          scripts/assert-kube-target.sh home
+          for permission in "create secrets" "patch secrets" "create serviceaccounts" "create deployments" "patch deployments"; do
+            verb="${permission%% *}"
+            resource="${permission##* }"
+            kubectl auth can-i "$verb" "$resource" -n observability | grep -qx yes
+          done
           kubectl create secret generic windows-alloy-metrics-tunnel \
             --from-literal=TUNNEL_TOKEN="$TUNNEL_TOKEN" \
             --dry-run=client -o yaml | kubectl apply -f - -n observability
