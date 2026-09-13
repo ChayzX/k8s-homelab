@@ -46,8 +46,9 @@ Known intentionally retired nodes may be listed in the host-only
 until removed from that setting.
 
 The Discord token, user ID, Loki URL, kubeconfig, and systemd unit remain
-host-local secrets/configuration. Install this directory on the host and
-point `k3s-watcher.service` at `watcher.py`; do not commit `.env` files.
+host-local secrets/configuration. Start from `watcher.env.example`, copy it to
+a host-local EnvironmentFile with mode `0600`, and fill in credentials there.
+The resulting `watcher.env` must not be committed.
 
 ## Operations dual delivery
 
