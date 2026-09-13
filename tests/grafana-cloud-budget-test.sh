@@ -17,6 +17,18 @@ for config in "${configs[@]}"; do
     echo "missing write_relabel_configs: $config" >&2
     exit 1
   }
+  grep -q 'max_samples_per_send: 2000' "$config" || {
+    echo "remote-write batches are too small: $config" >&2
+    exit 1
+  }
+  grep -q 'max_shards: 2' "$config" || {
+    echo "remote-write shard cap is too high: $config" >&2
+    exit 1
+  }
+  grep -q 'send: false' "$config" || {
+    echo "remote-write metadata upload is not disabled: $config" >&2
+    exit 1
+  }
   grep -q "action: keep" "$config" || {
     echo "missing remote-write keep policy: $config" >&2
     exit 1
