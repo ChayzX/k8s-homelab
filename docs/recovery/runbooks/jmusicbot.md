@@ -11,7 +11,9 @@ of the first failover path.
 
 Home is the normal Discord voice/music owner. Oracle is a warm standby/recovery
 target with constrained egress and must not connect to Discord while home is
-running. Follow `docs/recovery/ORACLE-JMUSICBOT-MIGRATION.md` for site setup and
+running. Oracle may run one fenced process replica; only the witness lease
+holder may connect to Discord or synchronize R2 state. Follow
+`docs/recovery/ORACLE-JMUSICBOT-MIGRATION.md` for site setup and
 `jmusicbot/README.md`/`SECRETS.md` for deployment/Secret contracts.
 
 ## Tracking and evidence

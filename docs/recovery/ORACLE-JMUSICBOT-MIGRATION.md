@@ -188,7 +188,9 @@ The standby migration is accepted only when all of the following are evidenced:
 
 The Oracle standalone server and standby deployment were created on
 2026-09-10. The R2 restore check recovered `serversettings.json` and
-`youtubetoken.txt`; keep the Oracle JMusicBot Deployment at zero replicas
-until `jmusicbot-witness` is provisioned and the lease/fencing rehearsal above
-has recorded evidence. After that gate, `replicas: 1` is safe capacity, not a
-second Discord writer.
+`youtubetoken.txt`; the `jmusicbot-witness` Secret is now provisioned and
+Oracle runs one warm-standby replica. Its main container remains NotReady while
+home owns the lease, while its R2 sidecar remains Ready. Keep Oracle at zero
+replicas only when the witness Secret, R2 restore, or standby health gate is
+unavailable; `replicas: 1` is safe capacity when the process remains fenced and
+is not a second Discord writer.
