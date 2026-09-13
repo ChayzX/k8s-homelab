@@ -11,8 +11,9 @@ usage() {
 Usage: pantrybot-promote-oracle.sh --confirm | --dry-run
 
 Required for a real promotion:
-  PANTRY_WITNESS_URL          private witness base URL
+  PANTRY_WITNESS_URL          private witness base URL (or WITNESS_URL)
   PANTRY_WITNESS_SECRET_FILE  root-readable file containing witness secret
+                              (or WITNESS_SHARED_SECRET in the environment)
   HOME_FENCE_COMMAND          exact home fence adapter path
   ORACLE_KUBECTL               kubectl binary or wrapper for the Oracle cluster
   PANTRY_PUBLIC_URLS           whitespace-separated public readiness URLs
@@ -23,19 +24,25 @@ USAGE
 mode=${1:-}
 [[ "$mode" == "--confirm" || "$mode" == "--dry-run" ]] || { usage >&2; exit 2; }
 
-: "${PANTRY_WITNESS_URL:?PANTRY_WITNESS_URL is required}"
-: "${PANTRY_WITNESS_SECRET_FILE:?PANTRY_WITNESS_SECRET_FILE is required}"
+: "${PANTRY_WITNESS_URL:=${WITNESS_URL:-}}"
+: "${PANTRY_WITNESS_SECRET_FILE:=}"
+: "${PANTRY_WITNESS_SHARED_SECRET:=${WITNESS_SHARED_SECRET:-}}"
 : "${HOME_FENCE_COMMAND:?HOME_FENCE_COMMAND is required}"
 : "${ORACLE_KUBECTL:?ORACLE_KUBECTL is required}"
 : "${PANTRY_PUBLIC_URLS:?PANTRY_PUBLIC_URLS is required}"
+[[ -n "$PANTRY_WITNESS_URL" ]] || { echo 'promotion failed: witness URL is empty' >&2; exit 1; }
 
 if [[ "$mode" == "--dry-run" ]]; then
   printf '%s\n' authority_acquired source_fenced database_promoted database_ready application_ready traffic_routed
   exit 0
 fi
 
-[[ -r "$PANTRY_WITNESS_SECRET_FILE" ]] || { echo 'promotion failed: witness secret file is unreadable' >&2; exit 1; }
-secret=$(<"$PANTRY_WITNESS_SECRET_FILE")
+if [[ -n "$PANTRY_WITNESS_SECRET_FILE" ]]; then
+  [[ -r "$PANTRY_WITNESS_SECRET_FILE" ]] || { echo 'promotion failed: witness secret file is unreadable' >&2; exit 1; }
+  secret=$(<"$PANTRY_WITNESS_SECRET_FILE")
+else
+  secret="$PANTRY_WITNESS_SHARED_SECRET"
+fi
 [[ -n "$secret" ]] || { echo 'promotion failed: witness secret is empty' >&2; exit 1; }
 
 KUBECTL_BIN="$ORACLE_KUBECTL"
@@ -64,6 +71,9 @@ printf 'authority_acquired epoch=%s\\n' "$epoch"
 echo source_fenced
 
 ns_pantry get pod postgres-authority-standby-0 >/dev/null
+recovery=$(ns_pantry exec postgres-authority-standby-0 -- sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atqc "select pg_is_in_recovery()"' | tr -d '\r')
+[[ "$recovery" == t ]] || { echo 'promotion failed: Oracle is not a standby' >&2; exit 1; }
 ns_pantry exec postgres-authority-standby-0 -- su postgres -s /bin/sh -c \
   'pg_ctl -D /var/lib/postgresql/data promote' >/dev/null
 for _ in $(seq 1 60); do
