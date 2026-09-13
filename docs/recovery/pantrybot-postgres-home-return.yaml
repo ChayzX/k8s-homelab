@@ -1,0 +1,120 @@
+# Canonical return target after Oracle promotion.
+#
+# This is intentionally replicas=0 by default.  The retained PVC must contain
+# a verified physical standby before it is started; hot_standby alone does not
+# make an existing PostgreSQL data directory read-only.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-authority-replication
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: pantry-postgres-authority-home-return
+    app.kubernetes.io/part-of: pantrybot
+    pantrybot.postgres/role: standby
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: pantry-postgres-authority-home-return
+    pantrybot.postgres/role: standby
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      nodePort: 30432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-authority-home-return
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: pantry-postgres-authority-home-return
+    app.kubernetes.io/part-of: pantrybot
+    pantrybot.postgres/failback: home
+    pantrybot.postgres/role: standby
+spec:
+  serviceName: postgres-authority-home-return
+  replicas: 0
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pantry-postgres-authority-home-return
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pantry-postgres-authority-home-return
+        app.kubernetes.io/part-of: pantrybot
+        pantrybot.postgres/failback: home
+        pantrybot.postgres/role: standby
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: minecraftmachine
+      terminationGracePeriodSeconds: 60
+      initContainers:
+        - name: verify-or-seed-standby
+          image: postgres:16-alpine
+          envFrom:
+            - secretRef:
+                name: pantry-bot-postgres-home-return
+          command: ["sh", "-ec"]
+          args:
+            - |
+              if [ -n "$(find /var/lib/postgresql/data -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+                test -f /var/lib/postgresql/data/standby.signal || {
+                  echo 'refusing to start: existing PVC is not a PostgreSQL standby' >&2
+                  exit 1
+                }
+                exit 0
+              fi
+              until pg_isready -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER"; do sleep 3; done
+              printf '%s:*:*:%s:%s\n' "$PRIMARY_HOST" "$REPLICATION_USER" "$REPLICATION_PASSWORD" > /tmp/pgpass
+              chmod 600 /tmp/pgpass
+              PGPASSFILE=/tmp/pgpass pg_basebackup \
+                -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER" \
+                -D /var/lib/postgresql/data -Fp -Xs -P -R -C -S "$PRIMARY_SLOT_NAME"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          args:
+            - -c
+            - hot_standby=on
+            - -c
+            - wal_receiver_timeout=10s
+          envFrom:
+            - secretRef:
+                name: pantry-bot-postgres-home-return
+          ports:
+            - name: postgres
+              containerPort: 5432
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -ec
+                - test "$(psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc 'select pg_is_in_recovery()')" = t
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 8Gi
