@@ -17,7 +17,7 @@ Node LAN IP: `192.168.40.208`. StorageClass: `local-path`.
 | `loki-config.yaml` | ConfigMap: Loki's `loki-config.yaml`. |
 | `loki-external-nodeport.yaml` | **Migration-window only.** NodePort 31100 so the old Docker-side promtail can keep pushing to the new Loki. |
 | `prometheus.yaml` | Prometheus SA, ClusterRole/Binding (API access for `kubernetes_sd_configs`), PVC (20Gi), Deployment, ClusterIP Service (9090). |
-| `oracle-prometheus.yaml` | Lightweight Oracle Prometheus collector with an 8Gi local buffer and Grafana Cloud remote-write. Apply to the independent Oracle k3s cluster, not home. |
+| `oracle-prometheus.yaml` | Lightweight Oracle Prometheus collector with an 8Gi local buffer. Apply to the independent Oracle k3s cluster, not home. |
 | `oracle-prometheus-config.yaml` | Oracle-only scrape configuration with `site=oracle` external labels. |
 | `node-exporter-oracle.yaml` | Oracle host metrics DaemonSet and Service. |
 | `prometheus-config.yaml` | ConfigMap: Prometheus' `prometheus.yml`, rewritten scrape config. |

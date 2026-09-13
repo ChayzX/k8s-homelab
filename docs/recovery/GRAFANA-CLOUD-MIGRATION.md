@@ -1,23 +1,25 @@
-# Grafana Cloud migration
+# Grafana Cloud migration and on-prem rollback
 
-Status: Cloud ingestion and dashboard migration are complete for the home and
-Oracle collectors; local Grafana/Loki remain online during the validation
-window.
+Status: on-prem Grafana is restored as the active UI and local Prometheus is
+the authoritative metrics store. A bounded Cloud Loki log copy remains an
+optional diagnostic path; metric remote-write has been disabled.
 
 This migration changes only observability collectors and dashboard placement;
 it does not touch PantryBot.
 
 ## Decision
 
-Grafana Cloud is the shared observability UI and long-lived external store.
-Each site continues collecting locally so a temporary internet outage does
-not stop local scraping or log collection.
+The self-hosted Grafana instance is the active observability UI and local
+Prometheus/Loki are the primary data stores. Cloud is retained only for the
+explicitly selected log copy and must not receive the full metrics stream.
+Each site continues collecting locally so an internet outage does not stop
+local dashboards or log collection.
 
 | Signal | Current path | Target path |
 | --- | --- | --- |
-| Metrics | Local Prometheus on MinecraftMachine | Local Prometheus at each site plus an allowlisted remote-write stream to Grafana Cloud Mimir |
+| Metrics | Local Prometheus on MinecraftMachine | Local Prometheus at each site; no Grafana Cloud remote-write stream |
 | Logs | Promtail to local Loki and Grafana Cloud | Promtail dual-write during validation, then Cloud-first with bounded local retention |
-| Dashboards | Local Grafana PVC | Import the tracked `dashboards/*.json` files into Grafana Cloud |
+| Dashboards | Local Grafana PVC | Tracked `dashboards/*.json` files provisioned into on-prem Grafana |
 | External checks | GCP monitor/UptimeRobot | Retained; Grafana Cloud is not the only failure detector |
 
 Grafana Cloud's current free plan lists 10,000 active metric series, 50 GB
@@ -42,34 +44,21 @@ datasources. The temporary migrated `Prometheus` and `Loki` datasources that
 pointed at in-cluster URLs were removed after confirming no dashboard or alert
 rule referenced them.
 
-The home and Oracle Prometheus collectors now remote-write to the Cloud
-Prometheus endpoint using site-local `grafana-cloud-metrics` Secrets. The
-local collectors retain their complete scrape sets, while
-`write_relabel_configs` exports only health, capacity, application, and
-required dashboard/Minecraft metric families. Full kubelet and cAdvisor
-high-cardinality series remain available locally but are not sent to the free
-Cloud stack. Live verification observed approximately 7,002 selected home
-series and 990 selected Oracle series, with remote-write rates around 478 and
-64 samples/sec respectively and zero failed samples. The token is not stored
-in the repository. This is the `metrics:write` credential used by Prometheus;
-it is not a Grafana Cloud query credential.
+The home and Oracle Prometheus collectors now retain metrics locally and no
+longer mount or use the `grafana-cloud-metrics` Secret. This is the deliberate
+on-prem cutover and stops metric ingestion charges. Promtail may continue
+dual-writing the explicitly selected logs to Cloud while local Loki remains
+available for dashboards and local incident response.
 
 ## Secret contract
 
-The current Prometheus manifests require the home and Oracle
-`grafana-cloud-metrics` Secrets to contain this key:
+The current Prometheus manifests do not require the old
+`grafana-cloud-metrics` Secret. It may be removed after confirming no other
+collector uses it. The optional log archive remains separately scoped to the
+`grafana-cloud-loki` Secret.
 
-- `password` (the `metrics:write` access-policy token)
-
-The Prometheus manifest mounts the password at
-`/etc/prometheus/secrets/password`; the endpoint and username are configured
-in the respective Prometheus ConfigMaps. Keep the token out of ConfigMaps,
-dashboards, GitHub issues, and shell history.
-
-This Secret contract is only for Prometheus remote write. A
-`metrics:read` credential, when needed for Grafana Cloud Explore, dashboards,
-or API queries, is separate from this Secret and must not be substituted for
-the `metrics:write` token.
+No metrics token is needed for the on-prem path. Keep any retained log token
+out of ConfigMaps, dashboards, GitHub issues, and shell history.
 
 The query endpoint is provided by the Grafana Cloud portal for the stack's
 Prometheus data source. Copy that portal-provided endpoint when configuring a
@@ -79,20 +68,14 @@ destination for Prometheus.
 
 ## Cutover gates
 
-1. Verify each collector's
-   `prometheus_remote_storage_samples_pending` queue drains after its initial
-   WAL replay. A non-zero transient queue is expected during catch-up, but a
-   sustained increase or any non-zero
-   `prometheus_remote_storage_samples_failed_total` requires investigation.
-2. Verify logs and metrics from the home site in Cloud Explore for one retention
-   interval.
-3. Oracle has a separately deployed, Oracle-labeled Prometheus collector using
-   its own 8Gi local buffer, with node-exporter, kube-state-metrics, kubelet,
-   and cAdvisor targets healthy. Its allowlisted remote-write queue is active
-   with zero failed samples; continue monitoring convergence before reducing
-   local retention.
-4. Only then reduce local Grafana/Loki/Prometheus retention. Keep local
-   collectors as an outage buffer and retain external monitoring/UptimeRobot.
+1. Verify both local collectors are Ready and their `/api/v1/query` endpoint
+   returns current `up` and node metrics.
+2. Verify the local Grafana Prometheus and Loki datasources and a current
+   dashboard query.
+3. Verify retained Cloud logs only if that diagnostic copy is desired; a
+   Cloud log outage must not make local Grafana unhealthy.
+4. Keep local collectors and retention as the primary outage buffer and retain
+   external monitoring/UptimeRobot.
 
 The local Grafana UI remains available for rollback and comparison. Do not
 decommission local Grafana or Loki until the validation window is complete.
