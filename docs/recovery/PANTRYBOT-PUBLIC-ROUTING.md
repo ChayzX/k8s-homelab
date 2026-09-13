@@ -1,11 +1,10 @@
 # PantryBot public routing contract
 
 This is the routing contract for the split PantryBot public UI. Cloudflare
-Tunnel hostnames are currently managed outside Git, so this file records the
-required entries before the split deployment is enabled. The live commands
-hostname is still on the shared tunnel and has not been cut over; see
-[`PANTRYBOT-COMMANDS-TUNNEL-PLAN.md`](./PANTRYBOT-COMMANDS-TUNNEL-PLAN.md) for
-the read-only evidence and the approved dedicated-tunnel migration procedure.
+Tunnel hostnames are managed outside Git, so this file records the required
+entries and the live split. `commands.greeniespantry.uk` is served by the
+dedicated active-active commands tunnel; the remaining private/OAuth routes
+stay on the shared tunnel.
 
 ## Viewer command guide
 
@@ -44,8 +43,16 @@ Hostname: `oauth.greeniespantry.uk`
 Route:
 
 ```text
-oauth.greeniespantry.uk/* -> http://pantry-bot.pantry-bot.svc:3000
+oauth.greeniespantry.uk/* -> http://auth-authentik-server.auth.svc.cluster.local:80
 ```
+
+The Cloudflare route now terminates at the Authentik embedded proxy outpost.
+Authentik's `PantryBot OAuth Proxy` forwards the authenticated request to
+`http://pantry-private-site.pantry-bot.svc.cluster.local:3000`. The provider
+is assigned to the embedded outpost and the `PantryBot OAuth Login`
+application is explicitly bound to the `Greenie` user. Keep this route
+separate from the OAuth-free commands hostname and record any Cloudflare
+configuration change in homelab issue #168.
 
 The public commands hostname must not route to this OAuth hostname, and the
 static commands/private UI pods must not receive OAuth, Twitch, or database
@@ -76,7 +83,8 @@ Before enabling the routes, verify:
 - `mods.greeniespantry.uk/mod/` serves the static console shell without API credentials.
 - `mods.greeniespantry.uk/mod/api/commands` redirects/authenticates through the API origin.
 - `mods.greeniespantry.uk/login/mod` remains reachable through the API origin.
-- `oauth.greeniespantry.uk/login/broadcaster` and `/login/bot` remain reachable.
+- `oauth.greeniespantry.uk/login/broadcaster` and `/login/bot` reach the
+  Authentik login flow before forwarding to PantryBot.
 - `overlay.greeniespantry.uk/` returns the overlay shell and WebSocket upgrade
   remains reachable after reconnect.
 - Both home and Oracle origins expose equivalent routes before automatic failover is enabled.
