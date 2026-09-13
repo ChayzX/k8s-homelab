@@ -1,0 +1,60 @@
+// Grafana Alloy template for a Unix host outside the homelab LAN.
+//
+// Install Alloy on the remote host and copy this file to its local config
+// path. Store the Grafana Cloud metrics-write token in
+// /etc/alloy/grafana-cloud-token (root-readable only); do not put it here.
+// The username is the Grafana Cloud stack/instance ID.
+
+prometheus.exporter.unix "host" {
+  // The default collector set is intentionally used. The remote-write
+  // allowlist below controls what leaves this machine.
+}
+
+prometheus.scrape "host" {
+  targets         = prometheus.exporter.unix.host.targets
+  scrape_interval = "30s"
+  forward_to      = [prometheus.relabel.host.receiver]
+}
+
+prometheus.relabel "host" {
+  // Make the host selector useful in both local and Cloud dashboards.
+  rule {
+    source_labels = ["instance"]
+    target_label  = "host"
+    action        = "replace"
+  }
+  rule {
+    target_label = "site"
+    replacement  = "remote"
+    action       = "replace"
+  }
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = "https://prometheus-prod-56-prod-us-east-2.grafana.net/api/prom/push"
+
+    basic_auth {
+      username     = "3548270"
+      password_file = "/etc/alloy/grafana-cloud-token"
+    }
+
+    // Keep the remote host inside the conservative Cloud budget. These are
+    // the core host panels; high-cardinality per-process/container metrics
+    // are deliberately not exported.
+    write_relabel_config {
+      source_labels = ["__name__"]
+      regex = "up|node_uname_info|node_boot_time_seconds|node_cpu_seconds_total|node_memory_MemAvailable_bytes|node_memory_MemTotal_bytes|node_load1|node_network_receive_bytes_total|node_network_transmit_bytes_total|node_filesystem_avail_bytes|node_filesystem_size_bytes"
+      action = "keep"
+    }
+
+    queue_config {
+      capacity           = 500
+      max_shards         = 2
+      min_shards         = 1
+      max_samples_per_send = 200
+      batch_send_deadline = "10s"
+    }
+  }
+}
