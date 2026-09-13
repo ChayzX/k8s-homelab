@@ -50,6 +50,11 @@ k() { "$KUBECTL_BIN" "$@"; }
 ns_pantry() { k -n pantry-bot "$@"; }
 ns_auth() { k -n auth "$@"; }
 
+# The fence is supplied as a root-owned, operator-reviewed command line. Parse
+# it into argv so SSH options are supported without invoking a shell.
+read -r -a home_fence_command <<< "$HOME_FENCE_COMMAND"
+(( ${#home_fence_command[@]} > 0 )) || { echo 'promotion failed: home fence command is empty' >&2; exit 1; }
+
 authority=$(curl --fail-with-body --silent --show-error --max-time 8 \
   -X POST "$PANTRY_WITNESS_URL/v1/authority/acquire" \
   -H "Authorization: Bearer $secret" -H 'Content-Type: application/json' \
@@ -67,7 +72,7 @@ token=$(jq -er '.token | select(type == "string" and length >= 16)' <<<"$authori
 }
 printf 'authority_acquired epoch=%s\\n' "$epoch"
 
-"$HOME_FENCE_COMMAND" --confirm >/dev/null
+"${home_fence_command[@]}" --confirm >/dev/null
 echo source_fenced
 
 ns_pantry get pod postgres-authority-standby-0 >/dev/null

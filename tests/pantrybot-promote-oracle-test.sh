@@ -23,4 +23,7 @@ grep -Fq 'database_ready' <<<"$output"
 grep -Fq 'application_ready' <<<"$output"
 grep -Fq 'traffic_routed' <<<"$output"
 
+grep -Fq 'read -r -a home_fence_command' "$SCRIPT"
+grep -Fq '"${home_fence_command[@]}"' "$SCRIPT"
+
 echo 'pantrybot-promote-oracle-test=passed'
