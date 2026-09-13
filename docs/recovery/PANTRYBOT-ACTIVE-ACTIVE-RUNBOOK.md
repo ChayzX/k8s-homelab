@@ -137,6 +137,14 @@ rejected after takeover at epochs 2 and 4. The disposable namespace was
 deleted afterward. This proves the PostgreSQL schema/lease path, but it does
 not yet prove cross-site database promotion or live Twitch routing.
 
+The live platform rehearsal was also run against the current Oracle writer on
+2026-09-13. It inserted a unique synthetic event, rejected its duplicate,
+claimed and completed it, inserted a unique rehearsal outbox row, rejected its
+duplicate, and claimed and completed the outbox row. Both final statuses were
+`completed`. The rehearsal target is non-external and sends nothing to Twitch
+or the overlay; live EventSub-to-worker-to-dispatcher behavior remains a
+separate provider-side gate.
+
 The same durable event/outbox rehearsal also passed against a disposable
 PostgreSQL 16 instance on the Oracle arm64 k3s node through an SSH tunnel. The
 Oracle namespace was deleted after the check. This proves application
