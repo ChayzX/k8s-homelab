@@ -13,6 +13,7 @@ R2_CONTAINER=r2-sync
 BACKUP_ROOT=/mnt/nvme/recovery/postgresql
 R2_PREFIX='r2:pantry-bot-backups/recovery/auth-postgresql'
 RETENTION_DAYS=30
+RCLONE_NETWORK_FLAGS='--timeout=2m --contimeout=15s --retries=2 --low-level-retries=5'
 
 mkdir -p "$BACKUP_ROOT"
 chmod 700 "$BACKUP_ROOT"
@@ -42,11 +43,11 @@ mv "$tmp" "$local_path"
 
 echo "uploading $name to R2"
 kubectl exec -i -n "$R2_NAMESPACE" "$R2_POD" -c "$R2_CONTAINER" -- sh -c \
-  "cat > /tmp/$name && rclone copyto /tmp/$name '$R2_PREFIX/$name' --config=/dev/null --s3-no-check-bucket && rm -f /tmp/$name" \
+  "cat > /tmp/$name && rclone copyto /tmp/$name '$R2_PREFIX/$name' --config=/dev/null --s3-no-check-bucket $RCLONE_NETWORK_FLAGS && rm -f /tmp/$name" \
   < "$local_path"
 
 remote_size="$(kubectl exec -n "$R2_NAMESPACE" "$R2_POD" -c "$R2_CONTAINER" -- \
-  rclone size "$R2_PREFIX/$name" --config=/dev/null --s3-no-check-bucket \
+  rclone size "$R2_PREFIX/$name" --config=/dev/null --s3-no-check-bucket $RCLONE_NETWORK_FLAGS \
   | awk '/Total size:/ {print $3; exit}')"
 test -n "$remote_size"
 find "$BACKUP_ROOT" -type f -name 'authentik-*.dump.gz' -mtime +"$RETENTION_DAYS" -delete
