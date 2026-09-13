@@ -13,11 +13,14 @@ passes 121 test files and 617 tests.
 
 The current controlled failover state is Oracle-primary: Oracle's PantryBot and
 Authentik PostgreSQL instances are writable and Oracle owns all external-side-
-effect leases. Home PantryBot and Authentik database StatefulSets are fenced at
-zero replicas with zero Service endpoints. Home Authentik HTTP capacity remains
-available against the Oracle writer so the home CI tunnel can serve the identity
-hostname. This is a deliberate single-writer recovery state, not uncontrolled
-multi-primary database operation.
+effect leases. The production home PantryBot and Authentik database
+StatefulSets remain fenced at zero replicas with zero production Service
+endpoints. A separate home-return PostgreSQL StatefulSet is running as a
+read-only physical standby (`pg_is_in_recovery()=t`, WAL receiver
+`streaming`) and is not an application authority. Home Authentik HTTP capacity
+remains available against the Oracle writer so the home CI tunnel can serve the
+identity hostname. This is a deliberate single-writer recovery state, not
+uncontrolled multi-primary database operation.
 
 The dedicated commands hostname is intentionally OAuth-free: its public site
 and `/api/public/commands` are available, while `/login/*`, `/oauth/*`,
@@ -40,8 +43,11 @@ The rehearsal exposed and corrected two adapter defects: multi-argument SSH
 fence commands were initially treated as one executable, and the ChaseBot
 forced-command wrapper did not accept GCP's explicit `--confirm` suffix. The
 replacement adapter is committed in homelab commits `560151d` and `dd8dd04`.
-Return-home, synthetic-event proof, and automatic daemon enablement remain
-separate gates.
+Return-home and synthetic-event proof remain separate gates. The Oracle-side
+automatic detector is now enabled by a 30-second systemd timer and has been
+verified to exit cleanly with `oracle_already_primary` while Oracle is already
+the authority. A live home-loss promotion and its RTO/RPO measurement remain
+unproven.
 
 ## Target topology
 
@@ -240,16 +246,17 @@ promotion command with both home fence adapters. It locks concurrent runs and
 fails closed when the probe recovers. It must not use a public hostname, since
 active-active Cloudflare routing can keep public traffic healthy while home is
 down. The contract test is
-`tests/pantrybot-auto-failover-gate-test.sh`; production enablement remains
-gated on deploying and measuring that private probe and running the failure
-matrix below.
+`tests/pantrybot-auto-failover-gate-test.sh`. The timer and private probe are
+deployed, but a real home-loss promotion and the full failure matrix below are
+still required before automatic promotion is considered proven.
 
-GCP is now a verified lightweight external observer: OS Login SSH works as
-`chasepdrsn_gmail_com`, passwordless sudo is available for the monitor unit,
-and the persisted monitor state is healthy for the public and protected
-routes. The 969 MiB VM remains too small for PostgreSQL or k3s. Do not enable
-automatic failover or place a coordination service there until the account
-eligibility, memory/network impact, and fencing-adapter tests are recorded.
+GCP is now a verified lightweight external observer and fencing relay: OS Login
+SSH works as `chasepdrsn_gmail_com`, passwordless sudo is available for the
+monitor unit, and the persisted monitor state is healthy for the public and
+protected routes. The 969 MiB VM remains too small for PostgreSQL or k3s; it is
+not a database or application site and must not become the coordination
+authority. Its limited role is external observation and the reviewed fencing
+transport, subject to the account allowance and network-impact guardrails.
 
 ## Free-cost guardrails
 
