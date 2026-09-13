@@ -1,6 +1,6 @@
 # Free-Tier Capacity Baseline
 
-**Measured:** 2026-09-11 CDT; refreshed after the PantryBot HA overlays, live PostgreSQL standby, and removal of the disposable Oracle rehearsal
+**Measured:** 2026-09-13 05:45 CDT; refreshed after the PantryBot HA overlays and the current Oracle authority state
 
 This is the initial capacity gate for the free active-active design. It is an observation record, not an authorization to deploy production failover.
 
@@ -8,10 +8,10 @@ This is the initial capacity gate for the free active-active design. It is an ob
 
 | Host | CPU | Memory | Disk | Current observation | Gate |
 |---|---:|---:|---:|---|---|
-| `minecraftmachine` | 16 logical CPUs | 15 GiB total, 8 GiB available | Root 3.4 TiB free; `/mnt/nvme` 188 GiB free | Home control plane and Minecraft host; Minecraft excluded from this project | Do not alter Minecraft placement |
-| `pantry-bot-oracle` | 2 vCPU; 2 allocatable k3s CPU | 11,932 MiB total, 10,164 MiB available; k3s currently 4% CPU / 15% memory | 40 GiB free | Independent arm64 Oracle k3s Ready; PantryBot stateless/API/overlay capacity plus the physical PostgreSQL standby Ready | Keep resource limits explicit; recheck with side-effect roles and egress |
+| `minecraftmachine` | 16 logical CPUs | 15 GiB total, 5.5 GiB available at check | Root 3.4 TiB free; `/mnt/nvme` 188 GiB free | Home control plane and Minecraft host; Minecraft excluded from this project | Do not alter Minecraft placement |
+| `pantry-bot-oracle` | 2 vCPU; 2 allocatable k3s CPU | 11 GiB total, 7.7 GiB available at host check; k3s 35% CPU / 41% memory | 33 GiB free | Independent arm64 Oracle k3s Ready; split PantryBot capacity and writable authority pod are running | Keep resource limits explicit; recheck with side-effect roles and egress |
 | `discordmusicbot` | 2 vCPU | 969 MiB total, 578 MiB available at check | 3.3 GiB free | x86_64 observer host; no swap, k3s, or Docker active; OS Login SSH and passwordless sudo verified | Observer-only; any coordination witness must be lightweight and pass a measured memory/network test |
-| `chasebot` | 2 allocatable CPU | 1,807 MiB currently used (54% of node memory); 433m CPU (21%) | Local-path storage only; current PVCs are RWO and node-local | Ready second home k3s node; hosts PantryBot stateless/API/overlay capacity and the live PostgreSQL primary | Use for stateless replicas and the home primary only; do not treat it as an independent site |
+| `chasebot` | 2 allocatable CPU | 1,015 MiB currently used (30% of node memory); 215m CPU (10%) | Local-path storage only; current PVCs are RWO and node-local | Ready second home k3s node; hosts no current PantryBot database pod | Use for stateless replicas and home-local capacity only; do not treat it as an independent site |
 
 ## Current home-to-Oracle network observation
 
@@ -22,32 +22,28 @@ average, 1.9 ms deviation). This is suitable for asynchronous application
 replication and queue processing, but is not evidence for synchronous
 cross-site PostgreSQL commits or a stretched k3s control plane.
 
-The same host currently reports 16 logical CPUs, 15,898 MiB RAM with 8,107 MiB
-available, 3.4 TiB free on `/`, and 188 GiB free on `/mnt/nvme`.
+The same host reports 16 logical CPUs and approximately 15 GiB RAM. Kubernetes
+reports `minecraftmachine` at 850m CPU and 10,130Mi memory (5% and 82%);
+Minecraft remains excluded and its placement was not changed.
 
-Current cluster evidence also shows `chasebot` Ready with 2 CPU and 3,342,604
-KiB allocatable memory. Kubernetes reports 433m CPU and 1,807 MiB memory in
-use on that node. Its local-path RWO storage confirms that it adds compute
-capacity inside the home failure domain, not independent state redundancy.
+Current cluster evidence shows `chasebot` Ready with 2 CPU. Kubernetes reports
+215m CPU and 1,015Mi memory in use on that node. Its local-path RWO storage
+confirms that it adds compute capacity inside the home failure domain, not
+independent state redundancy.
 
-Oracle k3s is also currently a single Ready arm64 control-plane node with 2
-allocatable CPU and 11,932 MiB total memory. After deploying the stateless
-PantryBot public/private UI, API, and overlay capacity plus the persistent
-physical standby, the live host check reports 91m CPU (4%) and 1,835Mi memory
-(15%), with 40GiB free on the root filesystem. The standby is streaming with
-equal receive/replay LSNs. The old disposable `pantry-bot-db-rehearsal`
-namespace was removed after this measurement. The side-effecting gateway,
-worker, and dispatcher deployments remain at zero replicas pending
-source-fencing proof. This confirms available free-tier application/database-
-standby capacity, not automatic cross-site failover.
+Oracle k3s is currently a single Ready arm64 control-plane node with 2
+allocatable CPU. The live check reports 714m CPU (35%), 4,940Mi memory (41%),
+and 33GiB free on the root filesystem. Both split PantryBot sites have their
+gateway, worker, dispatcher, API, UI, and tunnel capacity Ready. Oracle's
+`postgres-authority-standby-0` is accepting connections and reports
+`pg_is_in_recovery = false`; the home PantryBot PostgreSQL StatefulSets are
+currently scaled to zero. This is an Oracle-primary/ home-fenced observation,
+not proof of automatic promotion or failback.
 
-The home cluster currently reports `chasebot` at 433m CPU and 1,807Mi memory
-(21% and 54%) and `minecraftmachine` at 573m CPU and 10,180Mi memory (3% and
-82%). The home PantryBot PostgreSQL authority is Ready on `chasebot`; its
-non-secret state copy contains 275 users and 1,700 inventory rows, while the
-legacy SQLite deployment remains the active writer. These readings are a
-point-in-time observation and do not authorize adding workloads to the
-Minecraft node or declaring the database redundant.
+These readings are a point-in-time observation and do not authorize adding
+workloads to the Minecraft node or declaring the database redundant. The
+current Oracle-primary state must be reconciled with the documented return-home
+procedure before any automatic failback is enabled.
 
 ## GCP evidence boundary
 
