@@ -1,0 +1,112 @@
+# Fresh Home return standby for Authentik.
+# This StatefulSet uses a new PVC and must never reuse the fenced primary PVC.
+# The Secret is provisioned out of band from the current Oracle authority.
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-postgresql-home-return
+  namespace: auth
+  labels:
+    app.kubernetes.io/name: auth-postgresql-home-return
+    app.kubernetes.io/part-of: authentik
+    authentik.postgres/role: standby
+spec:
+  selector:
+    app.kubernetes.io/name: auth-postgresql-home-return
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: auth-postgresql-home-return
+  namespace: auth
+  labels:
+    app.kubernetes.io/name: auth-postgresql-home-return
+    app.kubernetes.io/part-of: authentik
+    authentik.postgres/role: standby
+spec:
+  serviceName: auth-postgresql-home-return
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auth-postgresql-home-return
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: auth-postgresql-home-return
+        app.kubernetes.io/part-of: authentik
+        authentik.postgres/role: standby
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: minecraftmachine
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: basebackup
+          image: postgres:17.10-bookworm
+          envFrom:
+            - secretRef:
+                name: auth-postgresql-home-return
+          command: ["sh", "-ec"]
+          args:
+            - |
+              if [ -f /var/lib/postgresql/data/PG_VERSION ]; then
+                exit 0
+              fi
+              until pg_isready -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER"; do sleep 3; done
+              printf '%s:*:*:%s:%s\n' "$PRIMARY_HOST" "$REPLICATION_USER" "$REPLICATION_PASSWORD" > /tmp/pgpass
+              chmod 600 /tmp/pgpass
+              PGPASSFILE=/tmp/pgpass pg_basebackup \
+                -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER" \
+                -D /var/lib/postgresql/data -Fp -Xs -P -R -S "$PRIMARY_SLOT_NAME"
+              printf "primary_conninfo = 'host=%s port=%s user=%s password=%s application_name=auth-home-return'\nprimary_slot_name = '%s'\n" \
+                "$PRIMARY_HOST" "$PRIMARY_PORT" "$REPLICATION_USER" "$REPLICATION_PASSWORD" "$PRIMARY_SLOT_NAME" \
+                >> /var/lib/postgresql/data/postgresql.auto.conf
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      containers:
+        - name: postgres
+          image: postgres:17.10-bookworm
+          args:
+            - -c
+            - hot_standby=on
+            - -c
+            - wal_receiver_timeout=10s
+            - -c
+            - max_connections=500
+          envFrom:
+            - secretRef:
+                name: auth-postgresql-home-return
+          ports:
+            - name: postgres
+              containerPort: 5432
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            periodSeconds: 5
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 10Gi
+        storageClassName: local-path

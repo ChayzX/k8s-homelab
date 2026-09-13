@@ -4,8 +4,9 @@ set -Eeuo pipefail
 home_values=${1:-auth/HOME-VALUES.yaml}
 oracle_values=${2:-auth/ORACLE-FAILOVER-VALUES.yaml}
 routing_doc=${3:-docs/recovery/INTERACTIVE-ROUTE-OWNERSHIP.md}
+return_manifest=${4:-auth/home-postgresql-return.yaml}
 
-for path in "$home_values" "$oracle_values" "$routing_doc"; do
+for path in "$home_values" "$oracle_values" "$routing_doc" "$return_manifest"; do
   test -f "$path" || { echo "missing required contract: $path" >&2; exit 1; }
 done
 
@@ -13,6 +14,9 @@ grep -q 'host: auth-postgresql$' "$home_values"
 grep -q 'host: auth-postgresql-standby.auth.svc.cluster.local$' "$oracle_values"
 grep -q '^Normal owner: Home$' "$routing_doc"
 grep -q '^Promotion owner: Oracle$' "$routing_doc"
+grep -q '^  name: auth-postgresql-home-return$' "$return_manifest"
+grep -q 'kubernetes.io/hostname: minecraftmachine' "$return_manifest"
+grep -q 'PRIMARY_SLOT_NAME' "$return_manifest"
 grep -q '`auth.greeniespantry.uk`: Home' "$routing_doc"
 grep -q '`oauth.greeniespantry.uk`: Home' "$routing_doc"
 grep -q '`grafana.greeniespantry.uk`: Home' "$routing_doc"
