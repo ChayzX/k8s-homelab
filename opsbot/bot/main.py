@@ -31,6 +31,12 @@ ALLOWLIST = util.parse_user_allowlist(os.environ.get("DISCORD_USER_ID"))
 OWNERSHIP: Ownership | None = None
 
 
+async def _close_after_fence() -> None:
+    """Withdraw readiness before closing the Discord runtime."""
+    health.mark_not_ready()
+    await bot.close()
+
+
 def _audit(interaction: discord.Interaction, authorized: bool, result: str = "") -> None:
     """One structured stdout line per command attempt: who, what, args,
     authorized y/n, and (once known) the result. No separate logging
@@ -408,7 +414,7 @@ async def bug(interaction: discord.Interaction, bot: str, what: str) -> None:
 async def setup_hook() -> None:
     assert OWNERSHIP is not None
     k8s_ops.set_authority_checker(OWNERSHIP.require)
-    OWNERSHIP.start(bot.close)
+    OWNERSHIP.start(_close_after_fence)
     k8s_ops.init()
     bot.tree.add_command(pods_group)
     bot.tree.add_command(deploy_group)

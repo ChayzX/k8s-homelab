@@ -23,6 +23,12 @@ def mark_ready() -> None:
     _ready = True
 
 
+def mark_not_ready() -> None:
+    """Withdraw readiness immediately when ownership or runtime is fenced."""
+    global _ready
+    _ready = False
+
+
 async def _live(_request: web.Request) -> web.Response:
     return web.json_response({"status": "ok"})
 

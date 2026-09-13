@@ -18,8 +18,10 @@ Discord token, witness endpoint, and both site deployments.
    opening a Discord gateway; witness acquire must return 409 and the Oracle
    logs must contain the fatal no-lease gate.
 4. Stop or isolate the home witness-renewal path and wait longer than the
-   configured 30-second lease. The home process must close Discord and refuse
-   a subsequent deployment/RCON operation; record the fencing timestamp.
+   configured 30-second lease. The home process must withdraw `/health` and
+   `/healthz` readiness before closing Discord, then refuse a subsequent
+   deployment/RCON operation; record the fencing timestamp. A 503 readiness
+   response is required evidence that the old owner is no longer routable.
 5. Start Oracle. It must acquire a higher epoch, connect to Discord, and pass
    the same disposable mutation check. Restore home connectivity but do not
    start it until the witness rejects its old epoch/token; then verify the
