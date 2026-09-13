@@ -15,6 +15,7 @@ Required for a real promotion:
   PANTRY_WITNESS_SECRET_FILE  root-readable file containing witness secret
                               (or WITNESS_SHARED_SECRET in the environment)
   HOME_FENCE_COMMAND          exact home fence adapter path
+  AUTH_HOME_FENCE_COMMAND     exact home Authentik database fence adapter path
   ORACLE_KUBECTL               kubectl binary or wrapper for the Oracle cluster
   PANTRY_PUBLIC_URLS           whitespace-separated public readiness URLs
 USAGE
@@ -28,12 +29,14 @@ mode=${1:-}
 : "${PANTRY_WITNESS_SECRET_FILE:=}"
 : "${PANTRY_WITNESS_SHARED_SECRET:=${WITNESS_SHARED_SECRET:-}}"
 : "${HOME_FENCE_COMMAND:?HOME_FENCE_COMMAND is required}"
+: "${AUTH_HOME_FENCE_COMMAND:?AUTH_HOME_FENCE_COMMAND is required}"
 : "${ORACLE_KUBECTL:?ORACLE_KUBECTL is required}"
 : "${PANTRY_PUBLIC_URLS:?PANTRY_PUBLIC_URLS is required}"
 [[ -n "$PANTRY_WITNESS_URL" ]] || { echo 'promotion failed: witness URL is empty' >&2; exit 1; }
 
 if [[ "$mode" == "--dry-run" ]]; then
   printf '%s\n' authority_acquired source_fenced database_promoted database_ready application_ready traffic_routed
+  printf '%s\n' auth_source_fenced auth_database_promoted
   exit 0
 fi
 
@@ -54,6 +57,8 @@ ns_auth() { k -n auth "$@"; }
 # it into argv so SSH options are supported without invoking a shell.
 read -r -a home_fence_command <<< "$HOME_FENCE_COMMAND"
 (( ${#home_fence_command[@]} > 0 )) || { echo 'promotion failed: home fence command is empty' >&2; exit 1; }
+read -r -a auth_home_fence_command <<< "$AUTH_HOME_FENCE_COMMAND"
+(( ${#auth_home_fence_command[@]} > 0 )) || { echo 'promotion failed: Authentik home fence command is empty' >&2; exit 1; }
 
 authority=$(curl --fail-with-body --silent --show-error --max-time 8 \
   -X POST "$PANTRY_WITNESS_URL/v1/authority/acquire" \
@@ -74,6 +79,8 @@ printf 'authority_acquired epoch=%s\\n' "$epoch"
 
 "${home_fence_command[@]}" --confirm >/dev/null
 echo source_fenced
+"${auth_home_fence_command[@]}" --confirm >/dev/null
+echo auth_source_fenced
 
 ns_pantry get pod postgres-authority-standby-0 >/dev/null
 recovery=$(ns_pantry exec postgres-authority-standby-0 -- sh -c \
@@ -94,6 +101,28 @@ ns_pantry label pod postgres-authority-standby-0 pantrybot.postgres/role=primary
 ns_pantry patch service postgres-authority-standby --type=json \
   -p='[{"op":"replace","path":"/spec/selector/pantrybot.postgres~1role","value":"primary"}]' >/dev/null
 echo database_ready
+
+# Authentik has the same single-writer invariant as PantryBot. Promote it only
+# after both home writers have been fenced, and verify the promoted database
+# before changing the application Secret or restarting identity services.
+ns_auth get pod auth-postgresql-standby-0 >/dev/null
+auth_recovery=$(ns_auth exec auth-postgresql-standby-0 -- sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atqc "select pg_is_in_recovery()"' | tr -d '\r')
+[[ "$auth_recovery" == t ]] || { echo 'promotion failed: Oracle Authentik database is not a standby' >&2; exit 1; }
+ns_auth exec auth-postgresql-standby-0 -- su postgres -s /bin/sh -c \
+  'pg_ctl -D /var/lib/postgresql/data promote' >/dev/null
+for _ in $(seq 1 60); do
+  auth_recovery=$(ns_auth exec auth-postgresql-standby-0 -- sh -c \
+    'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atqc "select pg_is_in_recovery()"' | tr -d '\r')
+  [[ "$auth_recovery" == f ]] && break
+  sleep 1
+done
+[[ "${auth_recovery:-}" == f ]] || { echo 'promotion failed: Oracle Authentik database did not promote' >&2; exit 1; }
+echo auth_database_promoted
+
+ns_auth label pod auth-postgresql-standby-0 authentik.postgres/role=primary --overwrite >/dev/null
+ns_auth patch service auth-postgresql-standby --type=merge \
+  -p='{"spec":{"selector":{"app.kubernetes.io/name":"auth-postgresql-standby","authentik.postgres/role":"primary"}}}' >/dev/null
 
 # Point application roles at the promoted local authority without printing or
 # reconstructing any secret values in logs.

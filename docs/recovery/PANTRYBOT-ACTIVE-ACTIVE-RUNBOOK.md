@@ -113,9 +113,12 @@ GitHub Issue #191.
 1. Confirm Oracle application pods are ready and can reach the database
    endpoint, Twitch APIs, and overlay destination.
 2. Confirm the home database writer and all home external-side-effect leases.
-3. Fence the home database writer using the database authority's promotion
-   mechanism. Do not merely scale the home pods down and assume fencing.
-4. Promote Oracle's database instance and record the new database epoch.
+3. Fence both home database writers using the independently reachable,
+   least-privilege PantryBot and Authentik fence adapters. Do not merely scale
+   the home pods down and assume fencing.
+4. Promote both Oracle database instances and record the new database epoch for
+   each. The PantryBot promotion adapter requires `HOME_FENCE_COMMAND` and
+   `AUTH_HOME_FENCE_COMMAND`; it refuses to proceed if either adapter is absent.
 5. Verify stale home database credentials cannot commit a write.
 6. Allow the Oracle gateway and target dispatchers to acquire their leases.
 7. Verify the old home gateway is disconnected and the old dispatchers reject
@@ -152,10 +155,12 @@ proven.
 The physical PostgreSQL transport was first exercised against the live home
 authority with a disposable Oracle standby. That historical rehearsal proved
 transport and promotion mechanics, but did not fence the home writer. The
-current production state has since been deliberately returned to an
-Oracle-primary/home-standby recovery window; the remaining gate is a fresh
-controlled return-home rehearsal proving the source fence and application
-fence against the live authority.
+current production state has since been deliberately left in an
+Oracle-primary/home-fenced recovery window. The promotion adapter now models
+the coupled PantryBot/Authentik fence-and-promote order; the remaining gates
+are a controlled return-home rehearsal proving the reverse source fence and
+application fence against the live authority, plus measured automatic
+promotion and live synthetic-event evidence.
 
 The application-side promotion check is reproducible from the PantryBot
 worktree with `npm run rehearsal:promotion`. Set
