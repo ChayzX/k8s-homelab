@@ -6,6 +6,13 @@ on:
 permissions:
   contents: read
 
+# A second manual ingress change must wait for the first rollout and health
+# check to finish; cancelling an in-flight rollout could leave the target
+# connector in an unknown state.
+concurrency:
+  group: windows-alloy-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

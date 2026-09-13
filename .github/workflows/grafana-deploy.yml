@@ -12,6 +12,12 @@ on:
 permissions:
   contents: read
 
+# This workflow is rollback-only. Do not let two manual rollback operations
+# race the same retained Grafana target.
+concurrency:
+  group: grafana-rollback
+  cancel-in-progress: false
+
 jobs:
   apply-configmap:
     name: 1 - Apply retained local dashboard ConfigMap (manual rollback only)
