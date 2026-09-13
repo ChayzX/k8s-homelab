@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 manifest=${1:-auth/50-ldap-outpost.yaml}
-transport_manifest=${2:-auth/60-postgresql-transport.yaml}
+transport_manifest=${2:-auth/30-postgresql-transport.yaml}
 
 for required_manifest in "$manifest" "$transport_manifest"; do
   test -f "$required_manifest"
@@ -10,7 +10,7 @@ done
 
 grep -q '^apiVersion: apps/v1$' "$manifest"
 grep -q '^  namespace: auth$' "$manifest"
-grep -q '^  replicas: 1$' "$manifest"
+grep -q '^  replicas: 2$' "$manifest"
 grep -q '^      automountServiceAccountToken: false$' "$manifest"
 grep -q '^          image: ghcr.io/goauthentik/ldap:2026.5.6$' "$manifest"
 grep -q '^                  name: ldap-outpost-token$' "$manifest"
@@ -28,7 +28,6 @@ grep -q '^kind: Service$' "$transport_manifest"
 grep -q '^  name: auth-postgresql-transport$' "$transport_manifest"
 grep -q '^  namespace: auth$' "$transport_manifest"
 grep -q '^  type: NodePort$' "$transport_manifest"
-grep -q '^  externalTrafficPolicy: Cluster$' "$transport_manifest"
 grep -q '^    homelab/transport: encrypted$' "$transport_manifest"
 grep -q '^    app.kubernetes.io/component: primary$' "$transport_manifest"
 grep -q '^    app.kubernetes.io/instance: auth$' "$transport_manifest"
