@@ -1,5 +1,5 @@
 # =============================================================================
-# cloudflared — Cloudflare Tunnel connector for pantry-bot
+# RETIRED cloudflared — historical shared Cloudflare Tunnel connector for pantry-bot
 # =============================================================================
 # Replaces the `cloudflared` service in
 # /home/chase/Downloads/pantry-bot/docker-compose.prod.yml

@@ -142,7 +142,7 @@ resulting pull Secret will silently be empty. In that case use the explicit
 ## 4. `pantry-bot-litestream` — R2 credentials for continuous SQLite backup
 
 New as of the litestream sidecar (`25-configmap-litestream.yaml`,
-`40-deployment.yaml`) — Step A of the cross-node failover migration, see
+`40-deployment.yaml.retired`) — Step A of the cross-node failover migration, see
 that ConfigMap's header comment. Without this Secret the pod fails to start
 (`CreateContainerConfigError`), by design — the sidecar has nothing useful
 to do without R2 credentials, so failing loudly beats silently not backing

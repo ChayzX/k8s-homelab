@@ -8,7 +8,7 @@
 #
 # `keel` namespace removed 2026-08-13 (k8s-homelab-oiv.6) -- Keel itself was
 # decommissioned, retired in favor of GitHub Actions deploy workflows
-# (see pantry-bot/40-deployment.yaml's header).
+# (see the retired pantry-bot/40-deployment.yaml.retired header).
 # Apply this before the pantry-bot and opsbot manifests. JMusicBot owns its
 # namespace in jmusicbot/00-namespace.yaml.
 #

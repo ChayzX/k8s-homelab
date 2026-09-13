@@ -1,7 +1,7 @@
 # ClusterIP Service exposing pantry-bot's cloudflared connector's /ready
-# metrics endpoint (port 2000, see 60-deployment-cloudflared.yaml's
+# metrics endpoint (port 2000, see 60-deployment-cloudflared.yaml.retired's
 # --metrics flag) for Kuma monitoring. Separate from the `pantry-bot`
-# Service (50-service.yaml), which only covers the `bot` container's ports --
+# Service (50-service.yaml.retired), which only covered the `bot` container's ports --
 # cloudflared is a distinct pod with its own selector.
 apiVersion: v1
 kind: Service

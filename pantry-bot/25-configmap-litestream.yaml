@@ -2,7 +2,7 @@
 # cross-node failover migration — see pantry-bot-infra's docs/ARCHITECTURE.md
 # and docs/DEPLOYMENT-PIPELINE-IMPACT.md for the full picture).
 #
-# This is additive-only: it makes the litestream sidecar in 40-deployment.yaml
+# This is archival/additive-only: it supported the retired litestream sidecar in 40-deployment.yaml.retired
 # continuously ship a backup of pantry.db to R2. It does NOT change where the
 # live database lives — that's still the `pantry-bot-data` PVC (30-pvc.yaml).
 #
@@ -37,4 +37,4 @@ data:
             # access-key-id / secret-access-key are NOT set here — litestream
             # reads them from the LITESTREAM_ACCESS_KEY_ID /
             # LITESTREAM_SECRET_ACCESS_KEY env vars automatically (see the
-            # litestream container's env in 40-deployment.yaml).
+            # litestream container's env in 40-deployment.yaml.retired).

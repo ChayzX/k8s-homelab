@@ -3,7 +3,7 @@
 Everything in this directory (`00-namespace.yaml`, `10-serviceaccount.yaml`,
 `20-deployment.yaml`) is the connector *pod*. The tunnel itself, its public
 hostname, and Cloudflare Access are dashboard-managed — same convention as
-every other tunnel in this repo (see `../pantry-bot/60-deployment-cloudflared.yaml`'s
+every other tunnel in this repo (see the retired `../pantry-bot/60-deployment-cloudflared.yaml.retired`'s
 header). These steps can't be scripted from here: this session has no
 Cloudflare API credentials, only what's checked into git.
 

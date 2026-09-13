@@ -134,7 +134,7 @@ side-effect roles until the source-fencing gate passes.
 
 This bootstrap does not modify:
 
-- `pantry-bot/40-deployment.yaml` or any legacy PantryBot Deployment;
+- `pantry-bot/40-deployment.yaml.retired` or any legacy PantryBot Deployment;
 - Minecraft manifests, node selectors, PVCs, or scheduling;
 - Oracle workloads or standby resources; or
 - any issue tracker other than GitHub Issues.

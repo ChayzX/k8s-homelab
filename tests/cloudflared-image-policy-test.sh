@@ -6,7 +6,6 @@ set -Eeuo pipefail
 # rollout path, so every tracked connector manifest must use a digest.
 manifests=(
   ci-tunnel/20-deployment.yaml
-  pantry-bot/60-deployment-cloudflared.yaml
   pantry-bot/62-deployment-commands-cloudflared.yaml
   pantry-bot/66-deployment-app-cloudflared.yaml
 )

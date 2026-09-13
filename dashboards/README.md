@@ -277,7 +277,7 @@ App-specific panels, and deliberately not padded with invented metrics.
   the deployment uses an `exec` probe reproducing the old Compose
   healthcheck rather than `httpGet` (an `httpGet` probe would treat that
   same 404 as failure and crash-loop a healthy pod — see the extensive
-  comment in `pantry-bot/40-deployment.yaml`). So "HTTP health" here is
+  comment in the retired `pantry-bot/40-deployment.yaml.retired`). So "HTTP health" here is
   honestly just `kube_pod_status_ready`, i.e. whether the exec probe's
   TCP connect + any-response check is passing — **not** request latency,
   status codes, or whether Twitch auth/SQLite/the tunnel actually work.

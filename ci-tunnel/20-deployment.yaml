@@ -2,7 +2,7 @@
 # cloudflared — dedicated Cloudflare Tunnel connector for CI/CD kubectl access
 # =============================================================================
 # Byte-for-byte the same container/args/probes as
-# ../pantry-bot/60-deployment-cloudflared.yaml -- same reasoning applies
+# ../pantry-bot/60-deployment-cloudflared.yaml.retired -- same reasoning applies
 # (token via env not argv, /ready metrics probe, RollingUpdate). Only the
 # namespace, names, and TUNNEL_TOKEN Secret differ. See that file's header
 # comments for the full "why" on each choice; not repeated here.

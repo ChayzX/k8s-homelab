@@ -17,7 +17,7 @@ secrets, SQLite databases, world data, or kubeconfigs into Git.
 | Prometheus | `observability/prometheus*.yaml` | `observability` namespace, internal Service | Inspect targets and rules with `kubectl`; change scrape configuration in Git and apply through the observability workflow/runbook. Persistent data is on the Prometheus PVC. |
 | Loki / Promtail | `observability/loki*.yaml` and `observability/promtail*.yaml` | `observability` namespace | Loki stores logs; Promtail labels and parses them. Changes to labels affect dashboards and the host watcher, so update queries/tests together. |
 | Monitoring | `observability/k3s-watcher/`, Prometheus, and UptimeRobot | k3s-watcher sends Discord/Operations alerts; UptimeRobot checks public reachability | Keep functional workload URLs in the host-local watcher environment. Use per-node UptimeRobot Ping/Port monitors for node identity; use existing public hostnames for HTTP checks. |
-| Cloudflare connectors | `pantry-bot/60-deployment-cloudflared.yaml`, `pantry-bot/62-deployment-commands-cloudflared.yaml`, and `ci-tunnel/20-deployment.yaml` | `pantry-bot` and `ci-tunnel` namespaces | Check `/ready` on metrics port 2000 and connector logs. The commands connector is deployed once per independent cluster and must serve only `commands.greeniespantry.uk`; the shared connector retains all private/Auth/SSH/RDP/monitoring routes. Remotely managed ingress and DNS live in Cloudflare, not this repo. |
+| Cloudflare connectors | `pantry-bot/62-deployment-commands-cloudflared.yaml`, `pantry-bot/66-deployment-app-cloudflared.yaml`, and `ci-tunnel/20-deployment.yaml` | `pantry-bot` and `ci-tunnel` namespaces | Check `/ready` on metrics port 2000 and connector logs. The dedicated commands connector serves only `commands.greeniespantry.uk`; the application connector serves the private OAuth/mod/overlay origins. Retired shared-tunnel manifests are stored as `.retired` and are not applied. Remotely managed ingress and DNS live in Cloudflare, not this repo. |
 | k3s-watcher | Tracked source in `observability/k3s-watcher/`; host-installed copy consumed by `~/.config/systemd/user/k3s-watcher.service` | Host systemd user service; polls Loki and Kubernetes, sends Discord DMs | Copy/install from the tracked source, keep `.env` host-local, run `PYTHONPATH=. python3 test_watcher.py`, then restart the user unit. It health-gates only narrow Cloudflared QUIC teardown noise and deduplicates fingerprints. |
 
 ## File-level map
@@ -98,7 +98,8 @@ secrets, SQLite databases, world data, or kubeconfigs into Git.
   — Grafana Deployment, datasources, and alert provisioning.
 - `dashboards/*.json` and `dashboards/dashboards-configmap.yaml` — dashboard
   panels and their ConfigMap packaging.
-- `pantry-bot/60-deployment-cloudflared.yaml`,
+- `pantry-bot/62-deployment-commands-cloudflared.yaml` and
+  `pantry-bot/66-deployment-app-cloudflared.yaml`,
   `pantry-bot/62-deployment-commands-cloudflared.yaml`, and
   `ci-tunnel/20-deployment.yaml` — shared, commands-only, and CI Cloudflare
   connector Deployments. Hostname ingress rules are remotely managed in

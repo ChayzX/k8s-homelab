@@ -20,7 +20,7 @@ The neutral witness and node-local relays are defined in
 `observability/failover-witness/`. PostgreSQL is a single-writer authority;
 the Oracle standby is not writable until the database-fencing gate passes.
 The legacy SQLite deployment in `k8s/deployment.yaml` and homelab
-`pantry-bot/40-deployment.yaml` is not the HA path and must not be started as a
+`pantry-bot/40-deployment.yaml.retired` is not the HA path and must not be started as a
 second writer during an incident.
 
 ## Current recovery state (2026-09-12)
