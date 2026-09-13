@@ -61,29 +61,6 @@ spec:
       serviceAccountName: jmusicbot-sa
       # Zero Kubernetes API access required. No token is projected.
       automountServiceAccountToken: false
-      # Both independent sites may run this Deployment, but only the site
-      # holding the resource-scoped witness lease may open Discord. The other
-      # pod waits without creating a JDA session until the lease is available.
-      env:
-        - name: JMUSICBOT_SITE
-          valueFrom:
-            secretKeyRef:
-              name: jmusicbot-witness
-              key: JMUSICBOT_SITE
-        - name: JMUSICBOT_WITNESS_URL
-          valueFrom:
-            secretKeyRef:
-              name: jmusicbot-witness
-              key: JMUSICBOT_WITNESS_URL
-        - name: JMUSICBOT_WITNESS_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: jmusicbot-witness
-              key: JMUSICBOT_WITNESS_SECRET
-        - name: JMUSICBOT_WITNESS_RESOURCE
-          value: "jmusicbot"
-        - name: JMUSICBOT_LEASE_SECONDS
-          value: "30"
       # java is PID 1 inside this image (verified: `docker top` shows only the
       # java process, so /app/entrypoint.sh exec's it), so SIGTERM reaches the
       # JVM directly and 30s is ample for a clean Discord disconnect.
@@ -168,6 +145,30 @@ spec:
           envFrom:
             - secretRef:
                 name: jmusicbot-witness
+          # Both independent sites may run this Deployment, but only the site
+          # holding the resource-scoped witness lease may open Discord. The
+          # other pod waits without creating a JDA session until the lease is
+          # available. Keep these as container env (not PodSpec fields).
+          env:
+            - name: JMUSICBOT_SITE
+              valueFrom:
+                secretKeyRef:
+                  name: jmusicbot-witness
+                  key: JMUSICBOT_SITE
+            - name: JMUSICBOT_WITNESS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: jmusicbot-witness
+                  key: JMUSICBOT_WITNESS_URL
+            - name: JMUSICBOT_WITNESS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jmusicbot-witness
+                  key: JMUSICBOT_WITNESS_SECRET
+            - name: JMUSICBOT_WITNESS_RESOURCE
+              value: "jmusicbot"
+            - name: JMUSICBOT_LEASE_SECONDS
+              value: "30"
           # Health endpoint: a JDK-built-in HttpServer on
           # 9091 in the patched image. /health returns 200 only after the bot
           # has logged into Discord; /live returns 200 whenever the JVM is
