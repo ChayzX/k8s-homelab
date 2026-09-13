@@ -15,7 +15,7 @@ not stop local scraping or log collection.
 
 | Signal | Current path | Target path |
 | --- | --- | --- |
-| Metrics | Local Prometheus on MinecraftMachine | Local Prometheus at each site plus remote-write to Grafana Cloud Mimir |
+| Metrics | Local Prometheus on MinecraftMachine | Local Prometheus at each site plus an allowlisted remote-write stream to Grafana Cloud Mimir |
 | Logs | Promtail to local Loki and Grafana Cloud | Promtail dual-write during validation, then Cloud-first with bounded local retention |
 | Dashboards | Local Grafana PVC | Import the tracked `dashboards/*.json` files into Grafana Cloud |
 | External checks | GCP monitor/UptimeRobot | Retained; Grafana Cloud is not the only failure detector |
@@ -44,10 +44,15 @@ rule referenced them.
 
 The home and Oracle Prometheus collectors now remote-write to the Cloud
 Prometheus endpoint using site-local `grafana-cloud-metrics` Secrets. The
-live verification observed accepted samples and zero failed samples from both
-collectors. The token is not stored in the repository. This is the
-`metrics:write` credential used by Prometheus; it is not a Grafana Cloud query
-credential.
+local collectors retain their complete scrape sets, while
+`write_relabel_configs` exports only health, capacity, application, and
+required dashboard/Minecraft metric families. Full kubelet and cAdvisor
+high-cardinality series remain available locally but are not sent to the free
+Cloud stack. Live verification observed approximately 7,002 selected home
+series and 990 selected Oracle series, with remote-write rates around 478 and
+64 samples/sec respectively and zero failed samples. The token is not stored
+in the repository. This is the `metrics:write` credential used by Prometheus;
+it is not a Grafana Cloud query credential.
 
 ## Secret contract
 
@@ -83,9 +88,9 @@ destination for Prometheus.
    interval.
 3. Oracle has a separately deployed, Oracle-labeled Prometheus collector using
    its own 8Gi local buffer, with node-exporter, kube-state-metrics, kubelet,
-   and cAdvisor targets healthy. Its remote-write queue is active with zero
-   failed samples; continue monitoring convergence before reducing local
-   retention.
+   and cAdvisor targets healthy. Its allowlisted remote-write queue is active
+   with zero failed samples; continue monitoring convergence before reducing
+   local retention.
 4. Only then reduce local Grafana/Loki/Prometheus retention. Keep local
    collectors as an outage buffer and retain external monitoring/UptimeRobot.
 
