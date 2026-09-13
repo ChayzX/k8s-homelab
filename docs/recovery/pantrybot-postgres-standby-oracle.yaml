@@ -36,6 +36,7 @@ metadata:
 spec:
   selector:
     app.kubernetes.io/name: pantry-postgres-authority-standby
+    pantrybot.postgres/role: standby
   ports:
     - name: postgres
       port: 5432
