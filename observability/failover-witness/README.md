@@ -101,6 +101,13 @@ promotion remain separate gates.
 The service API is `GET /healthz`, `POST /v1/authority/acquire`, and
 `POST /v1/authority/renew`, authenticated with `Authorization: Bearer ...`.
 
+For a controlled return-home, `fence-pantry-postgres-oracle.sh` and
+`fence-auth-postgres-oracle.sh` are separate, explicit-confirmation adapters.
+They target only the Oracle PantryBot and Authentik PostgreSQL StatefulSets,
+respectively, and verify that their Services have no endpoints. Both must
+complete before home databases are promoted; neither is an automatic health
+check.
+
 ## PantryBot PostgreSQL transport
 
 The repository also contains a guarded transport pair for the home PantryBot
