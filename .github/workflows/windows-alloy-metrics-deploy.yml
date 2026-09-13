@@ -32,8 +32,25 @@ jobs:
           set -euo pipefail
           test -n "$TUNNEL_SERVICE_TOKEN_ID"
           test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
-          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 &
-          sleep 3
+          cloudflared access tcp \
+            --hostname k8s-api.greeniespantry.uk \
+            --url 127.0.0.1:16443 \
+            --service-token-id "$TUNNEL_SERVICE_TOKEN_ID" \
+            --service-token-secret "$TUNNEL_SERVICE_TOKEN_SECRET" \
+            >"$RUNNER_TEMP/cloudflared-access.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/cloudflared-access.pid"
+          for _ in $(seq 1 30); do
+            if ! kill -0 "$(cat "$RUNNER_TEMP/cloudflared-access.pid")" 2>/dev/null; then
+              cat "$RUNNER_TEMP/cloudflared-access.log"
+              exit 1
+            fi
+            if timeout 1 bash -c '</dev/tcp/127.0.0.1/16443' 2>/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/cloudflared-access.log"
+          exit 1
 
       - name: Write scoped kubeconfig
         env:
@@ -64,3 +81,11 @@ jobs:
           kubectl rollout status deployment/prometheus -n observability --timeout=180s
           kubectl rollout status deployment/windows-alloy-metrics-cloudflared -n observability --timeout=180s
           kubectl get pods -n observability -l app.kubernetes.io/name=windows-alloy-metrics-cloudflared
+
+      - name: Close Access-authenticated tunnel
+        if: always()
+        run: |
+          set -euo pipefail
+          if test -s "$RUNNER_TEMP/cloudflared-access.pid"; then
+            kill "$(cat "$RUNNER_TEMP/cloudflared-access.pid")" 2>/dev/null || true
+          fi
