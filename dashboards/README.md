@@ -1,6 +1,6 @@
 # Grafana dashboards for the k3s home-lab
 
-Nine dashboards, built to replace the four that ran under Docker Desktop
+Ten dashboards, built to replace the four that ran under Docker Desktop
 (`host-overview`, `container-resources`, `minecraft`, `logs-overview` — see
 `/home/chase/docker/observability/monitoring/grafana/dashboards/` for the
 originals, kept read-only for reference) with equivalents that understand
@@ -54,6 +54,7 @@ cd /home/chase/k8s-homelab/dashboards
 kubectl create configmap grafana-dashboards -n observability \
   --from-file=apps.json=apps.json \
   --from-file=cluster-overview.json=cluster-overview.json \
+  --from-file=greenies-main-pc-health.json=greenies-main-pc-health.json \
   --from-file=host-pc.json=host-pc.json \
   --from-file=jmusicbot.json=jmusicbot.json \
   --from-file=logs.json=logs.json \
@@ -110,6 +111,13 @@ The host selector uses the native `node_exporter` `node_uname_info` series.
 Open it at `/d/homelab-host-pc/main-pc-bare-metal-health` (or use the link on
 the Overview dashboard). `cluster-overview.json` remains the mixed host + k3s
 control-plane dashboard for workload-aware triage.
+
+### `greenies-main-pc-health.json` — Greenie's Main PC Health
+
+This fixed dashboard is scoped to the single Windows PC forwarded by Alloy:
+all Prometheus queries use `site="remote", job="host"`, so there is no host
+selector to configure. It covers Alloy scrape health, CPU, memory, uptime,
+logical-disk free/used space, network throughput, and last boot time.
 
 ### `cluster-overview.json` — Host Health / Cluster Overview — Node & k3s Control Plane
 
