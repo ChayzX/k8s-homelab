@@ -27,6 +27,8 @@ require("if [ -f /musicbot/.jmusicbot-lease-owner ]; then", "ownership-gated R2 
 require("rclone sync /musicbot r2:pantry-bot-backups/jmusicbot/", "R2 sync command")
 require("sleep 300", "five-minute sync interval")
 require("JMUSICBOT_WITNESS_RESOURCE", "resource-scoped witness configuration")
+for variable in ("JMUSICBOT_SITE", "JMUSICBOT_WITNESS_URL", "JMUSICBOT_WITNESS_SECRET"):
+    require(f"name: {variable}", f"{variable} witness configuration")
 if not re.search(r"name: JMUSICBOT_WITNESS_RESOURCE\s+value:\s*[\x27\"]?jmusicbot[\x27\"]?", manifest):
     raise SystemExit("missing jmusicbot witness resource")
 
