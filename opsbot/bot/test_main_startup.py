@@ -59,10 +59,6 @@ def _import_main_without_optional_dependencies():
     kubernetes.stream = types.ModuleType("kubernetes.stream")
     kubernetes.stream.stream = lambda *args, **kwargs: None
 
-    health = types.SimpleNamespace(
-        start=Mock(), mark_ready=Mock(), mark_not_ready=Mock(),
-        start_background=Mock(return_value=Mock())
-    )
     modules = {
         "discord": discord,
         "discord.app_commands": app_commands,
@@ -73,7 +69,7 @@ def _import_main_without_optional_dependencies():
         "kubernetes.client.rest": kubernetes.client.rest,
         "kubernetes.config": kubernetes.config,
         "kubernetes.stream": kubernetes.stream,
-        "health": health,
+        "health": types.SimpleNamespace(start=Mock(), mark_ready=Mock()),
     }
     with patch.dict(sys.modules, modules):
         sys.modules.pop("main", None)
@@ -81,39 +77,20 @@ def _import_main_without_optional_dependencies():
 
 
 class MainStartupTests(unittest.TestCase):
-    def test_discord_starts_only_after_standby_acquires_a_witness_lease(self):
+    def test_discord_is_not_started_when_witness_lease_acquisition_fails(self):
         main = _import_main_without_optional_dependencies()
         main.DISCORD_BOT_TOKEN = "discord-token"
         main.ALLOWLIST = {1}
         main.bot.run.reset_mock()
 
         ownership = Mock()
-        ownership.acquire.side_effect = [
-            main.OwnershipError("no valid lease"),
-            types.SimpleNamespace(site="oracle", epoch=4),
-        ]
+        ownership.acquire.side_effect = main.OwnershipError("no valid lease")
         with patch.object(main.Ownership, "from_env", return_value=ownership):
-            with patch.object(main.time, "sleep") as sleep:
+            with self.assertRaises(SystemExit) as exit_error:
                 main.main()
 
-        sleep.assert_called_once_with(5)
-        main.health.start_background.assert_called_once_with()
-        main.bot.run.assert_called_once_with("discord-token")
-
-    def test_standby_retries_until_the_witness_grants_a_lease(self):
-        main = _import_main_without_optional_dependencies()
-        lease = types.SimpleNamespace(site="oracle", epoch=4)
-        ownership = Mock()
-        ownership.acquire.side_effect = [
-            main.OwnershipError("no valid lease"),
-            lease,
-        ]
-        with patch.object(main.time, "sleep") as sleep:
-            result = main.acquire_lease_until_available(ownership, retry_seconds=7)
-
-        self.assertIs(result, lease)
-        self.assertEqual(ownership.acquire.call_count, 2)
-        sleep.assert_called_once_with(7)
+        self.assertEqual(exit_error.exception.code, 1)
+        main.bot.run.assert_not_called()
 
 
 if __name__ == "__main__":
