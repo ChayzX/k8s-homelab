@@ -10,6 +10,13 @@ permissions:
   pull-requests: write
   checks: write
 
+# Security scans are repeatable and only the newest tree for a PR/ref matters.
+# Cancel superseded scans so rapid PR updates and successive main pushes do not
+# consume a runner for work whose result is already obsolete.
+concurrency:
+  group: security-scan-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   scan:
     runs-on: ubuntu-latest
