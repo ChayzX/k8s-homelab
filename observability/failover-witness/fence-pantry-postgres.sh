@@ -52,7 +52,8 @@ for statefulset in "${STATEFULSETS[@]}"; do
     continue
   fi
   found=1
-  kubectl -n "$NAMESPACE" scale statefulset "$statefulset" --replicas=0 >/dev/null
+  kubectl -n "$NAMESPACE" patch statefulset "$statefulset" --type=merge \
+    -p='{"spec":{"replicas":0}}' >/dev/null
   pod="${statefulset}-0"
   if kubectl -n "$NAMESPACE" get pod "$pod" >/dev/null 2>&1; then
     kubectl -n "$NAMESPACE" delete pod "$pod" --grace-period=0 --force --wait=false >/dev/null
