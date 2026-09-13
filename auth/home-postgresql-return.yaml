@@ -63,7 +63,7 @@ spec:
               chmod 600 /tmp/pgpass
               PGPASSFILE=/tmp/pgpass pg_basebackup \
                 -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER" \
-                -D /var/lib/postgresql/data -Fp -Xs -P -R -S "$PRIMARY_SLOT_NAME"
+                -D /var/lib/postgresql/data -Fp -Xs -P -R -c fast -S "$PRIMARY_SLOT_NAME"
               printf "primary_conninfo = 'host=%s port=%s user=%s password=%s application_name=auth-home-return'\nprimary_slot_name = '%s'\n" \
                 "$PRIMARY_HOST" "$PRIMARY_PORT" "$REPLICATION_USER" "$REPLICATION_PASSWORD" "$PRIMARY_SLOT_NAME" \
                 >> /var/lib/postgresql/data/postgresql.auto.conf
