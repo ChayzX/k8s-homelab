@@ -17,7 +17,7 @@ Node LAN IP: `192.168.40.208`. StorageClass: `local-path`.
 | `loki-config.yaml` | ConfigMap: Loki's `loki-config.yaml`. |
 | `loki-external-nodeport.yaml` | **Migration-window only.** NodePort 31100 so the old Docker-side promtail can keep pushing to the new Loki. |
 | `prometheus.yaml` | Prometheus SA, ClusterRole/Binding (API access for `kubernetes_sd_configs`), PVC (20Gi), Deployment, ClusterIP Service (9090). |
-| `oracle-prometheus.yaml` | Lightweight Oracle Prometheus collector with an 8Gi local buffer and Grafana Cloud remote-write. Apply to the independent Oracle k3s cluster, not home. |
+| `oracle-prometheus.yaml` | Lightweight Oracle Prometheus collector with an 8Gi local buffer. Apply to the independent Oracle k3s cluster, not home. |
 | `oracle-prometheus-config.yaml` | Oracle-only scrape configuration with `site=oracle` external labels. |
 | `node-exporter-oracle.yaml` | Oracle host metrics DaemonSet and Service. |
 | `prometheus-config.yaml` | ConfigMap: Prometheus' `prometheus.yml`, rewritten scrape config. |
@@ -46,8 +46,8 @@ label:
 Install Prometheus `node_exporter` on a Linux PC and allow TCP 9100 only from
 the Prometheus host (`192.168.40.208`). Do not port-forward 9100 or expose it
 through Cloudflare. The `host-pc` and cluster dashboards discover the new
-machine from `node_uname_info`; the existing remote-write allowlist forwards
-the selected host series to Grafana Cloud automatically. After updating the
+machine from `node_uname_info`. Metrics remain local to each Prometheus; only
+the bounded Loki log copy uses Grafana Cloud. After updating the
 ConfigMap, reload Prometheus with `POST /-/reload` (or restart its pod).
 
 Every stateful app (loki, prometheus, grafana) is a
@@ -143,7 +143,7 @@ kubectl apply -f promtail.yaml
 
 Oracle is an independent k3s cluster, so the Oracle collector manifests must
 be applied with Oracle's kubeconfig or directly on that host. Create the
-`grafana-cloud-metrics` Secret there using the same remote-write password
+`grafana-cloud-loki` Secret there using the log-write credential
 contract in `SECRETS.md`, then apply `node-exporter-oracle.yaml`,
 `kube-state-metrics.yaml`, `oracle-prometheus-config.yaml`, and
 `oracle-prometheus.yaml`. The Oracle collector uses `site=oracle` and
