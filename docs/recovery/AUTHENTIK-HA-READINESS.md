@@ -6,9 +6,12 @@ make Authentik a prerequisite for recovery.
 
 ## Current boundary
 
-- Authentik server, worker, PostgreSQL, and LDAP outpost are home-only.
-- Authentik PostgreSQL uses a local-path single-writer PVC; promotion and
-  old-writer fencing are not proven.
+- Authentik server, worker, and LDAP outpost run with application capacity on
+  both home and Oracle. This is active-active application capacity, not
+  multi-primary database operation.
+- Authentik PostgreSQL has one writer per fencing epoch: home is the current
+  writer and Oracle is a continuously streaming standby. Promotion and
+  old-writer fencing are not yet proven end-to-end.
 - Oracle and ChaseBot use SSSD over LDAPS and resolve `chase` and
   `posix-admins` (UID/GID 2018/27557).
 - Local SSH/key recovery remains independent of Authentik.
@@ -81,8 +84,10 @@ works.
 5. For issue #202, prove PostgreSQL promotion, measured RPO/RTO, old-writer
    fencing, session behavior, routing, and rollback without split-brain.
 
-Until these gates have issue evidence, Authentik remains home-primary with
-isolated restore/controlled-promotion capacity only.
+Until these gates have issue evidence, Authentik remains home-primary for
+database authority while both sites may serve application traffic. Routing
+must not direct writes to the Oracle standby before the promotion controller
+has completed fencing, promotion, endpoint switching, and readiness checks.
 
 ## Safe verification commands
 
