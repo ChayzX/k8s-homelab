@@ -1,0 +1,19 @@
+[Unit]
+Description=PantryBot fail-closed Oracle automatic failover supervisor
+Wants=network-online.target
+After=network-online.target failover-witness-oracle-tunnel.service
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=/etc/failover-witness/postgres-fence.env
+EnvironmentFile=/etc/pantrybot/auto-failover.env
+ExecStart=/usr/local/libexec/pantrybot-auto-failover-oracle.sh --confirm
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/run/lock
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run PantryBot Oracle automatic failover supervisor
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+Persistent=true
+Unit=pantrybot-auto-failover-oracle.service
+
+[Install]
+WantedBy=timers.target

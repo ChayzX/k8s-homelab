@@ -108,6 +108,34 @@ respectively, and verify that their Services have no endpoints. Both must
 complete before home databases are promoted; neither is an automatic health
 check.
 
+## Oracle automatic failover supervisor
+
+Oracle installs `pantrybot-auto-failover-oracle.service` together with
+`pantrybot-auto-failover-oracle.timer`. The timer runs the fail-closed
+supervisor every 30 seconds. It requires three consecutive failures of the
+private home-primary PostgreSQL probe, then checks that Oracle is not already
+primary before invoking the coupled PantryBot/Auth fence-and-promote adapter.
+When Oracle is already primary, the supervisor records `oracle_already_primary`
+and performs no mutation.
+
+The service is intentionally `Type=oneshot`; the timer, rather than a
+`Restart=always` service loop, provides repetition. Its live environment is
+root-owned and contains the private probe, GCP fencing adapters, promotion
+command, and public readiness URLs. Never put those credentials in Git.
+
+On Oracle, inspect the controller without triggering a promotion:
+
+```sh
+systemctl list-timers --all pantrybot-auto-failover-oracle.timer
+sudo journalctl -u pantrybot-auto-failover-oracle.service -n 50 --no-pager
+sudo /usr/local/sbin/probe-oracle-primary
+```
+
+The current live validation reached `oracle_already_primary` after the home
+probe threshold and confirmed Oracle's primary probe independently. A real
+home-loss promotion and controlled return-home rehearsal remain required
+before treating automatic failover as fully proven.
+
 ## PantryBot PostgreSQL transport
 
 The repository also contains a guarded transport pair for the home PantryBot
