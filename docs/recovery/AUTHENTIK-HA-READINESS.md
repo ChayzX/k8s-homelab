@@ -7,9 +7,10 @@ Authentik installation, or make Authentik a prerequisite for recovery access.
 
 ## Current boundary
 
-- Authentik server and worker are home-primary on the `minecraftmachine` k3s
-  control-plane host. Oracle application replicas remain scaled to zero while
-  promotion and session/provider gates are open.
+- Home and Oracle have Authentik server, worker, and LDAP application capacity.
+  Oracle application replicas use the home PostgreSQL authority while its local
+  PostgreSQL remains a read-only standby; this is active application capacity,
+  not independent identity-database authority.
 - PostgreSQL uses a local-path, single-writer PVC on home. Oracle now has a
   freshly reseeded 10Gi physical streaming standby through the private
   `auth-postgresql-transport` NodePort; the latest check showed both sides at
@@ -23,6 +24,8 @@ Authentik installation, or make Authentik a prerequisite for recovery access.
   password authentication or an interactive SSH/PAM login.
 - Emergency SSH/key access, external monitoring, and the independent Oracle
   standby must continue to work while Authentik and LDAP are unavailable.
+- Authentik's database remains one writable PostgreSQL primary per fencing
+  epoch; application replicas do not authorize a second database writer.
 
 ## Evidence already recorded
 
@@ -57,7 +60,9 @@ These facts establish restore/readiness evidence, not HA or login acceptance.
    PostgreSQL writer, measure freshness/RPO, fence the old writer, and prove
    that writes from the old primary are rejected before routing changes.
 5. **Rollback:** record the reverse routing/fencing sequence and demonstrate
-   that the original home writer can be resumed without split-brain.
+   that the original home writer can be resumed without split-brain. The
+   rehearsal must include old-writer rejection and controlled rollback from
+   Oracle before this is called HA-ready.
 
 Until gates 1–5 have evidence in issue #198, the supported model is
 home-primary with isolated restore/controlled-promotion capacity. Do not scale
