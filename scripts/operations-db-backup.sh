@@ -15,7 +15,9 @@ RETENTION_DAYS=30
 
 mkdir -p "$BACKUP_ROOT"
 chmod 700 "$BACKUP_ROOT"
-exec 9>"/tmp/homelab-operations-backup.lock"
+# The backup is invoked with sudo from cron.  /tmp is sticky, so a lock file
+# left there by the unprivileged scheduler cannot be reopened by root.
+exec 9>"/run/lock/homelab-operations-backup.lock"
 flock -n 9 || { echo 'backup already running'; exit 0; }
 
 APP_POD="$(kubectl get pod -n "$NAMESPACE" -l "$APP_POD_SELECTOR" -o jsonpath='{.items[0].metadata.name}')"
