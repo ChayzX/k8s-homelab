@@ -76,7 +76,12 @@ jobs:
           kubectl create secret generic windows-alloy-metrics-tunnel \
             --from-literal=TUNNEL_TOKEN="$TUNNEL_TOKEN" \
             --dry-run=client -o yaml | kubectl apply -f - -n observability
-          kubectl apply -f observability/prometheus.yaml -n observability
+          # prometheus.yaml also contains the cluster-scoped Prometheus
+          # ClusterRole/ClusterRoleBinding. The CI identity is deliberately
+          # namespace-scoped, so apply only the labeled workload objects here;
+          # cluster RBAC remains administrator-managed.
+          kubectl apply -f observability/prometheus.yaml \
+            --selector app.kubernetes.io/component=workload -n observability
           kubectl apply -f observability/windows-alloy-metrics-cloudflared.yaml -n observability
           kubectl rollout status deployment/prometheus -n observability --timeout=180s
           kubectl rollout status deployment/windows-alloy-metrics-cloudflared -n observability --timeout=180s

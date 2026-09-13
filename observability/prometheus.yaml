@@ -32,6 +32,7 @@ metadata:
     app: prometheus
     app.kubernetes.io/name: prometheus
     app.kubernetes.io/part-of: observability
+    app.kubernetes.io/component: workload
 # Prometheus DOES need the API: kubernetes_sd_configs (role: node) for
 # kubelet and cAdvisor discovery. Token is mounted.
 automountServiceAccountToken: true
@@ -93,6 +94,7 @@ metadata:
     app: prometheus
     app.kubernetes.io/name: prometheus
     app.kubernetes.io/part-of: observability
+    app.kubernetes.io/component: workload
 spec:
   accessModes:
     - ReadWriteOnce
@@ -110,6 +112,7 @@ metadata:
     app: prometheus
     app.kubernetes.io/name: prometheus
     app.kubernetes.io/part-of: observability
+    app.kubernetes.io/component: workload
 spec:
   replicas: 1
   revisionHistoryLimit: 3
@@ -242,6 +245,7 @@ metadata:
     app: prometheus
     app.kubernetes.io/name: prometheus
     app.kubernetes.io/part-of: observability
+    app.kubernetes.io/component: workload
 spec:
   # ClusterIP: the name "prometheus" on 9090 keeps the existing Grafana
   # datasource URL (http://prometheus:9090) working unchanged.
