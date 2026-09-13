@@ -216,18 +216,12 @@ spec:
             - name: config
               mountPath: /etc/prometheus
               readOnly: true
-            - name: grafana-cloud-metrics
-              mountPath: /etc/prometheus/secrets
-              readOnly: true
             - name: data
               mountPath: /prometheus
       volumes:
         - name: config
           configMap:
             name: prometheus-config
-        - name: grafana-cloud-metrics
-          secret:
-            secretName: grafana-cloud-metrics
         - name: data
           persistentVolumeClaim:
             claimName: prometheus-data

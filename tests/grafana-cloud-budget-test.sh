@@ -9,44 +9,14 @@ configs=(
 
 for config in "${configs[@]}"; do
   test -f "$config"
-  grep -q '^    remote_write:' "$config" || {
-    echo "missing remote_write config: $config" >&2
-    exit 1
-  }
-  grep -q '^        write_relabel_configs:' "$config" || {
-    echo "missing write_relabel_configs: $config" >&2
-    exit 1
-  }
-  grep -q 'max_samples_per_send: 2000' "$config" || {
-    echo "remote-write batches are too small: $config" >&2
-    exit 1
-  }
-  grep -q 'max_shards: 2' "$config" || {
-    echo "remote-write shard cap is too high: $config" >&2
-    exit 1
-  }
-  grep -q 'send: false' "$config" || {
-    echo "remote-write metadata upload is not disabled: $config" >&2
-    exit 1
-  }
-  grep -q "action: keep" "$config" || {
-    echo "missing remote-write keep policy: $config" >&2
-    exit 1
-  }
-  for metric in up pantry_ prometheus_ kube_pod_status_phase; do
-    grep -q "$metric" "$config" || {
-      echo "missing required metric family $metric: $config" >&2
-      exit 1
-    }
-  done
-
-  # The Cloud stream is intentionally allowlisted. These broad families stay
-  # local because their per-process/container/service labels can exhaust the
-  # free-tier series budget.
-  if grep -Eq "^            regex: '.*(^|\\|)(container_|kubelet_|cadvisor_|process_|go_).*'" "$config"; then
-    echo "remote-write allowlist includes a broad high-cardinality family: $config" >&2
+  if grep -q '^    remote_write:' "$config"; then
+    echo "Prometheus metrics must remain on-prem; remote_write found: $config" >&2
     exit 1
   fi
+  grep -q 'scrape_configs:' "$config" || {
+    echo "local scrape configuration is missing: $config" >&2
+    exit 1
+  }
 done
 
 grep -q 'cluster: minecraftmachine' "${configs[0]}"
