@@ -7,7 +7,7 @@ an in-cluster condition is healthy.
 | Signal | Collection/history | Single evaluator | Stable identity / continuity |
 |---|---|---|---|
 | Workload, node, restart-loop, and Loki log conditions | Prometheus and Loki | Host `k3s-watcher` | Hashed `eventKey`; singleton lock prevents two watcher processes; Operations reconciliation resolves only after a complete collection pass. |
-| Public HTTP/API/R2 continuity from outside home | GCP `homelab-external-monitor` | GCP monitor | `external-monitor:<check>` is persisted in `active_alerts`; notifications are emitted only when that per-check identity fires or recovers. Provider-acceptance receipts are bounded in `notification_receipts` and can be checked with `probe-notification-receipt.py`. |
+| Public HTTP/API/R2 continuity from outside home | GCP `homelab-external-monitor` | GCP monitor | A non-blocking advisory lock makes the GCP monitor a singleton evaluator; an overlapping process exits without probing or notifying. State is atomically replaced after each cycle. `external-monitor:<check>` is persisted in `active_alerts`; notifications are emitted only when that per-check identity fires or recovers. Provider-acceptance receipts are bounded in `notification_receipts` and can be checked with `probe-notification-receipt.py`. |
 | Independent public reachability observation | UptimeRobot account configuration (not stored here) | UptimeRobot | Provider-side monitor identity; its notification is independent evidence, not a second source for the watcher’s workload alerts. |
 | Dashboards and log exploration | Grafana | None | Grafana provisioning currently contains no alert rules; dashboards are views only. |
 
