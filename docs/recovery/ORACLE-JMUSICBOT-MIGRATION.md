@@ -89,6 +89,17 @@ the JMusicBot ServiceAccounts, config Secret, R2 Secret, health Service, and mai
 from this repository. Do not apply the release notifier in this first move;
 it has a separate webhook and local marker state.
 
+Before applying the main Deployment, run the non-live state-contract check:
+
+```bash
+kubectl kustomize jmusicbot | scripts/jmusicbot-r2-contract-check.sh
+```
+
+The check only inspects rendered YAML. It must pass before a handoff
+rehearsal; it confirms the approved JMusicBot R2 prefix, lease-gated sync,
+five-minute sync interval, and exclusions for mutable config, backup churn,
+and the lease marker.
+
 Provision the two Secrets through the approved secret store, using the names
 and keys documented in `jmusicbot/SECRETS.md`; never put their values in Git or
 the migration issue. Apply the checked-in Deployment without changing its

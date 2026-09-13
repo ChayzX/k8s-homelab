@@ -68,6 +68,20 @@ running. Do not copy state files from a live pod or place R2 credentials in the
 repository. The first Oracle cutover procedure is documented in
 `docs/recovery/ORACLE-JMUSICBOT-MIGRATION.md`.
 
+Before applying either environment, run the repository-only R2 contract
+preflight against the rendered Deployment:
+
+```bash
+kubectl kustomize jmusicbot | scripts/jmusicbot-r2-contract-check.sh
+```
+
+This does not contact R2 or start a workload. It verifies the approved state
+prefix, restore and ownership-gated sync commands, five-minute sync interval,
+single-writer `Recreate` strategy, and exclusions that prevent `config.txt`,
+JMusicBot backup churn, or the lease marker from being synchronized as mutable
+state. A failed preflight means the rendered manifest is not eligible for a
+handoff rehearsal.
+
 ### C. Deployment authority
 
 The active deployment authority is `.github/workflows/jmusicbot-deploy.yml`.
