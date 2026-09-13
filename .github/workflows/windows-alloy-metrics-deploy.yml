@@ -68,7 +68,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$TUNNEL_TOKEN"
-          for permission in "create secrets" "patch secrets" "create serviceaccounts" "create deployments" "patch deployments"; do
+          for permission in "get secrets" "create secrets" "patch secrets" "get serviceaccounts" "create serviceaccounts" "patch serviceaccounts" "create deployments" "patch deployments"; do
             verb="${permission%% *}"
             resource="${permission##* }"
             kubectl auth can-i "$verb" "$resource" -n observability | grep -qx yes
