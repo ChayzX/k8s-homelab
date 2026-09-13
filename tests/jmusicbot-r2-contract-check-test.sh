@@ -3,9 +3,16 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 checker="$root/scripts/jmusicbot-r2-contract-check.sh"
+manifest="$root/jmusicbot/40-deployment-jmusicbot.yaml"
 rendered="$(mktemp)"
 invalid="$(mktemp)"
 trap 'rm -f "$rendered" "$invalid"' EXIT
+
+if grep -q '^      env:$' "$manifest"; then
+  echo "JMusicBot witness env must be container-scoped" >&2
+  exit 1
+fi
+grep -q '^          env:$' "$manifest"
 
 if [[ -f "$root/jmusicbot/kustomization.yaml" || -f "$root/jmusicbot/kustomization.yml" ]]; then
   kubectl kustomize "$root/jmusicbot" >"$rendered"
