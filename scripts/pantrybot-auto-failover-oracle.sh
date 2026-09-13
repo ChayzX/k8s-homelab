@@ -15,6 +15,8 @@ Required environment for --confirm:
   HOME_PRIMARY_PROBE_URL        private home-primary readiness URL (optional)
   HOME_PRIMARY_PROBE_COMMAND     private argv probe that exits 0 only when home
                                 PostgreSQL is primary (optional)
+  ORACLE_PRIMARY_PROBE_COMMAND   private argv probe that exits 0 only when
+                                Oracle is already PostgreSQL primary
   HOME_FAILURE_THRESHOLD        consecutive failed probes before promotion
   HOME_PROBE_INTERVAL_SECONDS   delay between failed probes
   HOME_FENCE_COMMAND             PantryBot home fence adapter command
@@ -32,6 +34,7 @@ mode=${1:-}
 
 : "${HOME_PRIMARY_PROBE_URL:=}"
 : "${HOME_PRIMARY_PROBE_COMMAND:=}"
+: "${ORACLE_PRIMARY_PROBE_COMMAND:?ORACLE_PRIMARY_PROBE_COMMAND is required}"
 : "${HOME_FAILURE_THRESHOLD:?HOME_FAILURE_THRESHOLD is required}"
 : "${HOME_PROBE_INTERVAL_SECONDS:?HOME_PROBE_INTERVAL_SECONDS is required}"
 : "${HOME_FENCE_COMMAND:?HOME_FENCE_COMMAND is required}"
@@ -62,6 +65,11 @@ if [[ -n "$HOME_PRIMARY_PROBE_COMMAND" ]]; then
     exit 1
   }
 fi
+read -r -a oracle_primary_probe_command <<< "$ORACLE_PRIMARY_PROBE_COMMAND"
+(( ${#oracle_primary_probe_command[@]} > 0 )) || {
+  echo 'automatic failover refused: Oracle primary probe command is empty' >&2
+  exit 1
+}
 read -r -a promotion_command <<< "$PROMOTION_COMMAND"
 (( ${#promotion_command[@]} > 1 )) || {
   echo 'automatic failover refused: promotion command is empty' >&2
@@ -83,6 +91,7 @@ if [[ "$mode" == "--dry-run" ]]; then
   [[ -n "$HOME_PRIMARY_PROBE_COMMAND" ]] && probe_source=private-home-primary-command
   printf '%s\n' \
     "probe_source=$probe_source" \
+    oracle_primary_probe_validated \
     "failure_threshold=$HOME_FAILURE_THRESHOLD" \
     promotion_command_validated \
     automatic_promotion=disabled
@@ -110,5 +119,9 @@ for attempt in $(seq 1 "$HOME_FAILURE_THRESHOLD"); do
 done
 
 echo home_probe=failed threshold_reached
+if "${oracle_primary_probe_command[@]}" >/dev/null 2>&1; then
+  echo oracle_already_primary
+  exit 0
+fi
 export HOME_FENCE_COMMAND AUTH_HOME_FENCE_COMMAND
 exec "${promotion_command[@]}"

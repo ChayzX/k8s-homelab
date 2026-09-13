@@ -10,6 +10,7 @@ if "$SCRIPT" --confirm >/dev/null 2>&1; then
 fi
 
 output=$(HOME_PRIMARY_PROBE_COMMAND='/usr/local/sbin/probe-home-primary --expect-primary' \
+  ORACLE_PRIMARY_PROBE_COMMAND='/usr/local/sbin/probe-oracle-primary' \
   HOME_FAILURE_THRESHOLD=3 \
   HOME_PROBE_INTERVAL_SECONDS=5 \
   HOME_FENCE_COMMAND=/usr/local/sbin/fence-home \
@@ -24,8 +25,10 @@ grep -Fq 'automatic_promotion=disabled' <<<"$output"
 
 grep -Fq 'HOME_PRIMARY_PROBE_URL' "$SCRIPT"
 grep -Fq 'HOME_PRIMARY_PROBE_COMMAND' "$SCRIPT"
+grep -Fq 'ORACLE_PRIMARY_PROBE_COMMAND' "$SCRIPT"
 grep -Fq 'HOME_FAILURE_THRESHOLD' "$SCRIPT"
 grep -Fq 'PROMOTION_COMMAND' "$SCRIPT"
+grep -Fq 'oracle_already_primary' "$SCRIPT"
 grep -Fq 'HOME_FENCE_COMMAND' "$SCRIPT"
 grep -Fq 'AUTH_HOME_FENCE_COMMAND' "$SCRIPT"
 grep -Fq 'curl --fail' "$SCRIPT"
