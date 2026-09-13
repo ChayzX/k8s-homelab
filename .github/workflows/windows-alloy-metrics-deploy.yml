@@ -1,0 +1,62 @@
+name: Deploy Windows Alloy metrics ingress
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install cloudflared
+        env:
+          CLOUDFLARED_VERSION: "2026.7.3"
+          CLOUDFLARED_SHA256: "9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17"
+        run: |
+          set -euo pipefail
+          curl -sSL -o cloudflared "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64"
+          echo "${CLOUDFLARED_SHA256}  cloudflared" | sha256sum -c -
+          chmod +x cloudflared
+          sudo mv cloudflared /usr/local/bin/
+
+      - name: Open Access-authenticated tunnel to k3s API
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$TUNNEL_SERVICE_TOKEN_ID"
+          test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
+          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 &
+          sleep 3
+
+      - name: Write scoped kubeconfig
+        env:
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_GRAFANA }}
+        run: |
+          set -euo pipefail
+          test -n "$KUBE_CONFIG_B64"
+          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/grafana.kubeconfig"
+          chmod 600 "$RUNNER_TEMP/grafana.kubeconfig"
+
+      - name: Apply protected remote-write ingress
+        env:
+          KUBECONFIG: ${{ runner.temp }}/grafana.kubeconfig
+          TUNNEL_TOKEN: ${{ secrets.K8S_SECRET_WINDOWS_ALLOY_METRICS_TUNNEL }}
+        run: |
+          set -euo pipefail
+          test -n "$TUNNEL_TOKEN"
+          scripts/assert-kube-target.sh home
+          kubectl create secret generic windows-alloy-metrics-tunnel \
+            --from-literal=TUNNEL_TOKEN="$TUNNEL_TOKEN" \
+            --dry-run=client -o yaml | kubectl apply -f - -n observability
+          kubectl apply -f observability/prometheus.yaml -n observability
+          kubectl apply -f observability/windows-alloy-metrics-cloudflared.yaml -n observability
+          kubectl rollout status deployment/prometheus -n observability --timeout=180s
+          kubectl rollout status deployment/windows-alloy-metrics-cloudflared -n observability --timeout=180s
+          kubectl get pods -n observability -l app.kubernetes.io/name=windows-alloy-metrics-cloudflared
