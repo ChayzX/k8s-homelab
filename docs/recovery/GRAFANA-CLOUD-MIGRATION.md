@@ -45,20 +45,32 @@ rule referenced them.
 The home and Oracle Prometheus collectors now remote-write to the Cloud
 Prometheus endpoint using site-local `grafana-cloud-metrics` Secrets. The
 live verification observed accepted samples and zero failed samples from both
-collectors. The token is not stored in the repository.
+collectors. The token is not stored in the repository. This is the
+`metrics:write` credential used by Prometheus; it is not a Grafana Cloud query
+credential.
 
 ## Secret contract
 
-The home cluster Secret currently contains these keys:
+The current Prometheus manifests require the home and Oracle
+`grafana-cloud-metrics` Secrets to contain this key:
 
-- `remote-write-url`
-- `username`
 - `password` (the `metrics:write` access-policy token)
 
 The Prometheus manifest mounts the password at
 `/etc/prometheus/secrets/password`; the endpoint and username are configured
-in `prometheus-config.yaml`. Keep the token out of ConfigMaps, dashboards,
-GitHub issues, and shell history.
+in the respective Prometheus ConfigMaps. Keep the token out of ConfigMaps,
+dashboards, GitHub issues, and shell history.
+
+This Secret contract is only for Prometheus remote write. A
+`metrics:read` credential, when needed for Grafana Cloud Explore, dashboards,
+or API queries, is separate from this Secret and must not be substituted for
+the `metrics:write` token.
+
+The query endpoint is provided by the Grafana Cloud portal for the stack's
+Prometheus data source. Copy that portal-provided endpoint when configuring a
+reader; do not infer it from the remote-write URL or from
+`/api/prom/push`. The `/api/prom/push` path in this repository is a write-only
+destination for Prometheus.
 
 ## Cutover gates
 

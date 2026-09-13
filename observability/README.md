@@ -121,8 +121,8 @@ kubectl apply -f promtail.yaml
 
 Oracle is an independent k3s cluster, so the Oracle collector manifests must
 be applied with Oracle's kubeconfig or directly on that host. Create the
-`grafana-cloud-metrics` Secret there using the same three-key contract in
-`SECRETS.md`, then apply `node-exporter-oracle.yaml`,
+`grafana-cloud-metrics` Secret there using the same remote-write password
+contract in `SECRETS.md`, then apply `node-exporter-oracle.yaml`,
 `kube-state-metrics.yaml`, `oracle-prometheus-config.yaml`, and
 `oracle-prometheus.yaml`. The Oracle collector uses `site=oracle` and
 `cluster=pantry-bot-oracle` labels so its metrics are distinguishable from
