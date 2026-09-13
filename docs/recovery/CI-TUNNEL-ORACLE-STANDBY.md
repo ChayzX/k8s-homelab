@@ -20,3 +20,17 @@ Oracle connector to zero and restoring the prior workflow target.
 
 This is tracked by homelab Issue #204. It does not change the live home
 connector or Cloudflare configuration.
+
+## Workflow concurrency contract
+
+Every non-Minecraft deployment workflow that can mutate a shared target uses a
+static, target-scoped GitHub Actions concurrency group with
+`cancel-in-progress: false`. A later manual run waits for the earlier rollout
+and verification to finish instead of cancelling an in-flight change. This
+contract is present on the Grafana rollback, Windows Alloy, Opsbot, and
+JMusicBot workflows. The Minecraft workflow has its own separate group and is
+outside this project’s implementation scope.
+
+The contract also bounds usage: multiple queued requests for the same target do
+not execute concurrently. It does not replace target identity checks,
+Cloudflare Access fencing, or the Oracle credential gate above.
