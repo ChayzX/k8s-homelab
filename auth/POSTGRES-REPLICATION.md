@@ -7,9 +7,19 @@ multi-primary writes are not provided by the free homelab design.
 
 ## Current topology
 
-- Home primary: the ChaseBot-pinned `auth-postgresql-chasebot-standby-0`
-  StatefulSet. Its historical `standby` name is retained to preserve the PVC
-  and migration path; its live role label is `primary`.
+- Current live authority: Oracle `auth-postgresql-standby-0` is the writable
+  primary for the current fencing epoch. This is a temporary controlled state;
+  it is not evidence that automatic promotion is safe.
+- Normal home target: `auth-postgresql-home-primary` is a separately named,
+  one-replica PostgreSQL target for a controlled logical restore. It uses a new
+  PVC and must not be started alongside the current authority.
+- Home return standby: `auth-postgresql-home-return-0` is a fresh-PVC physical
+  standby target for a controlled return-home rehearsal. It remains scaled to
+  zero until a maintenance window and must not reuse the fenced primary PVC.
+- Historical migration target: the ChaseBot-pinned
+  `auth-postgresql-chasebot-standby-0` StatefulSet retains its old `standby`
+  name and `primary` role label for migration compatibility, but it is not the
+  current production authority and must not be treated as independently fenced.
 - Home transport: the private `auth-postgresql-transport` NodePort on `30433`.
 - Oracle standby: `auth-postgresql-standby-0`, backed by a local-path 10Gi PVC.
 - Replication slot: `auth_oracle_standby`.
@@ -17,9 +27,11 @@ multi-primary writes are not provided by the free homelab design.
 - Oracle standby accepts read-only connections and must not receive Authentik
   application traffic while home owns the database epoch.
 
-The home migration manifest is
-[chasebot-postgresql-standby.yaml](./chasebot-postgresql-standby.yaml). The
-Oracle standby remains defined by
+The controlled home-primary target is
+[home-postgresql-primary.yaml](./home-postgresql-primary.yaml); the home
+return standby is defined by
+[home-postgresql-return.yaml](./home-postgresql-return.yaml). The Oracle
+standby is defined by
 [oracle-postgresql-standby.yaml](./oracle-postgresql-standby.yaml).
 Its credentials and primary endpoint are supplied through the
 `auth-postgresql-standby` Secret out of band; no credentials belong in Git.
