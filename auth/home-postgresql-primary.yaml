@@ -1,0 +1,108 @@
+# Home Authentik primary target populated by a controlled logical restore.
+# The PVC is intentionally separate from the old fenced auth-postgresql PVC.
+# Secret auth-postgresql-home-primary is provisioned out of band.
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-postgresql-home-primary
+  namespace: auth
+  labels:
+    app.kubernetes.io/name: auth-postgresql-home-primary
+    app.kubernetes.io/part-of: authentik
+    authentik.postgres/role: primary
+spec:
+  selector:
+    app.kubernetes.io/name: auth-postgresql-home-primary
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: auth-postgresql-home-primary
+  namespace: auth
+  labels:
+    app.kubernetes.io/name: auth-postgresql-home-primary
+    app.kubernetes.io/part-of: authentik
+    authentik.postgres/role: primary
+spec:
+  serviceName: auth-postgresql-home-primary
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auth-postgresql-home-primary
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: auth-postgresql-home-primary
+        app.kubernetes.io/part-of: authentik
+        authentik.postgres/role: primary
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: minecraftmachine
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 999
+        runAsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:17.10-bookworm
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: auth-postgresql-home-primary
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: auth-postgresql-home-primary
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: auth-postgresql-home-primary
+                  key: POSTGRES_PASSWORD
+          args:
+            - -c
+            - max_connections=500
+          ports:
+            - name: postgres
+              containerPort: 5432
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 10Gi
+        storageClassName: local-path
