@@ -130,8 +130,8 @@ class Handler(BaseHTTPRequestHandler):
             resource = str(body.get("resource", "default"))
             if not resource or len(resource) > 128:
                 raise ValueError("resource must be between 1 and 128 characters")
-            if not site or site not in {"home", "oracle"}:
-                raise ValueError("site must be home or oracle")
+            if not site or site not in {"home", "oracle", "canada"}:
+                raise ValueError("site must be home, oracle, or canada")
             if self.path == "/v1/authority/acquire":
                 result = self.state.acquire(site, resource)
                 self._json(HTTPStatus.OK if result else HTTPStatus.CONFLICT, result or {"error": "lease held"})
