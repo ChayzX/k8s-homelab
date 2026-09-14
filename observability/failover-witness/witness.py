@@ -31,9 +31,19 @@ class WitnessState:
             loaded = json.loads(self.path.read_text())
             if not isinstance(loaded, dict):
                 raise ValueError("state must be an object")
-            return loaded
+            if "leases" in loaded and isinstance(loaded["leases"], dict):
+                return loaded
+            # Preserve the pre-resource single lease as the legacy default.
+            return {"leases": {"default": loaded}}
         except FileNotFoundError:
-            return {"epoch": 0, "holder": None, "expires_at": 0, "token": None, "token_hash": None}
+            return {"leases": {}}
+
+    def _lease(self, resource: str) -> dict[str, Any]:
+        leases = self.data.setdefault("leases", {})
+        return leases.setdefault(
+            resource,
+            {"epoch": 0, "holder": None, "expires_at": 0, "token": None, "token_hash": None},
+        )
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -53,35 +63,37 @@ class WitnessState:
     def authorized(self, supplied: str | None) -> bool:
         return bool(supplied) and hmac.compare_digest(supplied.encode(), self.secret)
 
-    def acquire(self, site: str) -> dict[str, Any] | None:
+    def acquire(self, site: str, resource: str = "default") -> dict[str, Any] | None:
         now = time.time()
         with self.lock:
-            if self.data["holder"] and self.data["expires_at"] > now:
-                if self.data["holder"] != site or not self.data.get("token"):
+            lease = self._lease(resource)
+            if lease["holder"] and lease["expires_at"] > now:
+                if lease["holder"] != site or not lease.get("token"):
                     return None
-                return {"site": site, "epoch": self.data["epoch"], "expires_at": self.data["expires_at"], "token": self.data["token"]}
-            self.data["epoch"] = int(self.data["epoch"]) + 1
+                return {"site": site, "epoch": lease["epoch"], "expires_at": lease["expires_at"], "token": lease["token"]}
+            lease["epoch"] = int(lease["epoch"]) + 1
             token = secrets.token_urlsafe(32)
-            self.data.update(
+            lease.update(
                 holder=site,
                 expires_at=now + self.lease_seconds,
                 token=token,
                 token_hash=hashlib.sha256(token.encode()).hexdigest(),
             )
             self._save()
-            return {"site": site, "epoch": self.data["epoch"], "expires_at": self.data["expires_at"], "token": token}
+            return {"site": site, "epoch": lease["epoch"], "expires_at": lease["expires_at"], "token": token}
 
-    def renew(self, site: str, epoch: int, token: str) -> bool:
+    def renew(self, site: str, epoch: int, token: str, resource: str = "default") -> bool:
         with self.lock:
+            lease = self._lease(resource)
             valid = (
-                self.data["holder"] == site
-                and int(self.data["epoch"]) == epoch
-                and self.data["expires_at"] > time.time()
-                and hmac.compare_digest(self.data["token_hash"] or "", hashlib.sha256(token.encode()).hexdigest())
+                lease["holder"] == site
+                and int(lease["epoch"]) == epoch
+                and lease["expires_at"] > time.time()
+                and hmac.compare_digest(lease["token_hash"] or "", hashlib.sha256(token.encode()).hexdigest())
             )
             if not valid:
                 return False
-            self.data["expires_at"] = time.time() + self.lease_seconds
+            lease["expires_at"] = time.time() + self.lease_seconds
             self._save()
             return True
 
@@ -115,14 +127,17 @@ class Handler(BaseHTTPRequestHandler):
         try:
             body = self._body()
             site = str(body["site"])
-            if not site or site not in {"home", "oracle"}:
-                raise ValueError("site must be home or oracle")
+            resource = str(body.get("resource", "default"))
+            if not resource or len(resource) > 128:
+                raise ValueError("resource must be between 1 and 128 characters")
+            if not site or site not in {"home", "oracle", "canada"}:
+                raise ValueError("site must be home, oracle, or canada")
             if self.path == "/v1/authority/acquire":
-                result = self.state.acquire(site)
+                result = self.state.acquire(site, resource)
                 self._json(HTTPStatus.OK if result else HTTPStatus.CONFLICT, result or {"error": "lease held"})
                 return
             if self.path == "/v1/authority/renew":
-                ok = self.state.renew(site, int(body["epoch"]), str(body["token"]))
+                ok = self.state.renew(site, int(body["epoch"]), str(body["token"]), resource)
                 self._json(HTTPStatus.OK if ok else HTTPStatus.CONFLICT, {"ok": ok})
                 return
             raise ValueError("not found")
