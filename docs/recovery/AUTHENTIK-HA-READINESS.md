@@ -63,6 +63,14 @@ passing result is only reconstruction preflight; it does not prove that the
 restored LDAP provider, `posix-admins` policy, certificate, or web session
 works.
 
+The repository also contains `auth/home-postgresql-primary.yaml` as a
+separately named, one-replica target for a controlled logical restore. It uses
+a new `local-path` PVC and Secret references only; it has no replication
+bootstrap, remote endpoint, NodePort, or normal Authentik route wiring. The
+target is guarded by `tests/authentik-home-primary-contract-test.sh` and is not
+an instruction to apply a second writer during normal operation. Any use still
+requires the external fencing, promotion, readiness, and rollback gates below.
+
 ## Required gates before HA readiness
 
 1. ~~Use a synthetic non-production directory credential to complete actual PAM

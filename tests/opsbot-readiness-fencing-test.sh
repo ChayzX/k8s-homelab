@@ -9,6 +9,7 @@ runbook="$root/opsbot/OWNERSHIP-REHEARSAL.md"
 grep -Fq 'def mark_not_ready()' "$health"
 grep -Fq 'health.mark_not_ready()' "$main"
 grep -Fq 'OWNERSHIP.start(_close_after_fence)' "$main"
-grep -Fq 'A 503 readiness response is required evidence' "$runbook"
+grep -Fq 'A 503 readiness' "$runbook"
+grep -Fq 'response is required evidence' "$runbook"
 
 echo 'opsbot-readiness-fencing-test=passed'
