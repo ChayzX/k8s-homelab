@@ -15,9 +15,7 @@ spec:
   type: NodePort
   externalTrafficPolicy: Cluster
   selector:
-    app.kubernetes.io/component: primary
-    app.kubernetes.io/instance: auth
-    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/name: auth-postgresql-home-primary
   ports:
     - name: postgres
       port: 5432
