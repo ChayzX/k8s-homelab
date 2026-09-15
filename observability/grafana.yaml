@@ -137,6 +137,19 @@ spec:
             # publishes it on 3002 to match the Compose-era host port.
             - name: GF_SERVER_HTTP_PORT
               value: "3000"
+            # Authentik's proxy outpost authenticates the browser first and
+            # passes the username in X-authentik-username. Map that identity
+            # directly to Grafana so users do not see a second login form.
+            - name: GF_AUTH_PROXY_ENABLED
+              value: "true"
+            - name: GF_AUTH_PROXY_HEADER_NAME
+              value: X-authentik-username
+            - name: GF_AUTH_PROXY_AUTO_SIGN_UP
+              value: "true"
+            - name: GF_AUTH_PROXY_SYNC_TTL
+              value: "60"
+            - name: GF_AUTH_DISABLE_LOGIN_FORM
+              value: "true"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

@@ -1,7 +1,7 @@
 {
   "uid": "homelab-pantry-bot-usage",
   "title": "Pantry Bot — Usage",
-  "description": "Application usage from Pantry Bot's /metrics endpoint: engagement actions, bot messages, commands, Extension requests, boss activity, and outcomes. Prometheus counters are process-local and reset on restart; increase() and rate() handle that reset. Distinct participant and first-time history remains in the bot's SQLite engagement tables.",
+  "description": "Live HA health and usage. Application counters are scraped from the HA API Service at /metrics; operational panels use kube-state-metrics and cAdvisor.",
   "tags": [
     "homelab",
     "twitch",
@@ -586,6 +586,119 @@
             "showPoints": "never",
             "spanNulls": false
           }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "row",
+      "title": "HA service health (live)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "panels": []
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Ready PantryBot pods",
+      "description": "Current ready pods in the pantry-bot namespace.",
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 35
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(kube_pod_status_ready{namespace=\"pantry-bot\",condition=\"true\"})",
+          "legendFormat": "ready"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "PantryBot container restarts",
+      "description": "Restarts in the pantry-bot namespace; useful during failover and recovery.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 35
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (pod, container) (increase(kube_pod_container_status_restarts_total{namespace=\"pantry-bot\"}[1h]))",
+          "legendFormat": "{{pod}}/{{container}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "PantryBot CPU and memory",
+      "description": "Current resource use for pantry-bot pods from kubelet cAdvisor.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 35
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"pantry-bot\",container!=\"\",container!=\"POD\"}[5m]))",
+          "legendFormat": "{{pod}} CPU"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"pantry-bot\",container!=\"\",container!=\"POD\"})",
+          "legendFormat": "{{pod}} memory"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
         },
         "overrides": []
       }

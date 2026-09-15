@@ -9,7 +9,10 @@ import json
 import os
 import shlex
 import subprocess
+import tempfile
 import time
+from pathlib import Path
+from threading import Event, Lock, Thread
 from dataclasses import dataclass
 from typing import Any, Callable
 from urllib import request
@@ -38,39 +41,195 @@ class PromotionAdapters:
     renew: Callable[[dict[str, Any]], bool] | None = None
     ready: Callable[[], bool] | None = None
     fence_old_writer: Callable[[], None] | None = None
+    verify_promoted: Callable[[], bool] | None = None
+    check_replication: Callable[[], None] | None = None
+    publish_routes: Callable[[], None] | None = None
+    verify_service: Callable[[], None] | None = None
+    validate_generation: Callable[[dict[str, Any]], None] | None = None
+    record_progress: Callable[[dict[str, Any], str], None] | None = None
+
+
+class ActivationJournal:
+    """A primary may resume only the same durable activation and DB identity."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+
+    def load(self) -> dict[str, Any] | None:
+        try:
+            result = json.loads(self.path.read_text())
+        except FileNotFoundError:
+            return None
+        if not isinstance(result, dict):
+            raise RuntimeError("invalid activation journal")
+        return result
+
+    def may_resume(self, epoch: int, system_identifier: str) -> bool:
+        prior = self.load()
+        return bool(prior and prior.get("site") == "oracle"
+                    and prior.get("resource") == "pantry:postgres"
+                    and prior.get("epoch") == epoch
+                    and prior.get("system_identifier") == system_identifier
+                    and prior.get("phase") in {"promoting", "promoted", "active"})
+
+    def record(self, epoch: int, system_identifier: str, phase: str) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix=".activation.", dir=self.path.parent)
+        try:
+            with os.fdopen(fd, "w") as stream:
+                json.dump({"site": "oracle", "resource": "pantry:postgres", "epoch": epoch,
+                           "system_identifier": system_identifier, "phase": phase}, stream)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.chmod(temporary, 0o600)
+            os.replace(temporary, self.path)
+            if os.name == "posix":
+                directory_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
+
+class AuthorityLost(RuntimeError):
+    """No more activation operations may begin with this lease."""
+
+
+class LeaseGuard:
+    """Renew throughout slow activation; loss triggers the independent local fence.
+
+    This guard supplements fencing. It cannot prove a paused host or an external
+    subprocess stopped; the next owner still needs positive old-writer fencing.
+    """
+
+    def __init__(self, renew: Callable[[], bool], fence: Callable[[], None], interval: float) -> None:
+        self.renew = renew
+        self.fence = fence
+        self.interval = interval
+        self.stopped = Event()
+        self.lost = Event()
+        self.thread: Thread | None = None
+
+    def start(self) -> None:
+        # Verify possession immediately, before any infrastructure changes.
+        if not self.renew():
+            self.lost.set()
+            self.fence()
+            raise AuthorityLost("authority lost before activation")
+        self.thread = Thread(target=self._run, name="postgres-authority-renewal", daemon=True)
+        self.thread.start()
+
+    def _run(self) -> None:
+        while not self.stopped.wait(self.interval):
+            try:
+                valid = self.renew()
+            except Exception:
+                valid = False
+            if not valid:
+                self.lost.set()
+                try:
+                    self.fence()
+                finally:
+                    return
+
+    def check(self) -> None:
+        if self.lost.is_set():
+            raise AuthorityLost("authority lost during activation")
+
+    def close(self) -> None:
+        self.stopped.set()
+        if self.thread:
+            self.thread.join(timeout=6)
 
 
 class OraclePromoter:
-    def __init__(self, adapters: PromotionAdapters) -> None:
+    def __init__(self, adapters: PromotionAdapters, renewal_interval: float = 5) -> None:
         self.adapters = adapters
         self.token: dict[str, Any] | None = None
         self.promoted = False
         self.fenced = False
+        self.renewal_interval = renewal_interval
+        self.fence_lock = Lock()
+        self.activation_guard: LeaseGuard | None = None
+
+    def assert_activation_authority(self) -> None:
+        if self.fenced or not self.activation_guard:
+            raise AuthorityLost("activation authority is unavailable")
+        self.activation_guard.check()
 
     def _fence(self) -> None:
-        if self.fenced:
-            return
-        self.adapters.fence()
-        self.fenced = True
-        self.token = None
+        with self.fence_lock:
+            if self.fenced:
+                return
+            self.adapters.fence()
+            self.fenced = True
+            self.token = None
 
     def run_once(self) -> bool:
+        if self.fenced:
+            raise AuthorityLost("fenced controller requires restart and recovery checks")
         if self.adapters.ready and not self.adapters.ready():
             return False
-        token = self.adapters.acquire()
+        try:
+            token = self.adapters.acquire()
+        except Exception:
+            # A restarted writer cannot retain authority merely because the
+            # witness request failed instead of returning a conflict.
+            self._fence()
+            raise
         if not token:
             if self.adapters.is_primary and self.adapters.is_primary():
                 self._fence()
             return False
+        guard = None
+        if self.adapters.renew:
+            guard = LeaseGuard(lambda: self.adapters.renew(token), self._fence, self.renewal_interval)
+        self.activation_guard = guard
+        def step(action: Callable[[], Any]) -> Any:
+            if guard:
+                guard.check()
+            result = action()
+            if guard:
+                guard.check()
+            return result
         try:
+            if guard:
+                guard.start()
+            if self.adapters.validate_generation:
+                step(lambda: self.adapters.validate_generation(token))
             if self.adapters.fence_old_writer:
-                self.adapters.fence_old_writer()
-            self.adapters.promote(token)
-            self.adapters.switch_endpoint()
-            self.adapters.enable_roles()
+                step(self.adapters.fence_old_writer)
+            if self.adapters.check_replication:
+                step(self.adapters.check_replication)
+            if self.adapters.record_progress:
+                step(lambda: self.adapters.record_progress(token, "promoting"))
+            step(lambda: self.adapters.promote(token))
+            if self.adapters.verify_promoted and not step(self.adapters.verify_promoted):
+                raise RuntimeError("target PostgreSQL promotion could not be verified")
+            if self.adapters.record_progress:
+                step(lambda: self.adapters.record_progress(token, "promoted"))
+            step(self.adapters.switch_endpoint)
+            step(self.adapters.enable_roles)
+            if self.adapters.verify_service:
+                step(self.adapters.verify_service)
+            if self.adapters.publish_routes:
+                step(self.adapters.publish_routes)
+            if self.adapters.record_progress:
+                step(lambda: self.adapters.record_progress(token, "active"))
         except Exception:
             self._fence()
             raise
+        finally:
+            if guard:
+                guard.close()
+            self.activation_guard = None
+        # Closing can overlap one final in-flight renewal. Never declare a
+        # controller active after its renewal thread already revoked authority.
+        if guard:
+            guard.check()
         self.token = token
         self.promoted = True
         return True
@@ -103,7 +262,7 @@ def _post(base_url: str, secret: str, path: str, body: dict[str, Any]) -> dict[s
 
 
 def _kubectl(*args: str, input_text: str | None = None) -> str:
-    result = subprocess.run(["kubectl", *args], check=True, capture_output=True, text=True, input=input_text)
+    result = subprocess.run(["kubectl", "--request-timeout=15s", *args], check=True, capture_output=True, text=True, input=input_text, timeout=195)
     return result.stdout.strip()
 
 
@@ -121,9 +280,36 @@ def run() -> None:
     parser.add_argument("--pod", default="postgres-authority-standby-0")
     parser.add_argument("--service", default="postgres-authority-standby")
     parser.add_argument("--old-writer-fence-command", default=os.environ.get("OLD_WRITER_FENCE_COMMAND"))
+    parser.add_argument("--local-writer-fence-command", default=os.environ.get("LOCAL_WRITER_FENCE_COMMAND"))
+    parser.add_argument("--replication-check-command", default=os.environ.get("REPLICATION_CHECK_COMMAND"))
+    parser.add_argument("--publish-routes-command", default=os.environ.get("PUBLISH_ROUTES_COMMAND"))
+    parser.add_argument("--service-check-command", default=os.environ.get("SERVICE_CHECK_COMMAND"))
+    parser.add_argument("--state-path", type=Path, default=Path("/var/lib/pantry-postgres-promoter/activation.json"))
     args = parser.parse_args()
     if not args.witness_url or not args.secret:
         raise SystemExit("WITNESS_URL and WITNESS_SHARED_SECRET are required")
+    # Missing adapters must stop startup BEFORE acquiring a production lease.
+    for name in ("old_writer_fence_command", "local_writer_fence_command", "replication_check_command", "publish_routes_command", "service_check_command"):
+        if not getattr(args, name) or not shlex.split(getattr(args, name)):
+            raise SystemExit(f"{name.upper()} is required before automatic promotion")
+    if not 15 <= args.lease_seconds <= 30:
+        raise SystemExit("--lease-seconds must match the witness TTL (15..30)")
+
+    journal = ActivationJournal(args.state_path)
+    generation: dict[str, Any] = {}
+
+    def run_hook(command: str, timeout: int = 30) -> None:
+        hook_env = os.environ.copy()
+        hook_env.update(PANTRY_PROMOTION_SITE="oracle", PANTRY_PROMOTION_RESOURCE="pantry:postgres",
+                        PANTRY_PROMOTION_EPOCH=str(generation.get("epoch", "")),
+                        PANTRY_DATABASE_SYSTEM_IDENTIFIER=str(generation.get("system_identifier", "")),
+                        PANTRY_RESUME_PRIMARY="true" if generation.get("resume") else "false")
+        subprocess.run(shlex.split(command), check=True, timeout=timeout, env=hook_env)
+
+    def activation_kubectl(*arguments: str) -> str:
+        # Recheck between EACH rollout command, not only after the whole loop.
+        promoter.assert_activation_authority()
+        return _kubectl(*arguments)
 
     def acquire() -> dict[str, Any] | None:
         try:
@@ -146,7 +332,7 @@ def run() -> None:
     def promote(_token: dict[str, Any]) -> None:
         recovery = _kubectl("-n", args.namespace, "exec", args.pod, "--", "sh", "-ec", "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select pg_is_in_recovery();\"")
         if recovery == "t":
-            _kubectl("-n", args.namespace, "exec", args.pod, "--", *_postgres_promote_command("/var/lib/postgresql/data"))
+            activation_kubectl("-n", args.namespace, "exec", args.pod, "--", *_postgres_promote_command("/var/lib/postgresql/data"))
             deadline = time.monotonic() + 60
             while time.monotonic() < deadline:
                 if _kubectl("-n", args.namespace, "exec", args.pod, "--", "sh", "-ec", "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select pg_is_in_recovery();\"") == "f":
@@ -156,7 +342,7 @@ def run() -> None:
                 raise RuntimeError("Oracle PostgreSQL did not leave recovery mode")
         elif recovery != "f":
             raise RuntimeError(f"unexpected Oracle recovery state: {recovery!r}")
-        _kubectl("-n", args.namespace, "label", "pod", args.pod, "pantrybot.postgres/role=primary", "--overwrite")
+        activation_kubectl("-n", args.namespace, "label", "pod", args.pod, "pantrybot.postgres/role=primary", "--overwrite")
 
     def is_primary() -> bool:
         try:
@@ -173,7 +359,7 @@ def run() -> None:
 
     def switch_endpoint() -> None:
         selector = json.dumps({"app.kubernetes.io/name": "pantry-postgres-authority-standby", "pantrybot.postgres/role": "primary"}, separators=(",", ":"))
-        _kubectl("-n", args.namespace, "patch", "service", args.service, "--type=merge", "-p", json.dumps({"spec": {"selector": json.loads(selector)}}))
+        activation_kubectl("-n", args.namespace, "patch", "service", args.service, "--type=merge", "-p", json.dumps({"spec": {"selector": json.loads(selector)}}))
         encoded = _kubectl("-n", args.namespace, "get", "secret", "pantry-bot-platform", "-o", "jsonpath={.data.PANTRY_DATABASE_URL}")
         current = base64.b64decode(encoded).decode()
         if "@" not in current:
@@ -182,22 +368,38 @@ def run() -> None:
         database = current.rsplit("/", 1)[-1]
         local = f"{userinfo}@{args.service}.{args.namespace}.svc.cluster.local:5432/{database}"
         replacement = base64.b64encode(local.encode()).decode()
-        _kubectl("-n", args.namespace, "patch", "secret", "pantry-bot-platform", "--type=merge", "-p", json.dumps({"data": {"PANTRY_DATABASE_URL": replacement}}))
-        for deployment in ORACLE_PROMOTION_DEPLOYMENTS:
-            _kubectl("-n", args.namespace, "rollout", "restart", f"deployment/{deployment}")
-            _kubectl("-n", args.namespace, "rollout", "status", f"deployment/{deployment}", "--timeout=180s")
+        activation_kubectl("-n", args.namespace, "patch", "secret", "pantry-bot-platform", "--type=merge", "-p", json.dumps({"data": {"PANTRY_DATABASE_URL": replacement}}))
+
+    def verify_promoted() -> bool:
+        # Promotion must be observed from the database before routing or
+        # mutating roles are enabled. A successful pg_ctl command alone is not
+        # proof that PostgreSQL left recovery mode.
+        return is_primary()
 
     def enable_roles() -> None:
-        for deployment, replicas in (("pantry-twitch-gateway", "1"), ("pantry-chat-worker", "2"), ("pantry-twitch-dispatcher", "1")):
-            _kubectl("-n", args.namespace, "scale", f"deployment/{deployment}", f"--replicas={replicas}")
+        for deployment in ORACLE_PROMOTION_DEPLOYMENTS:
+            activation_kubectl("-n", args.namespace, "scale", f"deployment/{deployment}", "--replicas=1")
+            activation_kubectl("-n", args.namespace, "rollout", "restart", f"deployment/{deployment}")
             _kubectl("-n", args.namespace, "rollout", "status", f"deployment/{deployment}", "--timeout=180s")
 
     def fence() -> None:
-        subprocess.run(
-            ["/usr/local/lib/failover-witness/fence-writer-domain.sh", "k3s.service"],
-            check=True,
-            timeout=30,
-        )
+        run_hook(args.local_writer_fence_command)
+        if generation:
+            journal.record(generation["epoch"], generation["system_identifier"], "fenced")
+
+    def validate_generation(token: dict[str, Any]) -> None:
+        identity = _kubectl("-n", args.namespace, "exec", args.pod, "--", "sh", "-ec", "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select system_identifier from pg_control_system();\"")
+        if not identity.isdigit():
+            raise RuntimeError("target database identity is unknown")
+        primary = is_primary()
+        generation.update(epoch=token["epoch"], system_identifier=identity, resume=primary)
+        if primary and not journal.may_resume(token["epoch"], identity):
+            raise RuntimeError("already-primary target has no matching durable activation receipt")
+
+    def record_progress(token: dict[str, Any], phase: str) -> None:
+        with promoter.fence_lock:
+            promoter.assert_activation_authority()
+            journal.record(token["epoch"], generation["system_identifier"], phase)
 
     def fence_old_writer() -> None:
         if not args.old_writer_fence_command:
@@ -207,8 +409,16 @@ def run() -> None:
             raise RuntimeError("OLD_WRITER_FENCE_COMMAND must not be empty")
         subprocess.run(command, check=True, timeout=30)
 
-    adapters = PromotionAdapters(acquire, is_primary, promote, switch_endpoint, enable_roles, fence, renew, ready, fence_old_writer)
-    promoter = OraclePromoter(adapters)
+    adapters = PromotionAdapters(
+        acquire, is_primary, promote, switch_endpoint, enable_roles, fence,
+        renew, ready, fence_old_writer, verify_promoted,
+        check_replication=lambda: run_hook(args.replication_check_command),
+        publish_routes=lambda: run_hook(args.publish_routes_command),
+        verify_service=lambda: run_hook(args.service_check_command),
+        validate_generation=validate_generation,
+        record_progress=record_progress,
+    )
+    promoter = OraclePromoter(adapters, renewal_interval=min(5, args.lease_seconds / 3))
     while not promoter.run_once():
         time.sleep(max(1, args.lease_seconds // 3))
     while promoter.renew_or_fence():

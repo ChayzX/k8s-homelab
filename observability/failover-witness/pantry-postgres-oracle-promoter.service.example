@@ -5,15 +5,32 @@ After=network-online.target k3s.service failover-witness-oracle-tunnel.service
 
 [Service]
 Type=simple
-# Copy oracle_promoter.py to /usr/local/lib/failover-witness/ and install a
-# root-owned EnvironmentFile containing WITNESS_URL and WITNESS_SHARED_SECRET.
-# In normal operation the shared pantry:postgres lease is held by home and
+# Copy oracle_promoter.py and publish-cloudflare-routes.sh to
+# /usr/local/lib/failover-witness/ and install a root-owned EnvironmentFile
+# containing WITNESS_URL, WITNESS_SHARED_SECRET, and all five required hook
+# variables. The controller refuses to acquire a lease when any hook is absent.
+# In normal operation the shared pantry:postgres lease is held by the active site and
 # this process only waits. It promotes Oracle after the lease expires, but only
 # after the independent old-writer fence command succeeds.
 ExecStart=/usr/bin/python3 /usr/local/lib/failover-witness/oracle_promoter.py
 EnvironmentFile=/etc/failover-witness/postgres-fence.env
-# The EnvironmentFile must define OLD_WRITER_FENCE_COMMAND using the GCP
-# wrapper installed by REMOTE-FENCE-TRANSPORT.md.
+# The environment file must define these non-empty, executable commands:
+# OLD_WRITER_FENCE_COMMAND
+# LOCAL_WRITER_FENCE_COMMAND
+# REPLICATION_CHECK_COMMAND
+# SERVICE_CHECK_COMMAND
+# PUBLISH_ROUTES_COMMAND
+# The EnvironmentFile must define ALL five reviewed adapters documented in
+# AUTOMATIC-PANTRY-FAILOVER.md. The legacy home-only fence cannot fence Canada.
+# OLD_WRITER_FENCE_COMMAND
+# LOCAL_WRITER_FENCE_COMMAND
+# REPLICATION_CHECK_COMMAND
+# SERVICE_CHECK_COMMAND
+# PUBLISH_ROUTES_COMMAND
+# Example (root-owned, with CLOUDFLARE_API_TOKEN supplied by the service
+# environment): /usr/local/lib/failover-witness/publish-cloudflare-routes.sh
+# Keep this service disabled until the isolated rehearsal and live evidence
+# requirements pass. An unset adapter fails before acquiring authority.
 Restart=always
 RestartSec=5
 User=root
@@ -21,6 +38,8 @@ NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
+StateDirectory=pantry-postgres-promoter
+ReadWritePaths=/var/lib/pantry-postgres-promoter
 
 [Install]
 WantedBy=multi-user.target

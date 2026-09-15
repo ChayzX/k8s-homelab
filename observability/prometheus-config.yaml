@@ -156,11 +156,20 @@ data:
         static_configs:
           - targets: ["kube-state-metrics.observability.svc.cluster.local:8080"]
 
-      # The retired single-process pantry-bot Service is intentionally scaled
-      # to zero. Do not scrape it: a permanent `up == 0` target would create
-      # false outage alerts while the HA roles are healthy. The HA roles are
-      # covered by Kubernetes readiness/restart metrics until each role has a
-      # stable application metrics contract.
+      # The HA API owns application counters and exposes Prometheus text metrics.
+      # Keep this behind a ClusterIP Service; /metrics is not published externally.
+      - job_name: pantry-bot-api
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["pantry-private-api.pantry-bot.svc.cluster.local:3000"]
+
+      - job_name: canada-pantry-bot-api
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["192.168.40.208:13101"]
+            labels:
+              site: canada
+              role: recovery
 
       # ---------------------------------------------------------------
       # The observability stack scraping itself

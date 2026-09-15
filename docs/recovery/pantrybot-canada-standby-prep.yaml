@@ -1,0 +1,99 @@
+# WORKSPACE PREPARATION ONLY. A separate zero-replica standby and a new PVC.
+# Does not replace postgres-authority-standby or expose a production endpoint.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pantrybot-canada-replica-prep
+  labels:
+    pantrybot.site: oracle
+    homelab/production: "false"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: canada-standby-prep
+  namespace: pantrybot-canada-replica-prep
+spec:
+  serviceName: canada-standby-prep
+  replicas: 0
+  selector:
+    matchLabels:
+      app: canada-standby-prep
+  template:
+    metadata:
+      labels:
+        app: canada-standby-prep
+        pantrybot.postgres/role: standby
+    spec:
+      # Required so this pod can reach the Oracle host's loopback SSH listener.
+      # Verify the label points to the exact Oracle host before scaling to one.
+      nodeSelector:
+        kubernetes.io/hostname: pantry-bot-oracle
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      terminationGracePeriodSeconds: 60
+      initContainers:
+        - name: basebackup
+          image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+          env:
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          command: [sh, -ec]
+          args:
+            - |
+              mkdir -p "$PGDATA"
+              install -m 600 -o postgres -g postgres /secrets/pgpass /run/replication/pgpass
+              if test -f "$PGDATA/PG_VERSION"; then
+                test "$(cat "$PGDATA/PG_VERSION")" = 16
+                test -f "$PGDATA/standby.signal"
+                test -f "$PGDATA/.canada-replica-bootstrap-complete"
+                exit 0
+              fi
+              # Never erase, overwrite, or adopt a partial or unrelated volume.
+              test -z "$(find "$PGDATA" -mindepth 1 -maxdepth 1 -print -quit)"
+              chown postgres:postgres "$PGDATA"
+              su-exec postgres pg_basebackup \
+                --dbname='host=127.0.0.1 port=25442 user=pantry_replicator passfile=/run/replication/pgpass application_name=oracle_from_canada connect_timeout=10' \
+                --pgdata="$PGDATA" --format=plain --wal-method=stream \
+                --write-recovery-conf --slot=oracle_from_canada --checkpoint=spread \
+                --max-rate=8M --no-password --no-clean
+              test -f "$PGDATA/standby.signal"
+              touch "$PGDATA/.canada-replica-bootstrap-complete"
+              chown postgres:postgres "$PGDATA/.canada-replica-bootstrap-complete"
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: credentials, mountPath: /secrets, readOnly: true }
+            - { name: passfile, mountPath: /run/replication }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+      containers:
+      - name: postgres
+          image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+          env:
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          args: ['-c','listen_addresses=127.0.0.1','-c','port=25443','-c','hot_standby=on','-c','wal_receiver_timeout=30s','-c','primary_conninfo=host=127.0.0.1 port=25442 user=pantry_replicator passfile=/run/replication/pgpass application_name=oracle_from_canada connect_timeout=10','-c','primary_slot_name=oracle_from_canada']
+          readinessProbe:
+            exec:
+              command: [sh, -ec, "test \"$(psql -p 25443 -U pantry -d pantry -AtX -c 'select pg_is_in_recovery();')\" = t"]
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 768Mi }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: passfile, mountPath: /run/replication, readOnly: true }
+      volumes:
+        - name: credentials
+          secret:
+            secretName: canada-replication-passfile
+            defaultMode: 0400
+        - name: passfile
+          emptyDir: { medium: Memory }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 16Gi }

@@ -1945,30 +1945,553 @@ data:
       "uid": "homelab-host-pc",
       "title": "Main PC — Bare-Metal Health",
       "description": "Dedicated bare-metal health dashboard for MinecraftMachine. These panels measure the physical host that runs the containers; Kubernetes workload health is intentionally excluded.",
-      "tags": ["homelab", "host", "bare-metal"],
+      "tags": [
+        "homelab",
+        "host",
+        "bare-metal"
+      ],
       "timezone": "browser",
       "editable": true,
       "schemaVersion": 39,
       "version": 3,
       "refresh": "30s",
-      "time": { "from": "now-6h", "to": "now" },
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
       "templating": {
         "list": [
-          { "name": "DS_PROMETHEUS", "label": "Prometheus", "type": "datasource", "query": "prometheus", "refresh": 1 },
-          { "name": "node", "label": "Host", "type": "query", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "definition": "label_values(node_uname_info, instance)", "query": { "qryType": 1, "query": "label_values(node_uname_info, instance)", "refId": "PrometheusVariableQueryEditor-VariableQuery" }, "refresh": 1, "includeAll": false, "multi": false, "sort": 1 }
+          {
+            "name": "DS_PROMETHEUS",
+            "label": "Prometheus",
+            "type": "datasource",
+            "query": "prometheus",
+            "refresh": 1
+          },
+          {
+            "name": "node",
+            "label": "Host",
+            "type": "query",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_PROMETHEUS}"
+            },
+            "definition": "label_values(node_uname_info, instance)",
+            "query": {
+              "qryType": 1,
+              "query": "label_values(node_uname_info, instance)",
+              "refId": "PrometheusVariableQueryEditor-VariableQuery"
+            },
+            "refresh": 1,
+            "includeAll": false,
+            "multi": false,
+            "sort": 1
+          }
         ]
       },
       "panels": [
-        { "type": "row", "title": "Host capacity and pressure", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "panels": [] },
-        { "id": 1, "type": "gauge", "title": "CPU Used", "description": "Whole-host CPU used percentage (100% means every host thread is busy). Calculated directly from non-idle CPU time.", "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "expr": "sum(rate(node_cpu_seconds_total{instance=\"$node\",mode!=\"idle\"}[5m])) / count(count by (cpu) (node_cpu_seconds_total{instance=\"$node\"})) * 100", "legendFormat": "CPU used" }], "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 70 }, { "color": "red", "value": 90 }] } }, "overrides": [] }, "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true } },
-        { "id": 2, "type": "gauge", "title": "Memory Used", "description": "MemAvailable accounts for reclaimable cache and is the useful host pressure signal.", "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "expr": "(1 - node_memory_MemAvailable_bytes{instance=\"$node\"} / node_memory_MemTotal_bytes{instance=\"$node\"}) * 100", "legendFormat": "Memory" }], "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 80 }, { "color": "red", "value": 95 }] } }, "overrides": [] }, "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true } },
-        { "id": 3, "type": "gauge", "title": "Root Disk Used", "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "expr": "(1 - node_filesystem_avail_bytes{instance=\"$node\",mountpoint=\"/\",fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{instance=\"$node\",mountpoint=\"/\",fstype!~\"tmpfs|overlay|squashfs\"}) * 100", "legendFormat": "/" }], "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 80 }, { "color": "red", "value": 90 }] } }, "overrides": [] }, "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true } },
-        { "id": 4, "type": "stat", "title": "Host Uptime", "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "expr": "time() - node_boot_time_seconds{instance=\"$node\"}", "legendFormat": "uptime" }], "fieldConfig": { "defaults": { "unit": "dtdurations", "decimals": 1 }, "overrides": [] }, "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name", "colorMode": "value" } },
-        { "id": 5, "type": "timeseries", "title": "Load Average vs CPU Cores", "gridPos": { "h": 7, "w": 12, "x": 0, "y": 6 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "expr": "node_load1{instance=\"$node\"}", "legendFormat": "load 1m" }, { "refId": "B", "expr": "node_load5{instance=\"$node\"}", "legendFormat": "load 5m" }, { "refId": "C", "expr": "count(count by (cpu) (node_cpu_seconds_total{instance=\"$node\"}))", "legendFormat": "CPU cores" }], "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } } },
-        { "id": 6, "type": "timeseries", "title": "Memory Breakdown", "gridPos": { "h": 7, "w": 12, "x": 12, "y": 6 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "expr": "node_memory_MemAvailable_bytes{instance=\"$node\"}", "legendFormat": "available" }, { "refId": "B", "expr": "node_memory_Cached_bytes{instance=\"$node\"}", "legendFormat": "cached" }, { "refId": "C", "expr": "node_memory_Buffers_bytes{instance=\"$node\"}", "legendFormat": "buffers" }, { "refId": "D", "expr": "node_memory_MemTotal_bytes{instance=\"$node\"}", "legendFormat": "total" }], "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] } },
-        { "id": 7, "type": "timeseries", "title": "Disk Utilisation and Throughput", "gridPos": { "h": 7, "w": 12, "x": 0, "y": 13 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "expr": "rate(node_disk_io_time_seconds_total{instance=\"$node\",device!~\"loop.*|dm-.*\"}[5m]) * 100", "legendFormat": "{{device}} busy %" }, { "refId": "B", "expr": "rate(node_disk_read_bytes_total{instance=\"$node\",device!~\"loop.*|dm-.*\"}[5m])", "legendFormat": "{{device}} read" }, { "refId": "C", "expr": "rate(node_disk_written_bytes_total{instance=\"$node\",device!~\"loop.*|dm-.*\"}[5m])", "legendFormat": "{{device}} write" }], "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] } },
-        { "id": 8, "type": "timeseries", "title": "Physical Network I/O", "description": "Excludes loopback and k3s overlay interfaces so this shows the host NIC load.", "gridPos": { "h": 7, "w": 12, "x": 12, "y": 13 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "expr": "rate(node_network_receive_bytes_total{instance=\"$node\",device!~\"lo|cni.*|flannel.*\"}[5m])", "legendFormat": "{{device}} receive" }, { "refId": "B", "expr": "rate(node_network_transmit_bytes_total{instance=\"$node\",device!~\"lo|cni.*|flannel.*\"}[5m])", "legendFormat": "{{device}} transmit" }], "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] } },
-        { "id": 9, "type": "timeseries", "title": "Host Temperatures", "gridPos": { "h": 7, "w": 24, "x": 0, "y": 20 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "expr": "node_hwmon_temp_celsius{instance=\"$node\"}", "legendFormat": "{{chip}} / {{sensor}}" }], "fieldConfig": { "defaults": { "unit": "celsius" }, "overrides": [] } }
+        {
+          "type": "row",
+          "title": "Host capacity and pressure",
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "panels": []
+        },
+        {
+          "id": 1,
+          "type": "gauge",
+          "title": "CPU Used",
+          "description": "Whole-host CPU used percentage (100% means every host thread is busy). Calculated directly from non-idle CPU time.",
+          "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 0,
+            "y": 1
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(node_cpu_seconds_total{instance=\"$node\",mode!=\"idle\"}[5m])) / count(count by (cpu) (node_cpu_seconds_total{instance=\"$node\"})) * 100",
+              "legendFormat": "CPU used"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 70
+                  },
+                  {
+                    "color": "red",
+                    "value": 90
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          }
+        },
+        {
+          "id": 2,
+          "type": "gauge",
+          "title": "Memory Used",
+          "description": "MemAvailable accounts for reclaimable cache and is the useful host pressure signal.",
+          "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 6,
+            "y": 1
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(1 - node_memory_MemAvailable_bytes{instance=\"$node\"} / node_memory_MemTotal_bytes{instance=\"$node\"}) * 100",
+              "legendFormat": "Memory"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 80
+                  },
+                  {
+                    "color": "red",
+                    "value": 95
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          }
+        },
+        {
+          "id": 3,
+          "type": "gauge",
+          "title": "Root Disk Used",
+          "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 12,
+            "y": 1
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(1 - node_filesystem_avail_bytes{instance=\"$node\",mountpoint=\"/\",fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{instance=\"$node\",mountpoint=\"/\",fstype!~\"tmpfs|overlay|squashfs\"}) * 100",
+              "legendFormat": "/"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 80
+                  },
+                  {
+                    "color": "red",
+                    "value": 90
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Host Uptime",
+          "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 18,
+            "y": 1
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "time() - node_boot_time_seconds{instance=\"$node\"}",
+              "legendFormat": "uptime"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "dtdurations",
+              "decimals": 1
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name",
+            "colorMode": "value"
+          }
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Load Average vs CPU Cores",
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "node_load1{instance=\"$node\"}",
+              "legendFormat": "load 1m"
+            },
+            {
+              "refId": "B",
+              "expr": "node_load5{instance=\"$node\"}",
+              "legendFormat": "load 5m"
+            },
+            {
+              "refId": "C",
+              "expr": "count(count by (cpu) (node_cpu_seconds_total{instance=\"$node\"}))",
+              "legendFormat": "CPU cores"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom"
+            }
+          }
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Memory Breakdown",
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "node_memory_MemAvailable_bytes{instance=\"$node\"}",
+              "legendFormat": "available"
+            },
+            {
+              "refId": "B",
+              "expr": "node_memory_Cached_bytes{instance=\"$node\"}",
+              "legendFormat": "cached"
+            },
+            {
+              "refId": "C",
+              "expr": "node_memory_Buffers_bytes{instance=\"$node\"}",
+              "legendFormat": "buffers"
+            },
+            {
+              "refId": "D",
+              "expr": "node_memory_MemTotal_bytes{instance=\"$node\"}",
+              "legendFormat": "total"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes"
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Disk Utilisation and Throughput",
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 13
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "rate(node_disk_io_time_seconds_total{instance=\"$node\",device!~\"loop.*|dm-.*\"}[5m]) * 100",
+              "legendFormat": "{{device}} busy %"
+            },
+            {
+              "refId": "B",
+              "expr": "rate(node_disk_read_bytes_total{instance=\"$node\",device!~\"loop.*|dm-.*\"}[5m])",
+              "legendFormat": "{{device}} read"
+            },
+            {
+              "refId": "C",
+              "expr": "rate(node_disk_written_bytes_total{instance=\"$node\",device!~\"loop.*|dm-.*\"}[5m])",
+              "legendFormat": "{{device}} write"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps"
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Physical Network I/O",
+          "description": "Excludes loopback and k3s overlay interfaces so this shows the host NIC load.",
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 13
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "rate(node_network_receive_bytes_total{instance=\"$node\",device!~\"lo|cni.*|flannel.*\"}[5m])",
+              "legendFormat": "{{device}} receive"
+            },
+            {
+              "refId": "B",
+              "expr": "rate(node_network_transmit_bytes_total{instance=\"$node\",device!~\"lo|cni.*|flannel.*\"}[5m])",
+              "legendFormat": "{{device}} transmit"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps"
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Host Temperatures",
+          "gridPos": {
+            "h": 7,
+            "w": 24,
+            "x": 0,
+            "y": 20
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "node_hwmon_temp_celsius{instance=\"$node\"}",
+              "legendFormat": "{{chip}} / {{sensor}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius"
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "row",
+          "title": "Greenies Windows GPU",
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 28
+          },
+          "panels": []
+        },
+        {
+          "id": 10,
+          "type": "timeseries",
+          "title": "GPU engine utilisation",
+          "description": "Greenies main PC GPU engine activity from windows_exporter.",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 29
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (host, engtype) (rate(windows_gpu_engine_time_seconds{site=\"windows-remote\"}[5m])) * 100",
+              "legendFormat": "{{host}} {{engtype}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom"
+            }
+          }
+        },
+        {
+          "id": 11,
+          "type": "timeseries",
+          "title": "GPU memory",
+          "description": "Dedicated and shared GPU memory for Greenies main PC.",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 29
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "windows_gpu_adapter_memory_dedicated_bytes{site=\"windows-remote\"}",
+              "legendFormat": "{{host}} dedicated"
+            },
+            {
+              "refId": "B",
+              "expr": "windows_gpu_adapter_memory_shared_bytes{site=\"windows-remote\"}",
+              "legendFormat": "{{host}} shared"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom"
+            }
+          }
+        }
       ]
     }
   jmusicbot.json: |
@@ -3349,7 +3872,7 @@ data:
     {
       "uid": "homelab-pantry-bot-usage",
       "title": "Pantry Bot — Usage",
-      "description": "Application usage from Pantry Bot's /metrics endpoint: engagement actions, bot messages, commands, Extension requests, boss activity, and outcomes. Prometheus counters are process-local and reset on restart; increase() and rate() handle that reset. Distinct participant and first-time history remains in the bot's SQLite engagement tables.",
+      "description": "Live HA health and usage. Application counters are unavailable until the deployed HA images expose /metrics; the operational panels below use kube-state-metrics and cAdvisor.",
       "tags": [
         "homelab",
         "twitch",
@@ -3934,6 +4457,119 @@ data:
                 "showPoints": "never",
                 "spanNulls": false
               }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "row",
+          "title": "HA service health (live)",
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 34
+          },
+          "panels": []
+        },
+        {
+          "id": 10,
+          "type": "stat",
+          "title": "Ready PantryBot pods",
+          "description": "Current ready pods in the pantry-bot namespace.",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 0,
+            "y": 35
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(kube_pod_status_ready{namespace=\"pantry-bot\",condition=\"true\"})",
+              "legendFormat": "ready"
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 11,
+          "type": "timeseries",
+          "title": "PantryBot container restarts",
+          "description": "Restarts in the pantry-bot namespace; useful during failover and recovery.",
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 35
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (pod, container) (increase(kube_pod_container_status_restarts_total{namespace=\"pantry-bot\"}[1h]))",
+              "legendFormat": "{{pod}}/{{container}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 12,
+          "type": "timeseries",
+          "title": "PantryBot CPU and memory",
+          "description": "Current resource use for pantry-bot pods from kubelet cAdvisor.",
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 35
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"pantry-bot\",container!=\"\",container!=\"POD\"}[5m]))",
+              "legendFormat": "{{pod}} CPU"
+            },
+            {
+              "refId": "B",
+              "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"pantry-bot\",container!=\"\",container!=\"POD\"})",
+              "legendFormat": "{{pod}} memory"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
             },
             "overrides": []
           }

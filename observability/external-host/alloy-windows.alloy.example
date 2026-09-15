@@ -1,11 +1,9 @@
 // Grafana Alloy template for a Windows 11 host outside the homelab LAN.
-// Store the Grafana Cloud metrics-write token in
-// C:\\ProgramData\\GrafanaLabs\\Alloy\\grafana-cloud-token and grant
-// read access only to the Alloy service account.
+// Metrics use the self-hosted Prometheus receiver. Logs use the self-hosted
+// Loki push endpoint supplied in PANTRY_LOKI_PUSH_URL.
 
 prometheus.exporter.windows "host" {
-  // Keep the default low-cardinality host collectors only.
-  enabled_collectors = ["cpu", "logical_disk", "net", "os", "system"]
+  enabled_collectors = ["cpu", "logical_disk", "net", "os", "system", "gpu"]
 }
 
 prometheus.scrape "host" {
@@ -15,41 +13,38 @@ prometheus.scrape "host" {
 }
 
 prometheus.relabel "host" {
-  rule {
-    source_labels = ["instance"]
-    target_label  = "host"
-    action        = "replace"
-  }
-  rule {
-    target_label = "site"
-    replacement  = "remote"
-    action       = "replace"
-  }
-  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+  rule { source_labels = ["instance"] target_label = "host" action = "replace" }
+  rule { target_label = "site" replacement = "remote" action = "replace" }
+  forward_to = [prometheus.remote_write.pantryprom.receiver]
 }
 
-prometheus.remote_write "grafana_cloud" {
+prometheus.remote_write "pantryprom" {
   endpoint {
-    url = "https://prometheus-prod-56-prod-us-east-2.grafana.net/api/prom/push"
-
-    basic_auth {
-      username      = "3548270"
-      password_file = "C:\\ProgramData\\GrafanaLabs\\Alloy\\grafana-cloud-token"
-    }
-
-    // Windows exporter uses windows_* metric names rather than node_*.
+    url = sys.env("PANTRY_PROMETHEUS_REMOTE_WRITE_URL")
     write_relabel_config {
       source_labels = ["__name__"]
-      regex = "up|windows_cpu_time_total|windows_memory_available_bytes|windows_memory_physical_total_bytes|windows_logical_disk_free_bytes|windows_logical_disk_size_bytes|windows_net_bytes_received_total|windows_net_bytes_sent_total|windows_system_boot_time_timestamp"
+      regex = "up|windows_cpu_time_total|windows_memory_available_bytes|windows_memory_physical_total_bytes|windows_logical_disk_free_bytes|windows_logical_disk_size_bytes|windows_net_bytes_received_total|windows_net_bytes_sent_total|windows_system_boot_time_timestamp|windows_gpu_.*"
       action = "keep"
     }
-
-    queue_config {
-      capacity             = 500
-      max_shards           = 2
-      min_shards           = 1
-      max_samples_per_send = 200
-      batch_send_deadline  = "10s"
-    }
+    queue_config { capacity = 500 max_shards = 2 min_shards = 1 max_samples_per_send = 200 batch_send_deadline = "10s" }
   }
+}
+
+// Only Windows Event Log levels Critical (1) and Error (2) are collected.
+// XPath filtering happens at the source, keeping routine informational events
+// off the machine and off Loki.
+loki.source.windowsevent "application" {
+  eventlog_name = "Application"
+  xpath_query   = "*[System[(Level=1 or Level=2)]]"
+  forward_to    = [loki.write.local.receiver]
+}
+
+loki.source.windowsevent "system" {
+  eventlog_name = "System"
+  xpath_query   = "*[System[(Level=1 or Level=2)]]"
+  forward_to    = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint { url = sys.env("PANTRY_LOKI_PUSH_URL") }
 }

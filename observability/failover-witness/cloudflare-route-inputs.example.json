@@ -1,0 +1,52 @@
+{
+  "account_id": "0d22ee71e5473142b1678cb7005f80f8",
+  "resource": "pantry:postgres",
+  "sites": {
+    "metrics": {
+      "tunnel_id": "ec8409f5-6740-49de-8801-357f333c25fb",
+      "hostnames": [
+        "metrics.greeniespantry.uk",
+        "metrics-ingest.greeniespantry.uk"
+      ],
+      "origin": "http://prometheus.observability.svc.cluster.local:9090"
+    },
+    "oracle": {
+      "application_tunnel_id": "30dde1eb-e625-4dd4-b5ac-2d385a1b7336",
+      "commands_tunnel_id": "c0015a8b-3f9e-4af9-b172-a97b882b4b28",
+      "hostnames": [],
+      "application_hostnames": ["mods.greeniespantry.uk", "overlay.greeniespantry.uk"],
+      "commands_hostnames": ["commands.greeniespantry.uk"],
+      "application_routes": [
+        {"hostname": "mods.greeniespantry.uk", "service": "http://pantry-private-site.pantry-bot.svc.cluster.local:3000"},
+        {"hostname": "overlay.greeniespantry.uk", "service": "http://pantry-overlay.pantry-bot.svc.cluster.local:8080"}
+      ],
+      "commands_routes": [
+        {"hostname": "commands.greeniespantry.uk", "service": "http://pantry-commands-site.pantry-bot.svc.cluster.local:3000"}
+      ],
+      "route_state": "standby-excluded"
+    },
+    "canada": {
+      "connector_tunnel_id": "8392cd48-c1bf-437b-ac03-3c4b4acd321e",
+      "commands_tunnel_id": null,
+      "application_hostnames": ["mods.greeniespantry.uk", "overlay.greeniespantry.uk"],
+      "commands_hostnames": ["commands.greeniespantry.uk"],
+      "application_routes": [
+        {"hostname": "mods.greeniespantry.uk", "service": "http://127.0.0.1:18081"},
+        {"hostname": "overlay.greeniespantry.uk", "service": "http://127.0.0.1:18082"}
+      ],
+      "commands_routes": [
+        {"hostname": "commands.greeniespantry.uk", "service": "http://127.0.0.1:18080"}
+      ],
+      "hostnames": [
+        "mods.greeniespantry.uk",
+        "overlay.greeniespantry.uk",
+        "commands.greeniespantry.uk"
+      ],
+      "route_state": "active"
+    }
+  },
+  "notes": [
+    "Resolve the Canada connector role, hostnames, and command tunnel only after verifying the Cloudflare account configuration.",
+    "This file contains identifiers only; API tokens and tunnel tokens stay in the secret manager."
+  ]
+}

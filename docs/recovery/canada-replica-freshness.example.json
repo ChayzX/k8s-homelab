@@ -1,0 +1,4 @@
+{
+  "source_psql": ["psql", "-XAtq", "-v", "ON_ERROR_STOP=1", "-h", "127.0.0.1", "-p", "25442", "-U", "pantry", "-d", "pantry", "-f", "-"],
+  "standby_psql": ["kubectl", "--request-timeout=5s", "-n", "pantrybot-canada-replica-prep", "exec", "-i", "canada-standby-prep-0", "--", "psql", "-XAtq", "-v", "ON_ERROR_STOP=1", "-p", "25443", "-U", "pantry", "-d", "pantry", "-f", "-"]
+}
