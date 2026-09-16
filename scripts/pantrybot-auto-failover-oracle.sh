@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Conservative Oracle-side automatic-failover supervisor. The probe must be a
-# private, site-specific home-primary endpoint; public routes are invalid here
-# because active-active Cloudflare routing can remain healthy through Oracle.
-# This supervisor never fences or promotes directly: the coupled promotion
-# adapter remains the only mutation path.
+# Conservative automatic-failover supervisor for the promoting site. The probe
+# must be a private, site-specific home-primary endpoint; public routes are
+# invalid here because active-active Cloudflare routing can remain healthy.
+# This supervisor never fences or promotes directly: the one-shot site-neutral
+# promotion adapter remains the only mutation path. Authentik is not part of
+# automatic failover (single-writer home model); only PantryBot may auto-promote.
 
 usage() {
   cat <<'USAGE'
@@ -16,15 +17,14 @@ Required environment for --confirm:
   HOME_PRIMARY_PROBE_COMMAND     private argv probe that exits 0 only when home
                                 PostgreSQL is primary (optional)
   ORACLE_PRIMARY_PROBE_COMMAND   private argv probe that exits 0 only when
-                                Oracle is already PostgreSQL primary
+                                the local site is already PostgreSQL primary
   HOME_FAILURE_THRESHOLD        consecutive failed probes before promotion
   HOME_PROBE_INTERVAL_SECONDS   delay between failed probes
-  HOME_FENCE_COMMAND             PantryBot home fence adapter command
-  AUTH_HOME_FENCE_COMMAND        Authentik home fence adapter command
-  PROMOTION_COMMAND              exact promotion command including --confirm
+  PROMOTION_COMMAND              exact one-shot promotion command including --confirm
+                                invoking scripts/pantrybot-promote-site.sh
 
-The supervisor should run only on Oracle. It is deliberately fail-closed when
-the home probe is reachable or the promotion contract is not exact.
+The promotion adapter also needs WITNESS_URL, WITNESS_SHARED_SECRET, and
+OLD_WRITER_FENCE_COMMAND in its environment (root-owned EnvironmentFile).
 USAGE
 }
 
@@ -37,8 +37,6 @@ mode=${1:-}
 : "${ORACLE_PRIMARY_PROBE_COMMAND:?ORACLE_PRIMARY_PROBE_COMMAND is required}"
 : "${HOME_FAILURE_THRESHOLD:?HOME_FAILURE_THRESHOLD is required}"
 : "${HOME_PROBE_INTERVAL_SECONDS:?HOME_PROBE_INTERVAL_SECONDS is required}"
-: "${HOME_FENCE_COMMAND:?HOME_FENCE_COMMAND is required}"
-: "${AUTH_HOME_FENCE_COMMAND:?AUTH_HOME_FENCE_COMMAND is required}"
 : "${PROMOTION_COMMAND:?PROMOTION_COMMAND is required}"
 
 [[ -n "$HOME_PRIMARY_PROBE_URL" || -n "$HOME_PRIMARY_PROBE_COMMAND" ]] || {
@@ -79,10 +77,10 @@ promotion_has_confirm=false
 promotion_has_adapter=false
 for arg in "${promotion_command[@]}"; do
   [[ "$arg" == --confirm ]] && promotion_has_confirm=true
-  [[ "$arg" == *pantrybot-promote-oracle* ]] && promotion_has_adapter=true
+  [[ "$arg" == *pantrybot-promote-site* ]] && promotion_has_adapter=true
 done
 [[ "$promotion_has_confirm" == true && "$promotion_has_adapter" == true ]] || {
-  echo 'automatic failover refused: promotion command must be the Oracle adapter with --confirm' >&2
+  echo 'automatic failover refused: promotion command must be pantrybot-promote-site with --confirm' >&2
   exit 1
 }
 
@@ -127,5 +125,6 @@ for attempt in $(seq 1 "$HOME_FAILURE_THRESHOLD"); do
 done
 
 echo home_probe=failed threshold_reached
-export HOME_FENCE_COMMAND AUTH_HOME_FENCE_COMMAND
+# The one-shot adapter is site-neutral; it reads its own copy of the witness
+# and old-writer-fence credentials from the root-owned EnvironmentFile.
 exec "${promotion_command[@]}"

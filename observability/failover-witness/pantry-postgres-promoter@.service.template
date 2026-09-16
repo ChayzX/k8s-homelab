@@ -1,0 +1,39 @@
+[Unit]
+Description=Site-neutral PantryBot PostgreSQL promotion controller (%i)
+Wants=network-online.target
+After=network-online.target k3s.service failover-witness-oracle-tunnel.service
+
+# Template unit: one instance per site, enabled as
+#   pantry-postgres-promoter@<site>.service
+#
+# Each site installs a root-owned EnvironmentFile (mode 0600) containing only
+# per-site values, e.g. /etc/failover-witness/pantry-promoter-<site>.env:
+#   PROMOTION_SITE=oracle                 # home | oracle | canada
+#   WITNESS_URL=...                       # private witness base URL
+#   WITNESS_SHARED_SECRET=...             # witness Bearer secret
+#   OLD_WRITER_FENCE_COMMAND="..."        # exact old-writer fence argv
+# The PostgreSQL pod, service, namespace, deployment set and platform Secret
+# defaults in site_neutral_promoter.py match the current Oracle authority;
+# override for a new site with additional args in ExecStart (e.g. --pod,
+# --service, --namespace, --deployments, --role-deployments).
+#
+# Secrets must never be committed: keep them in the root-owned EnvironmentFile,
+# not in this unit file.
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/lib/failover-witness/site_neutral_promoter.py
+EnvironmentFile=-/etc/failover-witness/pantry-promoter-%i.env
+EnvironmentFile=/etc/failover-witness/postgres-fence.env
+Restart=always
+RestartSec=5
+User=root
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+StateDirectory=pantry-postgres-promoter
+ReadWritePaths=/var/lib/pantry-postgres-promoter
+
+[Install]
+WantedBy=multi-user.target

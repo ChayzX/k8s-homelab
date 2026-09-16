@@ -122,9 +122,12 @@ GitHub Issue #191.
 3. Fence both home database writers using the independently reachable,
    least-privilege PantryBot and Authentik fence adapters. Do not merely scale
    the home pods down and assume fencing.
-4. Promote both Oracle database instances and record the new database epoch for
-   each. The PantryBot promotion adapter requires `HOME_FENCE_COMMAND` and
-   `AUTH_HOME_FENCE_COMMAND`; it refuses to proceed if either adapter is absent.
+4. Promote the PantryBot Oracle database and record the new database epoch. The
+   site-neutral promotion adapter requires the old-writer fence command and
+   witness authority; it refuses to proceed unless the old writer is fenced and
+   authority is acquired. Authentik is not part of automatic promotion: home
+   remains its sole writer and any Authentik database promotion is a separate
+   manual, runbook-gated decision.
 5. Verify stale home database credentials cannot commit a write.
 6. Allow the Oracle gateway and target dispatchers to acquire their leases.
 7. Verify the old home gateway is disconnected and the old dispatchers reject
@@ -170,9 +173,11 @@ The physical PostgreSQL transport was first exercised against the live home
 authority with a disposable Oracle standby. That historical rehearsal proved
 transport and promotion mechanics, but did not fence the home writer. The
 current production state has since been deliberately left in an
-Oracle-primary/home-fenced recovery window. The promotion adapter now models
-the coupled PantryBot/Authentik fence-and-promote order; the remaining gates
-are a controlled return-home rehearsal proving the reverse source fence and
+Oracle-primary/home-fenced recovery window. The promotion adapter is now
+site-neutral and PantryBot-only: it fences the old writer, promotes the local
+database, verifies writability, and enables application roles without touching
+Authentik (home remains the sole Authentik writer). The remaining gates are a
+controlled return-home rehearsal proving the reverse source fence and
 application fence against the live authority, plus measured automatic
 promotion and live synthetic-event evidence.
 
@@ -241,11 +246,13 @@ ordering guard, not evidence that a witness or provider adapter is configured.
 
 `scripts/pantrybot-auto-failover-oracle.sh` supplies the conservative detector
 boundary for Oracle. It requires a private, site-specific home-primary probe,
-three-or-more operator-selected consecutive failures, and the coupled
-promotion command with both home fence adapters. It locks concurrent runs and
-fails closed when the probe recovers. It must not use a public hostname, since
-active-active Cloudflare routing can keep public traffic healthy while home is
-down. The contract test is
+three-or-more operator-selected consecutive failures, and the site-neutral
+PantryBot promotion command (`scripts/pantrybot-promote-site.sh --confirm`),
+which itself requires the old-writer fence command and witness authority.
+Authentik is explicitly outside automatic promotion. The supervisor locks
+concurrent runs and fails closed when the probe recovers. It must not use a
+public hostname, since active-active Cloudflare routing can keep public
+traffic healthy while home is down. The contract test is
 `tests/pantrybot-auto-failover-gate-test.sh`. The timer and private probe are
 deployed, but a real home-loss promotion and the full failure matrix below are
 still required before automatic promotion is considered proven.

@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-promotion="scripts/pantrybot-promote-oracle.sh"
+# Authentik rollback contract gate.
+#
+# Under the single-Authentik-writer model (issue #198), the site-neutral
+# PantryBot promotion adapter explicitly does NOT touch Authentik. Authentik
+# promotion/failback is a manual, runbook-gated operation on home. This check
+# guards the runbook-written safety gates and the adapter/runbook boundary:
+
+promotion="scripts/pantrybot-promote-site.sh"
 runbook="docs/recovery/runbooks/authentik.md"
 
 usage() {
@@ -42,35 +49,12 @@ require_runbook() {
   }
 }
 
-line_number() {
-  local needle=$1
-  awk -v needle="$needle" 'index($0, needle) { print NR; exit }' "$promotion"
-}
-
-auth_fence_line=$(line_number '"${auth_home_fence_command[@]}" --confirm')
-auth_promote_line=$(line_number 'pg_ctl -D /var/lib/postgresql/data promote')
-auth_route_line=$(line_number 'auth_patch=')
-
-[[ -n "$auth_fence_line" ]] || {
-  echo 'promotion script has no explicit Authentik home fence' >&2
+# The Auto-promote adapter must never fence or promote Authentik: home is the
+# only Authentik writer and promotion of its database is a manual decision.
+if grep -Eq 'auth_|authentik_|auth-postgresql' "$promotion"; then
+  echo 'promotion script must not touch Authentik (single home writer)' >&2
   exit 1
-}
-[[ -n "$auth_promote_line" ]] || {
-  echo 'promotion script has no Authentik database promotion' >&2
-  exit 1
-}
-[[ -n "$auth_route_line" ]] || {
-  echo 'promotion script has no Authentik endpoint switch' >&2
-  exit 1
-}
-(( auth_fence_line < auth_promote_line )) || {
-  echo 'Authentik home fence must precede database promotion' >&2
-  exit 1
-}
-(( auth_promote_line < auth_route_line )) || {
-  echo 'Authentik endpoint switch must follow database promotion' >&2
-  exit 1
-}
+fi
 
 require_runbook 'Fence the promoted writer'
 require_runbook 're-seed home'

@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 CHECKER="$ROOT/scripts/authentik-rollback-contract-check.sh"
-PROMOTION="$ROOT/scripts/pantrybot-promote-oracle.sh"
+PROMOTION="$ROOT/scripts/pantrybot-promote-site.sh"
 RUNBOOK="$ROOT/docs/recovery/runbooks/authentik.md"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT

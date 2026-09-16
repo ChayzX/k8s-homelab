@@ -108,13 +108,49 @@ respectively, and verify that their Services have no endpoints. Both must
 complete before home databases are promoted; neither is an automatic health
 check.
 
+## PantryBot PostgreSQL promotion controller
+
+`site_neutral_promoter.py` is the guarded PantryBot PostgreSQL promotion
+controller. It replaces the Oracle-hardcoded `oracle_promoter.py` with a single
+binary that can run on any PantryBot site (`home`, `oracle`, or `canada` — the
+same set the witness accepts). Site identity and the local mutation contracts
+are supplied per host:
+
+- in the **environment** (`PROMOTION_SITE`, `WITNESS_URL`,
+  `WITNESS_SHARED_SECRET`, `OLD_WRITER_FENCE_COMMAND`) from a root-owned
+  `EnvironmentFile`, and/or
+- as **flags** (`--namespace`, `--pod`, `--service`, `--service-label-name`,
+  `--platform-secret`, `--database-url-key`, `--deployments`,
+  `--role-deployments`, `--fence-command`, `--kubectl`, timeouts).
+
+The defaults reproduce the existing Oracle controller exactly, so an existing
+Oracle host can adopt it with no flag changes. It only promotes PantryBot
+PostgreSQL; Authentik remains home-only by design and is never auto-promoted.
+
+Run the behavior and contract tests with:
+
+```sh
+python3 observability/failover-witness/test_site_neutral_promoter.py
+```
+
+The template unit `pantry-postgres-promoter@.service.template` is the
+deployment contract for task 4: install one instance per site as
+`pantry-postgres-promoter@.<site>.service.request-home`. Each site's
+root-owned `EnvironmentFile` must set `PROMOTION_SITE`, `WITNESS_URL`,
+`WITNESS_SHARED_SECRET`, and `OLD_WRITER_FENCE_COMMAND` (never commit the
+secrets). The controller holds the `pantry:postgres` witness lease while the
+local standby is promoted, re-points the local Service endpoint Secret, and
+fences the local writer domain if the lease is ever lost.
+
 ## Oracle automatic failover supervisor
 
 Oracle installs `pantrybot-auto-failover-oracle.service` together with
 `pantrybot-auto-failover-oracle.timer`. The timer runs the fail-closed
 supervisor every 30 seconds. It requires three consecutive failures of the
 private home-primary PostgreSQL probe, then checks that Oracle is not already
-primary before invoking the coupled PantryBot/Auth fence-and-promote adapter.
+primary before invoking the site-neutral PantryBot promotion adapter
+`scripts/pantrybot-promote-site.sh --confirm`. Authentik is not part of
+automatic promotion: home remains its sole writer.
 When Oracle is already primary, the supervisor records `oracle_already_primary`
 and performs no mutation.
 
