@@ -45,6 +45,11 @@ pass — ordering only matters for the Secrets, which are not in this directory)
 
 ### A. Side-load the jmusicbot image into containerd
 
+**Legacy path.** The pinned Deployment image is the multi-arch GHCR image
+published by the `.github/workflows/jmusicbot-deploy.yml` pipeline (section C),
+so this side-load is not needed for a normal deploy. It is kept for the retired
+local `jmusicbot-custom` builds:
+
 `jmusicbot-custom:yts1182` exists only in the local Docker daemon. k3s uses its
 own embedded containerd and cannot see it.
 
@@ -54,7 +59,10 @@ sudo k3s ctr images ls | grep jmusicbot-custom     # confirm before applying
 ```
 
 The Deployment sets `imagePullPolicy: IfNotPresent`. **Do not change this to
-`Always`** — there is no registry copy to pull and the pod will never start.
+`Always`** (see section C): the current pinned image is the GHCR multi-arch
+`ghcr.io/chayzx/jmusicbot` image published by the pipeline, which k3s can pull
+when absent; the local side-load above only applies to the retired
+`jmusicbot-custom` tags.
 
 ### B. Restore mutable state from R2
 
@@ -108,6 +116,10 @@ The Deployment's probes and the `jmusicbot-health` Service target port **9091**,
 which only the health-patched image listens on. A stock
 image has no listener there and the pod would sit NotReady forever, so build the
 patched image **before** applying the manifest.
+
+**The pinned pipeline image already carries the health-endpoint patch** (and the
+poToken patch, section F); the commands below are the retired local-Docker
+build path. The current deployment authority is section C.
 
 ```bash
 # Option 1 — production path: auto-update.sh re-clones upstream MusicBot,

@@ -112,16 +112,34 @@ Secrets are namespaced — the `ghcr-pull-secret` created in `pantry-bot` does
 
 ---
 
+## 4. `jmusicbot-r2` — R2 restore/sync credential for the main Deployment
+
+The `restore-state` init container and `r2-sync` sidecar in
+`40-deployment-jmusicbot.yaml` use this credential to reach the shared
+`pantry-bot-backups` bucket under the `jmusicbot/` prefix (README section B).
+The Deployment references exactly these two keys via `secretKeyRef`:
+
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+
+Create it in the approved secret store — a copy of the existing
+`pantry-bot-litestream` R2 credential for the same bucket — never in Git. Its
+name and keys are assets of the lease-gated recovery contract:
+`docs/recovery/jmusicbot-secret-restore-rbac.yaml` scopes its restore Role to
+exactly `jmusicbot-config-txt` and `jmusicbot-r2`, and the migration sequence
+restores both through that identity before the main Deployment starts.
+
 ## Checklist before applying the Deployments
 
 ```bash
-kubectl -n jmusicbot get secret jmusicbot-config-txt jmusicbot-notifier-secrets
+kubectl -n jmusicbot get secret jmusicbot-config-txt jmusicbot-r2 jmusicbot-notifier-secrets
 ```
 
-Both must exist. Neither should ever be committed, exported to a file in this
-repo, or included in a `kubectl get -o yaml` paste.
+The first two are required by the main Deployment; `jmusicbot-notifier-secrets`
+is required by the release notifier. None should ever be committed, exported to
+a file in this repo, or included in a `kubectl get -o yaml` paste.
 
-## 4. `jmusicbot-witness` — cross-site Discord ownership
+## 5. `jmusicbot-witness` — cross-site Discord ownership
 
 Create this Secret separately in the home and independent Oracle clusters. The
 site value must be `home` in the home cluster and `oracle` in Oracle; the URL
