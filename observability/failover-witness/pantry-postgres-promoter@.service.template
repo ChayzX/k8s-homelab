@@ -6,6 +6,11 @@ After=network-online.target k3s.service failover-witness-oracle-tunnel.service
 # Template unit: one instance per site, enabled as
 #   pantry-postgres-promoter@<site>.service
 #
+# Only home and oracle are promotion candidates. Canada is a last-resort site:
+# it has NO serve-mode controller and this unit must NEVER be installed or
+# enabled for @canada. Canadian recovery is an operator-run one-shot path
+# documented in docs/recovery/runbooks/pantrybot-canada-last-resort.md.
+#
 # Each site installs a root-owned EnvironmentFile (mode 0600) containing only
 # per-site values, e.g. /etc/failover-witness/pantry-promoter-<site>.env:
 #   PROMOTION_SITE=oracle                 # home | oracle | canada

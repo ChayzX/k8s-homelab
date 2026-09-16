@@ -127,6 +127,15 @@ The defaults reproduce the existing Oracle controller exactly, so an existing
 Oracle host can adopt it with no flag changes. It only promotes PantryBot
 PostgreSQL; Authentik remains home-only by design and is never auto-promoted.
 
+**Home and Oracle are always preferred over Canada.** Canada is a last-resort
+site only: `build_adapters` refuses a canada config without
+`--allow-canada-last-resort`, `run()` refuses canada serve mode (`--once`
+only), and the promoter unit must never be installed for `@canada`. The flag is
+honored only via `scripts/pantrybot-promote-site.sh` after both
+`CANADA_LAST_RESORT_HOME_GATE` and `CANADA_LAST_RESORT_ORACLE_GATE` pass and a
+`CANADA_LAST_RESORT_CONFIRM` token is set; see
+`docs/recovery/runbooks/pantrybot-canada-last-resort.md`.
+
 Run the behavior and contract tests with:
 
 ```sh

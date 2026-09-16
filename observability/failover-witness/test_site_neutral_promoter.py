@@ -59,6 +59,23 @@ class PromoterContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_adapters(config)
 
+    def test_canada_refused_without_last_resort_gate(self):
+        config = make_config(site="canada")
+        with self.assertRaises(ValueError):
+            build_adapters(config)
+
+    def test_canada_allowed_with_last_resort_gate(self):
+        config = make_config(site="canada", allow_canada_last_resort=True)
+        build_adapters(config)
+
+    def test_canada_flag_wired_from_parser_and_env(self):
+        parser = make_parser(env={"CANADA_LAST_RESORT": "1"})
+        args = parser.parse_args([])
+        self.assertTrue(args.allow_canada_last_resort)
+        parser = make_parser(env={})
+        args = parser.parse_args([])
+        self.assertFalse(args.allow_canada_last_resort)
+
     def test_promotion_resource_matches_witness_lease(self):
         self.assertEqual(PROMOTION_RESOURCE, "pantry:postgres")
 

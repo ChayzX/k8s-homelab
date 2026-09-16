@@ -45,6 +45,9 @@ The names-only reconciliation is maintained in
 - Application readiness and external behavior are verified after restore.
 - Recovery time and data-loss window are recorded in GitHub Issue #191.
 - Standby writers remain stopped until promotion establishes exclusive write authority.
+- Canada is a last-resort PantryBot site only; recovery to Canada is a manual
+  one-shot operator exercise (`docs/recovery/runbooks/pantrybot-canada-last-resort.md`),
+  never automatic, and restore runs return routing/authority to home or Oracle.
 
 ## Current backup evidence
 

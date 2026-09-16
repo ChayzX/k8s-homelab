@@ -37,4 +37,10 @@ if oauth:
 print("cloudflare-route-inputs=loadable")
 PY
 
+# Canada is a last-resort route target: the publisher must refuse canada without
+# the operator acknowledgement token that the promote-site.sh guard requires.
+publisher="$adapter_dir/publish-cloudflare-routes.sh"
+refused=$(env PANTRY_PROMOTION_SITE=canada bash "$publisher" 2>&1 || true)
+case "$refused" in *requires\ CANADA_LAST_RESORT_CONFIRM*) ;; *) echo "contract: canada route publish must require CANADA_LAST_RESORT_CONFIRM" >&2; exit 1 ;; esac
+
 echo 'pantrybot-routing-contract-test=passed'

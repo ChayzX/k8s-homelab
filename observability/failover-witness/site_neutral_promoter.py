@@ -18,6 +18,12 @@ It keeps the original guarded semantics:
 
 Only PantryBot PostgreSQL is promoted here. Authentik is home-only by design
 and is never auto-promoted by this controller.
+
+Site preference: home and oracle are always preferred over canada. Canada is a
+last-resort site only and is never automatically promoted: canada promotion
+requires the explicit ``--allow-canada-last-resort`` flag (caller-supplied
+twist), is refused in serve mode (``--once`` only), and must be the result of a
+manual recovery runbook, never an enabled systemd unit.
 """
 
 from __future__ import annotations
@@ -68,6 +74,7 @@ class SiteConfig:
     promote_timeout: int = 60
     rollout_timeout: int = 180
     fence_command: tuple[str, ...] = ("/usr/local/lib/failover-witness/fence-writer-domain.sh", "k3s.service")
+    allow_canada_last_resort: bool = False
     old_writer_fence_command: tuple[str, ...] = ()
     kubectl: str = "kubectl"
 
@@ -190,6 +197,8 @@ def _split_role_deployments(value: str) -> tuple[tuple[str, str], ...]:
 def build_adapters(config: SiteConfig) -> PromotionAdapters:
     if config.site not in VALID_SITES:
         raise ValueError(f"site must be one of {', '.join(VALID_SITES)}")
+    if config.site == "canada" and not config.allow_canada_last_resort:
+        raise ValueError("canada is a last-resort site; promotion requires --allow-canada-last-resort")
     if not config.old_writer_fence_command:
         raise ValueError("old-writer fence command must not be empty (required before promotion)")
 
@@ -315,6 +324,12 @@ def make_parser(env: dict[str, str] | None = None) -> argparse.ArgumentParser:
     parser.add_argument("--platform-secret", default="pantry-bot-platform")
     parser.add_argument("--database-url-key", default="PANTRY_DATABASE_URL")
     parser.add_argument("--old-writer-fence-command", default=environment.get("OLD_WRITER_FENCE_COMMAND"))
+    parser.add_argument(
+        "--allow-canada-last-resort",
+        action="store_true",
+        default=environment.get("CANADA_LAST_RESORT") == "1",
+        help="permit a one-shot canada promotion (last-resort site; never in serve mode)",
+    )
     parser.add_argument("--fence-command", default="/usr/local/lib/failover-witness/fence-writer-domain.sh k3s.service")
     parser.add_argument("--promote-timeout", type=int, default=60, dest="promote_timeout")
     parser.add_argument("--rollout-timeout", type=int, default=180, dest="rollout_timeout")
@@ -364,11 +379,14 @@ def config_from_args(args: argparse.Namespace) -> SiteConfig:
         fence_command=_shlex_tuple(args.fence_command),
         old_writer_fence_command=_shlex_tuple(args.old_writer_fence_command or ""),
         kubectl=args.kubectl,
+        allow_canada_last_resort=args.allow_canada_last_resort,
     )
 
 
 def run() -> None:
     args = make_parser().parse_args()
+    if args.site == "canada" and not args.once:
+        raise SystemExit("canada is a last-resort site; serve mode refused (--once required)")
     config = config_from_args(args)
     promoter = SitePromoter(build_adapters(config))
     if not args.once:

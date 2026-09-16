@@ -88,6 +88,27 @@ equivalent home and Oracle overlay capacity and WebSocket reconnect tests pass.
 In the route adapter inputs it stays OFF (`route_state: standby-excluded` and
 absent from `application_routes`) so promotion cannot republish it.
 
+## Canada is last resort, never a failover target
+
+Home and Oracle are always preferred over Canada. Canada is a last-resort
+recovery site only: there is no automated controller for it, no systemd
+instance is ever installed for it, and live routing is never published to it
+during ordinary failover.
+
+- `scripts/pantrybot-promote-site.sh` refuses `PROMOTION_SITE=canada` unless the
+  operator action token `CANADA_LAST_RESORT_CONFIRM` is present AND both
+  site-dark probes `CANADA_LAST_RESORT_HOME_GATE` and
+  `CANADA_LAST_RESORT_ORACLE_GATE` exit 0 (home and Oracle dark). The gates are
+  private, host-level probes only; a healthy public route is not proof a site is
+  dead (see the "public health is not failover proof" notes above).
+- `site_neutral_promoter.py` refuses canada without `--allow-canada-last-resort`
+  and refuses canada serve mode entirely (`--once` only). The flag is
+  single-pass: it never keeps a lease.
+- `observability/failover-witness/publish-cloudflare-routes.sh` refuses a canada
+  route publish without the same `CANADA_LAST_RESORT_CONFIRM` token.
+- The full procedure is `docs/recovery/runbooks/pantrybot-canada-last-resort.md`;
+  restore-normal runs always return routing to home or Oracle.
+
 ## Validation
 
 Before enabling the routes, verify:
