@@ -193,14 +193,20 @@ inputs file (`canada` or `oracle`); the promoting site's tunnels receive their
 recorded routes and every other site's tunnels are set to an `http_status:404`
 standby, so a standby origin can never be exposed by a partial publish.
 
-The adapter switches only the per-site application tunnels for
-`mods.greeniespantry.uk` and `overlay.greeniespantry.uk`.
-`commands.greeniespantry.uk` is served by the dedicated active-active
-`PantryBot-Commands` tunnel (`c0015a8b-3f9e-4af9-b172-a97b882b4b28`) and
+The adapter parks and excludes the per-site application tunnels for
+`mods.greeniespantry.uk` and `overlay.greeniespantry.uk`. `mods` is served by
+the dedicated active-active `PantryBot-Mods` tunnel (one connector on home and
+one on Oracle) and is managed outside this adapter, exactly like
+`commands.greeniespantry.uk` on the dedicated active-active
+`PantryBot-Commands` tunnel (`c0015a8b-3f9e-4af9-b172-a97b882b4b28`);
 `oauth.greeniespantry.uk` stays on the shared `PantryBot` tunnel
 (`59569621-7067-4146-a0e8-5ed84b7f9538`) for the single home Authentik writer
-decision (#329); neither hostname is in the adapter inputs. The template inputs
-are `cloudflare-route-inputs.example.json`; the live file on Oracle is
+decision (#329). None of those hostnames are in the adapter routes.
+`overlay.greeniespantry.uk` stays OFF this pass (`route_state: standby-excluded`
+and absent from `application_routes`) until equivalent home and Oracle overlay
+capacity and WebSocket reconnect tests pass, so neither per-site tunnel carries
+mods/overlay routes and both are parked at `http_status:404`. The template
+inputs are `cloudflare-route-inputs.example.json`; the live file on Oracle is
 `/etc/failover-witness/cloudflare-route-inputs.json` and is validated by
 `tests/pantrybot-routing-contract-test.sh`.
 

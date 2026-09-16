@@ -3,8 +3,11 @@
 This is the routing contract for the split PantryBot public UI. Cloudflare
 Tunnel hostnames are managed outside Git, so this file records the required
 entries and the live split. `commands.greeniespantry.uk` is served by the
-dedicated active-active commands tunnel; the remaining private/OAuth routes
-stay on the shared tunnel.
+dedicated active-active commands tunnel
+(`c0015a8b-3f9e-4af9-b172-a97b882b4b28`) and `mods.greeniespantry.uk` by the
+dedicated active-active mods tunnel (connectors on home and Oracle); the
+remaining private/OAuth routes stay on the shared tunnel. The mods cutover
+sequence is recorded in [PANTRYBOT-MODS-TUNNEL-PLAN.md](./PANTRYBOT-MODS-TUNNEL-PLAN.md).
 
 ## Viewer command guide
 
@@ -30,6 +33,16 @@ Route:
 ```text
 mods.greeniespantry.uk/* -> http://pantry-private-site.pantry-bot.svc:3000
 ```
+
+This hostname is served by the dedicated active-active mods tunnel, mirroring
+the commands tunnel pattern: one cloudflared connector on home and one on
+Oracle, both pinned to
+`cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf`,
+with the tunnel ingress resolving to the local
+`pantry-private-site.pantry-bot.svc.cluster.local:3000` in each cluster. DNS is
+a proxied CNAME to the tunnel's `cfargotunnel.com` target. The per-site
+application tunnels and the route adapter no longer switch this hostname; the
+mods tunnel must not contain `oauth`, `commands`, `overlay`, or a wildcard.
 
 The private UI serves browser assets and proxies `/mod/api`, `/login`, and
 `/oauth/callback` to `pantry-private-api`. The API origin owns moderator
@@ -72,6 +85,8 @@ This origin serves the static browser-source assets and WebSocket upgrade on
 the same hostname. It is backed by PostgreSQL reconnect snapshots and the
 fenced overlay outbox lane; the Cloudflare route must not be enabled until
 equivalent home and Oracle overlay capacity and WebSocket reconnect tests pass.
+In the route adapter inputs it stays OFF (`route_state: standby-excluded` and
+absent from `application_routes`) so promotion cannot republish it.
 
 ## Validation
 
@@ -86,7 +101,9 @@ Before enabling the routes, verify:
 - `oauth.greeniespantry.uk/login/broadcaster` and `/login/bot` reach the
   Authentik login flow before forwarding to PantryBot.
 - `overlay.greeniespantry.uk/` returns the overlay shell and WebSocket upgrade
-  remains reachable after reconnect.
+  remains reachable after reconnect — but only after the capacity pass; in this
+  pass it remains OFF (`route_state: standby-excluded` in the route adapter
+  inputs, absent from `application_routes`).
 - Both home and Oracle origins expose equivalent routes before automatic failover is enabled.
 
 ## Free routing proof harness

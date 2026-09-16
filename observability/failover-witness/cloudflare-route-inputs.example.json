@@ -2,32 +2,33 @@
   "account_id": "0d22ee71e5473142b1678cb7005f80f8",
   "resource": "pantry:postgres",
   "notes": [
-    "Switches only mods/overlay between the per-site application tunnels.",
-    "commands.greeniespantry.uk is served by the dedicated PantryBot-Commands",
-    "tunnel (c0015a8b-3f9e-4af9-b172-a97b882b4b28), which is active-active and",
-    "managed outside this adapter. oauth.greeniespantry.uk stays on the shared",
-    "PantryBot tunnel (59569621-7067-4146-a0e8-5ed84b7f9538) for the single home",
-    "Authentik writer decision (#329); this adapter must never move it.",
+    "mods.greeniespantry.uk is served by the dedicated active-active PantryBot-Mods",
+    "tunnel (one cloudflared connector on home and one on Oracle, pinned image,",
+    "per-site ingress to pantry-private-site, DNS CNAME) and is managed outside this",
+    "adapter, mirroring the PantryBot-Commands tunnel",
+    "(c0015a8b-3f9e-4af9-b172-a97b882b4b28). The per-site application tunnels no",
+    "longer carry the mods or overlay hostnames; both sites park at http_status:404.",
+    "overlay.greeniespantry.uk is OFF (route_state standby-excluded and absent from",
+    "application_routes) until equivalent home and Oracle overlay capacity and",
+    "WebSocket reconnect tests pass; keeping it out of application_routes is what",
+    "guarantees promotion cannot republish it.",
+    "oauth.greeniespantry.uk stays on the shared PantryBot tunnel",
+    "(59569621-7067-4146-a0e8-5ed84b7f9538) for the single home Authentik writer",
+    "decision (#329); this adapter must never move it.",
     "Identifiers only; API tokens stay in /etc/failover-witness/cloudflare-token."
   ],
   "sites": {
     "oracle": {
       "application_tunnel_id": "30dde1eb-e625-4dd4-b5ac-2d385a1b7336",
       "application_hostnames": [],
-      "application_routes": [
-        {"hostname": "mods.greeniespantry.uk", "service": "http://pantry-private-site.pantry-bot.svc.cluster.local:3000"},
-        {"hostname": "overlay.greeniespantry.uk", "service": "http://pantry-overlay.pantry-bot.svc.cluster.local:8080"}
-      ],
+      "application_routes": [],
       "route_state": "standby-excluded"
     },
     "canada": {
       "connector_tunnel_id": "8392cd48-c1bf-437b-ac03-3c4b4acd321e",
       "application_hostnames": [],
-      "application_routes": [
-        {"hostname": "mods.greeniespantry.uk", "service": "http://127.0.0.1:18081"},
-        {"hostname": "overlay.greeniespantry.uk", "service": "http://127.0.0.1:18082"}
-      ],
-      "route_state": "active"
+      "application_routes": [],
+      "route_state": "standby-excluded"
     }
   }
 }
