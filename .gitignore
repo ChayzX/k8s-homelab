@@ -3,11 +3,10 @@ paper.jar
 *.pyc
 __pycache__/
 
-# Beads / Dolt files (added by bd init)
-.dolt/
-*.db
+# retired Beads/Dolt issue database (removed 2026-09-15; use GitHub Issues)
+.beads/
+.beads.backup-pre-recovery/
 .beads-credential-key
-.beads/proxieddb/
 
 # Generated graphify knowledge-graph output (regenerate with /graphify)
 graphify-out/
