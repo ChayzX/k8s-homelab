@@ -172,6 +172,44 @@ probe threshold and confirmed Oracle's primary probe independently. A real
 home-loss promotion and controlled return-home rehearsal remain required
 before treating automatic failover as fully proven.
 
+## Cloudflare route adapter
+
+`cloudflare_route_adapter.py` publishes the active PantryBot site's public
+routes and excludes every standby origin. Its CLI contract matches the
+deployed `publish-cloudflare-routes.sh` wrapper:
+
+```sh
+python3 cloudflare_route_adapter.py \
+  --inputs /etc/failover-witness/cloudflare-route-inputs.json \
+  --active oracle --apply
+```
+
+`--apply` is required to mutate tunnel configurations; without it the adapter
+prints the changes it would make. The Cloudflare API token is read from
+`CLOUDFLARE_API_TOKEN` or, on the wrapped hosts, from the root-owned
+`/etc/failover-witness/cloudflare-token` file (override with
+`CLOUDFLARE_API_TOKEN_FILE`). Choose `--active` from the site names in the
+inputs file (`canada` or `oracle`); the promoting site's tunnels receive their
+recorded routes and every other site's tunnels are set to an `http_status:404`
+standby, so a standby origin can never be exposed by a partial publish.
+
+The adapter switches only the per-site application tunnels for
+`mods.greeniespantry.uk` and `overlay.greeniespantry.uk`.
+`commands.greeniespantry.uk` is served by the dedicated active-active
+`PantryBot-Commands` tunnel (`c0015a8b-3f9e-4af9-b172-a97b882b4b28`) and
+`oauth.greeniespantry.uk` stays on the shared `PantryBot` tunnel
+(`59569621-7067-4146-a0e8-5ed84b7f9538`) for the single home Authentik writer
+decision (#329); neither hostname is in the adapter inputs. The template inputs
+are `cloudflare-route-inputs.example.json`; the live file on Oracle is
+`/etc/failover-witness/cloudflare-route-inputs.json` and is validated by
+`tests/pantrybot-routing-contract-test.sh`.
+
+Run the adapter tests with:
+
+```sh
+python3 observability/failover-witness/test_cloudflare_route_adapter.py
+```
+
 ## PantryBot PostgreSQL transport
 
 The repository also contains a guarded transport pair for the home PantryBot
