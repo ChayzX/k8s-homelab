@@ -107,6 +107,7 @@ def send_discord_alert(title, description, color=0xE74C3C):
 
 def kubectl(*args, timeout=30, check=True):
     """Run kubectl and return stdout. Raises on non-zero when check=True."""
+    # oculum-ignore-next-line [dangerous_function]: fixed kubectl argv assembled from validated local config; shell=False and timeout-bounded
     proc = subprocess.run(
         [KUBECTL, *args],
         capture_output=True,

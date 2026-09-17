@@ -171,6 +171,7 @@ def build_adapters(args: argparse.Namespace) -> PromotionAdapters:
             _kubectl("-n", args.namespace, "rollout", "status", f"deployment/{deployment}", "--timeout=180s")
 
     def fence() -> None:
+        # oculum-ignore-next-line [dangerous_function]: operator-supplied fence executable is argv-only and timeout-bounded
         subprocess.run(
             [args.fence_command, "k3s.service"],
             check=True,
@@ -178,6 +179,7 @@ def build_adapters(args: argparse.Namespace) -> PromotionAdapters:
         )
 
     def fence_old_writer() -> None:
+        # oculum-ignore-next-line [dangerous_function]: validated argv from explicit operator fence configuration; no shell
         subprocess.run(old_writer_fence_command, check=True, timeout=30)
 
     return PromotionAdapters(acquire, is_primary, promote, switch_endpoint, enable_roles, fence, renew, ready, fence_old_writer)

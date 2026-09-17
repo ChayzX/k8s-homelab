@@ -9,6 +9,7 @@ import watcher
 
 # The retired monolith must not regain a functional endpoint probe while the
 # namespace remains monitored for its replacement workloads.
+# oculum-ignore-next-line [dangerous_function]: test fixture invokes fixed bash script with no external input
 runtime_config = subprocess.run(
     [
         "bash",
@@ -259,13 +260,19 @@ reconcile_session.post.assert_not_called()
 
 # A partial Kubernetes/Loki collection must never reconcile active alerts.
 original_restart_check = watcher.check_restart_loops
+original_workload_check = watcher.check_workload_health
+original_node_check = watcher.check_node_health
 original_log_check = watcher.check_log_errors
+original_external_check = watcher.check_external_health
 original_flush = watcher.flush_operations_alerts
 original_reconcile = watcher.reconcile_operations
 original_started_at = watcher._reconciliation_started_at
 try:
     watcher.check_restart_loops = Mock(return_value=(False, {"restart:" + "c" * 64}))
+    watcher.check_workload_health = Mock(return_value=(True, set()))
+    watcher.check_node_health = Mock(return_value=(True, set()))
     watcher.check_log_errors = Mock(return_value=(True, {"log:" + "d" * 64}))
+    watcher.check_external_health = Mock(return_value=(True, set()))
     watcher.flush_operations_alerts = Mock()
     watcher.reconcile_operations = Mock()
     watcher.run_checks_once()
@@ -283,7 +290,10 @@ try:
     )
 finally:
     watcher.check_restart_loops = original_restart_check
+    watcher.check_workload_health = original_workload_check
+    watcher.check_node_health = original_node_check
     watcher.check_log_errors = original_log_check
+    watcher.check_external_health = original_external_check
     watcher.flush_operations_alerts = original_flush
     watcher.reconcile_operations = original_reconcile
     watcher._reconciliation_started_at = original_started_at
