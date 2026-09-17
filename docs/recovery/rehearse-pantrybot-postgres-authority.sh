@@ -97,7 +97,7 @@ fencing_epoch=$(validate_fence_proof)
 fence_finished=$(date +%s)
 
 kubectl --context "$ORACLE_CONTEXT" -n "$ORACLE_NS" exec "$oracle_pod" -- sh -ec \
-  "pg_ctl -D /var/lib/postgresql/data promote"
+  "su postgres -c 'pg_ctl -D /var/lib/postgresql/data promote'"
 kubectl --context "$ORACLE_CONTEXT" -n "$ORACLE_NS" exec "$oracle_pod" -- sh -ec \
   "until [ \"\$(psql -U pantry -d pantry -Atc 'SELECT NOT pg_is_in_recovery();')\" = 't' ]; do sleep 1; done"
 kubectl --context "$ORACLE_CONTEXT" -n "$ORACLE_NS" label pod "$oracle_pod" pantrybot.postgres/role=primary --overwrite >/dev/null
