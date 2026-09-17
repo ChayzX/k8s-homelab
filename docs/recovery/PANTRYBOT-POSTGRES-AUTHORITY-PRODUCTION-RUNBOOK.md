@@ -1,8 +1,18 @@
 # PantryBot production PostgreSQL authority bootstrap
 
-**Status:** home authority bootstrap applied and verified on 2026-09-10. This
-does not change the legacy PantryBot Deployment, move Minecraft, or claim HA
-promotion.
+**Bootstrap status:** home authority bootstrap was applied and verified on
+2026-09-10. This document describes the bootstrap artifact, not the current
+production writer. As of the 2026-09-17 maintenance audit, Oracle
+(`100.78.181.15`) is the sole verified writable PantryBot PostgreSQL authority;
+home is the return/standby path, and the Canada Docker database is stopped and
+fenced as a stale historical branch. This does not move Minecraft or claim
+automatic HA promotion.
+
+The current authority state is deliberately recorded here because a healthy
+home bootstrap pod or Service is not evidence that home currently owns the
+writer lease. Before any production cutover, reconcile the live endpoint
+Secret, fencing epoch, replication direction, and route publication against
+GitHub Issues `ChayzX/pantry-bot#147` and `ChayzX/k8s-homelab#191`.
 
 This path creates one PostgreSQL authority in the existing `pantry-bot`
 namespace. The pod is pinned to `chasebot`, uses the `local-path` StorageClass
