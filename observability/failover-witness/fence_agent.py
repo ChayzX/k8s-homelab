@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from typing import Callable, Any
 from urllib import request
 
+from command_policy import parse_operator_command
+
 
 @dataclass(frozen=True)
 class AuthorityToken:
@@ -115,9 +117,10 @@ def run() -> None:
         )
         return result.get("ok") is True
 
-    command = shlex.split(args.fence_command)
-    if not command:
-        raise SystemExit("--fence-command must not be empty")
+    try:
+        command = parse_operator_command(args.fence_command, "--fence-command")
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
 
     def fence() -> None:
         # oculum-ignore-next-line [dangerous_function]: explicit operator fence argv; shell execution is disabled and timeout is bounded
