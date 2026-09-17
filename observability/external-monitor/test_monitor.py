@@ -241,6 +241,7 @@ assert reason == "stale"
 with tempfile.TemporaryDirectory() as directory:
     state_file = Path(directory) / "state.json"
     state_file.write_text(json.dumps(receipt_state))
+    # oculum-ignore-next-line [dangerous_function]: test invokes a fixed Python fixture with controlled temp-file argv
     probe = subprocess.run(
         [
             sys.executable,
