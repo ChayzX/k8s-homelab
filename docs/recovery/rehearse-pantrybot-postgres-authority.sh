@@ -67,6 +67,7 @@ apply_with_password() {
   local context=$1 manifest=$2 namespace=$3
   sed "s/replace-at-apply/$REHEARSAL_PASSWORD/g; s/replace-with-home-reachable-address/${HOME_PRIMARY_ADDRESS:?set HOME_PRIMARY_ADDRESS}/g" "$manifest" \
     | kubectl --context "$context" apply -f - >/dev/null
+  kubectl --context "$context" -n "$namespace" wait --for=create --timeout=180s pod -l app.kubernetes.io/name=pantry-postgres-authority
   kubectl --context "$context" -n "$namespace" wait --for=condition=ready pod -l app.kubernetes.io/name=pantry-postgres-authority --timeout=180s
 }
 
@@ -97,7 +98,7 @@ fencing_epoch=$(validate_fence_proof)
 fence_finished=$(date +%s)
 
 kubectl --context "$ORACLE_CONTEXT" -n "$ORACLE_NS" exec "$oracle_pod" -- sh -ec \
-  "pg_ctl -D /var/lib/postgresql/data promote"
+  "su postgres -c 'pg_ctl -D /var/lib/postgresql/data promote'"
 kubectl --context "$ORACLE_CONTEXT" -n "$ORACLE_NS" exec "$oracle_pod" -- sh -ec \
   "until [ \"\$(psql -U pantry -d pantry -Atc 'SELECT NOT pg_is_in_recovery();')\" = 't' ]; do sleep 1; done"
 kubectl --context "$ORACLE_CONTEXT" -n "$ORACLE_NS" label pod "$oracle_pod" pantrybot.postgres/role=primary --overwrite >/dev/null

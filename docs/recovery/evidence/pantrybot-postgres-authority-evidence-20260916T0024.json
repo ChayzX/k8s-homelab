@@ -1,0 +1,12 @@
+{
+  "candidate": "physical-postgres-streaming",
+  "production_changed": false,
+  "fence_proof_file": "operator-supplied",
+  "fencing_epoch": 1,
+  "primary_lsn_at_boundary": "0/30001E0",
+  "standby_replay_lsn_at_boundary": "0/303BC68",
+  "wal_lag_bytes_at_boundary": -244360.0,
+  "rto_seconds": 41,
+  "fence_seconds": 0,
+  "status": "passed only if the proof file demonstrates old-writer rejection"
+}
