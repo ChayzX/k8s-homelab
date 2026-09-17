@@ -67,3 +67,23 @@ ChaseBot host's writerless k3s maintenance mode. Keep PantryBot's
 gateway/worker/dispatcher at zero on Oracle until the first complete
 promotion, routing, stale-writer rejection, and return-home rehearsal is
 recorded in GitHub Issues #147 and #191.
+
+## Known hazard: fence scope includes home-return standby
+
+**Regression guard:** `test_failback_fence_scope_document_hazard_with_home_return` in
+`observability/failover-witness/test_pantry_postgres_fence.py`.
+
+The normal home fence (`fence-pantry-postgres.sh`) targets three StatefulSets:
+- `postgres-authority` (home writer)
+- `postgres-authority-home-failback` (temporary failback target)
+- `postgres-authority-home-return` (prepared standby)
+
+**Safety constraint:** The normal home fence must not be invoked during Oracle-to-home failback. Fencing Oracle requires a separate Oracle fence adapter before acquiring the home lease, while preserving `postgres-authority-home-return` on home so that standby replication back from the restored home primary is not destroyed.
+
+**Resolution path:**
+1. Failback must never invoke `fence-pantry-postgres.sh` directly.
+2. The failback sequence requires a separate Oracle fence adapter before acquiring the home lease.
+3. Any home-side fence adapter used during or after failback must preserve `postgres-authority-home-return`.
+
+**Verification:** Run `pytest observability/failover-witness/test_pantry_postgres_fence.py`
+to confirm the hazard is documented and the fence script behavior is unchanged.
