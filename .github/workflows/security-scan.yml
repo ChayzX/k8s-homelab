@@ -21,10 +21,11 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      # Pin third-party actions to immutable commits; update only after review.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Run Oculum Security Scan
-        uses: OculumDev/oculum-action@v1
+        uses: OculumDev/oculum-action@d43812a73db077d03caff16b7196607d8d6d87bf # v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
