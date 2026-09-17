@@ -1,0 +1,41 @@
+name: Create Oculum Security Baseline
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Create reviewed baseline
+        uses: OculumDev/oculum-action@d43812a73db077d03caff16b7196607d8d6d87bf # v1
+        with:
+          depth: cheap
+          baseline: create
+          fail-on: none
+          comment: false
+          sarif: false
+
+      - name: Verify baseline artifact
+        run: |
+          test -s .oculum/baseline.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('.oculum/baseline.json').read_text())
+          assert data.get('version') == 1
+          assert isinstance(data.get('findings'), list)
+          print(f"baseline_findings={len(data['findings'])}")
+          PY
+
+      - name: Upload baseline artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: oculum-baseline
+          path: .oculum/baseline.json
+          if-no-files-found: error
