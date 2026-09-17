@@ -46,6 +46,7 @@ def probe(command, label):
     # Configured argv is a trusted psql transport. SQL arrives on stdin; no shell
     # interpolation, connection strings or passwords are printed.
     try:
+        # oculum-ignore: command is an allowlisted psql/kubectl argv vector; shell execution is disabled.
         result = subprocess.run(command, input=SQL, text=True, capture_output=True, timeout=15)
     except (OSError, subprocess.TimeoutExpired):
         raise RuntimeError(f"{label} probe could not finish") from None
