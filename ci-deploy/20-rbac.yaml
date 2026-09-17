@@ -42,7 +42,8 @@
 # the new pod, verify image/start/readiness, and inspect recent startup logs.
 # No pod mutation or exec is granted.
 #
-# Explicitly NOT granted, anywhere in this file: pods/exec, secrets (any verb), any write verb on
+# Explicitly NOT granted, anywhere in this file: pods/exec, arbitrary secrets,
+# any write verb on
 # replicasets, delete/deletecollection on anything, and no rule ever omits an
 # apiGroups/resources/namespace scope to widen it. This is deliberately
 # narrower than opsbot's own bot RBAC (../opsbot/20-rbac.yaml), which needs
@@ -72,6 +73,17 @@ rules:
   - apiGroups: [""]
     resources: ["services"]
     verbs: ["get", "list", "watch"]
+  # The deploy workflow refreshes this one registry credential immediately
+  # before a component rollout. Scope by name so CI cannot read or mutate any
+  # application secret; create is necessarily namespace-scoped because the
+  # Kubernetes API does not apply resourceNames to create requests.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["ghcr-pull-secret"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
