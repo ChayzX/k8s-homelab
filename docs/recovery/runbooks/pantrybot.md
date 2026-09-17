@@ -151,3 +151,45 @@ live writer.
 - Cloudflare hostname configuration is external to these manifests.
 - The legacy SQLite deployment is a recovery path, not a second HA writer.
 - Do not put Minecraft or Cartwise into this failover sequence.
+
+## Fence adapters
+
+### Current production fence adapters
+
+| Adapter | Target | Status |
+|---|---|---|
+| `fence-pantry-postgres.sh` | Home `pantry-bot` namespace PostgreSQL StatefulSets | Installed/enabled |
+| `fence-canada-from-oracle.sh` | Canada writer (PowerShell) | Installed/enabled |
+
+### Oracle canada-standby-prep fence adapter (not yet installed)
+
+| Adapter | Target | Status |
+|---|---|---|
+| `fence-pantry-postgres-oracle.sh` | Oracle `pantrybot-canada-replica-prep` namespace `canada-standby-prep` StatefulSet, via fixed SSH transport | **Not yet installed/enabled** |
+
+The Oracle fence adapter runs on the home controller and targets only the
+`canada-standby-prep` StatefulSet in the `pantrybot-canada-replica-prep` namespace
+through a fixed, host-key-verified SSH command. It is designed to be production-safe
+and idempotent but requires explicit `--confirm` argument and a bounded timeout.
+
+**To enable** the Oracle Canada fence adapter, run the test suite first:
+
+```bash
+cd <homelab-repository>
+python3 observability/failover-witness/test_fence_pantry_postgres_oracle.py
+```
+
+Once validated, invoke the adapter with:
+
+```bash
+observability/failover-witness/fence-pantry-postgres-oracle.sh --confirm
+```
+
+The adapter will:
+- Scale `canada-standby-prep` replicas to 0
+- Delete `canada-standby-prep-0` if present
+- Wait for pod absence (default timeout: 45s)
+- Verify the service has no endpoints
+- Exit 0 on success, non-zero on any failure
+
+This adapter never touches PVCs, other namespaces, secrets, or routes.
