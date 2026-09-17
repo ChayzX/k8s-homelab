@@ -1,10 +1,13 @@
 # PantryBot commands-only Cloudflare Tunnel plan
 
-Status: live cutover complete. The dedicated `PantryBot-Commands` tunnel is
-active on home and Oracle, and `commands.greeniespantry.uk` now points to it.
-The shared tunnel retains the other routes but no longer contains the
-commands hostname. The cutover is not the remaining blocker for issue #148;
-the unchecked work is external site-loss and rollback evidence.
+Status: live cutover complete, automatic origin failover not verified. The
+dedicated `PantryBot-Commands` tunnel is active on home and Oracle, and
+`commands.greeniespantry.uk` points to it. The shared tunnel retains the other
+routes but no longer contains the commands hostname. A controlled Oracle
+commands-site loss on 2026-09-17 returned repeated HTTP 502 responses instead
+of selecting home capacity; Oracle was restored to 2/2 immediately. The
+cutover is complete, but automatic site failover remains an open gate for
+issue #148 and must not be inferred from dual connectors alone.
 
 ## Historical pre-cutover evidence captured 2026-09-11
 
@@ -54,13 +57,15 @@ migrated to the dedicated tunnel and re-verified on 2026-09-12.
 
 ## Remaining blocker for PantryBot issue #148
 
-The implementation and live route cutover are complete. The only unchecked
-acceptance work is to periodically verify the route during a site loss and to
-record an externally observed DNS/tunnel rollback and recovery exercise. That
-requires a controlled Cloudflare/DNS operation and live two-site failure
-window; it cannot be completed by repository-only changes or by adding another
-manifest. Do not create a second tunnel or re-run the cutover to satisfy this
-gate.
+The implementation and live route cutover are complete, but the controlled
+site-loss test failed to demonstrate automatic origin failover: when Oracle's
+commands Deployment was scaled to zero, the public hostname returned HTTP 502
+while home capacity remained available. The current tunnel connector model is
+therefore not a health-checked origin pool. Do not claim HA from connector
+count alone. Closing this gate requires a reviewed Cloudflare origin-failover
+design, credentials, and an externally observed before/after transition with
+measured convergence; do not re-run the cutover or add a second tunnel without
+that design.
 
 The original UUID and route inventory came from read-only inspection; the
 cutover was performed through the authenticated Cloudflare API. The tunnel
