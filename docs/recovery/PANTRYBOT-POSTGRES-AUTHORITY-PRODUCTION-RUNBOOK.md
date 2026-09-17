@@ -14,6 +14,17 @@ writer lease. Before any production cutover, reconcile the live endpoint
 Secret, fencing epoch, replication direction, and route publication against
 GitHub Issues `ChayzX/pantry-bot#147` and `ChayzX/k8s-homelab#191`.
 
+The Oracle recovery-preparation object is a special case during the current
+failover state: `pantrybot-canada-replica-prep/canada-standby-prep-0` is being
+used as the promoted Oracle writer on port `25443`, while its preparation
+manifest still carries the historical `standby` label and recovery-only
+readiness probe. Consequently, the pod may report `pg_is_in_recovery() = f`
+and `0/1` readiness while the endpoint is intentionally serving the current
+writer. Do not treat that readiness result or the `postgres-authority-standby`
+name as proof of standby status. Before another promotion or failback, either
+restore the object to recovery mode or apply a reviewed role-specific manifest;
+do not silently change the probe or labels during an incident.
+
 This path creates one PostgreSQL authority in the existing `pantry-bot`
 namespace. The pod is pinned to `chasebot`, uses the `local-path` StorageClass
 with one 8Gi `ReadWriteOnce` PVC, and is reached only through the stable
