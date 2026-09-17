@@ -14,6 +14,8 @@ jobs:
 
       - name: Create reviewed baseline
         uses: OculumDev/oculum-action@d43812a73db077d03caff16b7196607d8d6d87bf # v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           depth: cheap
           baseline: create
