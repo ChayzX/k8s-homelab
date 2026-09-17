@@ -60,7 +60,8 @@ def _import_main_without_optional_dependencies():
     kubernetes.stream.stream = lambda *args, **kwargs: None
 
     health = types.SimpleNamespace(
-        start=Mock(), mark_ready=Mock(), start_background=Mock(return_value=Mock())
+        start=Mock(), mark_ready=Mock(), mark_not_ready=Mock(),
+        start_background=Mock(return_value=Mock())
     )
     modules = {
         "discord": discord,

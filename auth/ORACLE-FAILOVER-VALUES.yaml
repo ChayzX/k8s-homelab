@@ -1,0 +1,29 @@
+# Secret-free Oracle Authentik values used only after controlled promotion.
+# Do not deploy this while Oracle PostgreSQL reports recovery mode.
+global:
+  image:
+    tag: "2026.5.6"
+
+authentik:
+  enabled: true
+  existingSecret:
+    secretName: auth-authentik
+  postgresql:
+    enabled: false
+    host: auth-postgresql-standby.auth.svc.cluster.local
+    port: 5432
+    name: authentik
+    user: authentik
+
+postgresql:
+  enabled: false
+
+server:
+  replicas: 1
+  service:
+    type: ClusterIP
+
+worker:
+  replicas: 1
+  enablePrometheusMetrics: false
+  forceSync: false

@@ -1,0 +1,31 @@
+# Secret-free Home Authentik values for the normal interactive path.
+# The auth-authentik Secret is provisioned separately.
+global:
+  image:
+    tag: "2026.5.6"
+
+authentik:
+  enabled: true
+  existingSecret:
+    secretName: auth-authentik
+  postgresql:
+    enabled: false
+    host: auth-postgresql
+    port: 5432
+    name: authentik
+    user: authentik
+
+postgresql:
+  enabled: true
+
+server:
+  replicas: 1
+  service:
+    type: LoadBalancer
+    servicePortHttp: 9080
+    servicePortHttps: 9443
+
+worker:
+  replicas: 1
+  enablePrometheusMetrics: false
+  forceSync: false
