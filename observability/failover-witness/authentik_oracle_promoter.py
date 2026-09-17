@@ -26,6 +26,7 @@ from urllib import request
 from urllib.error import HTTPError
 
 from oracle_promoter import OraclePromoter, PromotionAdapters, _kubectl, _postgres_promote_command
+from command_policy import parse_operator_command
 
 
 AUTHENTIK_DEPLOYMENTS = (
@@ -60,9 +61,7 @@ def _patch_secret_key(namespace: str, secret_name: str, key: str, value: str) ->
 
 
 def build_adapters(args: argparse.Namespace) -> PromotionAdapters:
-    old_writer_fence_command = shlex.split(args.old_writer_fence_command)
-    if not old_writer_fence_command:
-        raise ValueError("--old-writer-fence-command must not be empty")
+    old_writer_fence_command = parse_operator_command(args.old_writer_fence_command, "--old-writer-fence-command")
 
     def acquire() -> dict[str, Any] | None:
         try:
@@ -171,9 +170,10 @@ def build_adapters(args: argparse.Namespace) -> PromotionAdapters:
             _kubectl("-n", args.namespace, "rollout", "status", f"deployment/{deployment}", "--timeout=180s")
 
     def fence() -> None:
+        fence_command = parse_operator_command(args.fence_command, "--fence-command")
         # oculum-ignore-next-line [dangerous_function]: operator-supplied fence executable is argv-only and timeout-bounded
         subprocess.run(
-            [args.fence_command, "k3s.service"],
+            [*fence_command, "k3s.service"],
             check=True,
             timeout=30,
         )

@@ -18,6 +18,8 @@ from typing import Any, Callable
 from urllib import request
 from urllib.error import HTTPError
 
+from command_policy import parse_operator_command
+
 
 ORACLE_PROMOTION_DEPLOYMENTS = (
     "pantry-commands-site",
@@ -405,9 +407,10 @@ def run() -> None:
     def fence_old_writer() -> None:
         if not args.old_writer_fence_command:
             raise RuntimeError("OLD_WRITER_FENCE_COMMAND is required before promotion")
-        command = shlex.split(args.old_writer_fence_command)
-        if not command:
-            raise RuntimeError("OLD_WRITER_FENCE_COMMAND must not be empty")
+        try:
+            command = parse_operator_command(args.old_writer_fence_command, "OLD_WRITER_FENCE_COMMAND")
+        except ValueError as error:
+            raise RuntimeError(str(error)) from error
         # oculum-ignore-next-line [dangerous_function]: explicit operator fence argv parsed without shell interpolation and timeout-bounded
         subprocess.run(command, check=True, timeout=30)
 
