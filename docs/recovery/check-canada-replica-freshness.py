@@ -28,6 +28,8 @@ SELECT json_build_object(
 ROLLBACK;
 """
 
+ALLOWED_PROBE_BINARIES = {"psql", "kubectl"}
+
 
 def lsn(value):
     if not isinstance(value, str) or not re.fullmatch(r"[0-9A-Fa-f]{1,8}/[0-9A-Fa-f]{1,8}", value):
@@ -39,6 +41,8 @@ def lsn(value):
 def probe(command, label):
     if not isinstance(command, list) or not command or not all(isinstance(item, str) for item in command):
         raise ValueError(f"{label} command must be an argument array")
+    if Path(command[0]).name not in ALLOWED_PROBE_BINARIES:
+        raise ValueError(f"{label} command must invoke psql or kubectl")
     # Configured argv is a trusted psql transport. SQL arrives on stdin; no shell
     # interpolation, connection strings or passwords are printed.
     try:

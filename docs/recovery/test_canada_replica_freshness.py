@@ -15,6 +15,13 @@ def sample_pair():
 source, standby = sample_pair()
 result = module.validate(source, standby, "123", "oracle_from_canada", 0, 10, 102)
 assert result["ok"] and result["promotion_authorized"] is False
+for unsafe_command in (["bash", "-c", "echo unsafe"], ["/tmp/psql-wrapper"]):
+    try:
+        module.probe(unsafe_command, "test")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"untrusted probe executable was accepted: {unsafe_command[0]}")
 for change in (
     {"in_recovery": False}, {"system_identifier": "wrong"}, {"receiver_timeline": 8},
     {"receiver_status": "stopped"}, {"replay_lsn": "1/FF"}, {"slot_name": "home_slot"},
