@@ -31,6 +31,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           depth: validated
-          fail-on: none
+          # Do not merge or publish a tree with an unsuppressed high/critical finding.
+          # Existing reviewed findings must be narrowly suppressed with rationale.
+          fail-on: high
           sarif: false
           oculum-api-key: ${{ secrets.OCULUM_API_KEY }}
