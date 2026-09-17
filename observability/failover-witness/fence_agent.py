@@ -120,6 +120,7 @@ def run() -> None:
         raise SystemExit("--fence-command must not be empty")
 
     def fence() -> None:
+        # oculum-ignore-next-line [dangerous_function]: explicit operator fence argv; shell execution is disabled and timeout is bounded
         subprocess.run(command, check=True, timeout=30)
 
     agent = FenceAgent(acquire, renew, fence, args.lease_seconds)

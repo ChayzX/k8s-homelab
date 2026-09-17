@@ -201,6 +201,7 @@ def _operations_ingest_key():
         return OPERATIONS_ALERT_INGEST_KEY
     if _operations_ingest_key_cache:
         return _operations_ingest_key_cache
+    # oculum-ignore-next-line [dangerous_function]: fixed kubectl argv; namespace and secret name are local configuration, shell=False
     result = subprocess.run(
         [
             "kubectl", "get", "secret", OPERATIONS_ALERT_INGEST_SECRET_NAME,
@@ -532,6 +533,7 @@ def deployment_rollout_active(deployments):
 
 
 def rollout_suppressed(namespace):
+    # oculum-ignore-next-line [dangerous_function]: fixed kubectl read-only query with configured namespace as an argv value
     result = subprocess.run(
         ["kubectl", "get", "deployments", "-n", namespace, "-o", "json"],
         capture_output=True, text=True, timeout=15,
@@ -551,6 +553,7 @@ def check_restart_loops():
     active_event_keys = set()
     collection_complete = True
     for namespace in WATCH_NAMESPACES:
+        # oculum-ignore-next-line [dangerous_function]: fixed kubectl read-only pod query; no shell interpolation
         result = subprocess.run(
             ["kubectl", "get", "pods", "-n", namespace, "-o", "json"],
             capture_output=True, text=True, timeout=15,
@@ -617,6 +620,7 @@ def functional_health_check(namespace, url, session=requests):
         service_namespace = cluster_host[: -len(cluster_suffix)].split(".")[1]
         try:
             remote_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            # oculum-ignore-next-line [dangerous_function]: fixed kubectl port-forward argv, loopback-only bind, no shell
             forwarder = subprocess.Popen(
                 [
                     "kubectl", "-n", service_namespace, "port-forward",
@@ -676,6 +680,7 @@ def check_workload_health():
     collection_complete = True
     for namespace in WATCH_NAMESPACES:
         namespace_has_waiting_failure = False
+        # oculum-ignore-next-line [dangerous_function]: fixed kubectl read-only pod query; no shell interpolation
         pods_result = subprocess.run(
             ["kubectl", "get", "pods", "-n", namespace, "-o", "json"],
             capture_output=True, text=True, timeout=15,
@@ -733,6 +738,7 @@ def check_workload_health():
                         ),
                     })
 
+        # oculum-ignore-next-line [dangerous_function]: fixed kubectl read-only deployment query; no shell interpolation
         deployments_result = subprocess.run(
             ["kubectl", "get", "deployments", "-n", namespace, "-o", "json"],
             capture_output=True, text=True, timeout=15,
@@ -870,6 +876,7 @@ def check_node_health():
     infra-level, so it always goes to the primary recipient only, not the
     per-namespace EXTRA_ALERT_RECIPIENTS list.
     """
+    # oculum-ignore-next-line [dangerous_function]: fixed kubectl read-only node query; no shell interpolation
     result = subprocess.run(
         ["kubectl", "get", "nodes", "-o", "json"],
         capture_output=True, text=True, timeout=15,

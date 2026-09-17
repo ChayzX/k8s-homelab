@@ -304,6 +304,7 @@ def run() -> None:
                         PANTRY_PROMOTION_EPOCH=str(generation.get("epoch", "")),
                         PANTRY_DATABASE_SYSTEM_IDENTIFIER=str(generation.get("system_identifier", "")),
                         PANTRY_RESUME_PRIMARY="true" if generation.get("resume") else "false")
+        # oculum-ignore-next-line [dangerous_function]: explicit operator hook is parsed to argv, never passed to a shell, and timeout-bounded
         subprocess.run(shlex.split(command), check=True, timeout=timeout, env=hook_env)
 
     def activation_kubectl(*arguments: str) -> str:
@@ -407,6 +408,7 @@ def run() -> None:
         command = shlex.split(args.old_writer_fence_command)
         if not command:
             raise RuntimeError("OLD_WRITER_FENCE_COMMAND must not be empty")
+        # oculum-ignore-next-line [dangerous_function]: explicit operator fence argv parsed without shell interpolation and timeout-bounded
         subprocess.run(command, check=True, timeout=30)
 
     adapters = PromotionAdapters(
