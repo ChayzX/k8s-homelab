@@ -84,10 +84,11 @@ freshness-monitor gate because the credential is still a workload credential.
   with verified size 13,727,556 bytes. The R2 write path must be retained in
   the documented backup procedure.
 - The recurring implementation is `scripts/authentik-postgres-backup.sh`; its
-  database target was corrected to `auth-postgresql-home-primary-0` and the
-  current `POSTGRES_PASSWORD` environment contract. No deployed timer or R2
-  sidecar is currently present on MinecraftMachine, so automated freshness and
-  remote-upload verification remain open.
+  repository target was corrected to `auth-postgresql-home-primary-0` and the
+  current `POSTGRES_PASSWORD` environment contract. MinecraftMachine still
+  has a 02:30 crontab entry, but it runs a stale checkout that has failed since
+  the primary rename; no successful automated backup has been recorded after
+  2026-09-13. R2 sidecar/upload freshness remains open.
 - Operations audit data is SQLite at `/data/operations.db`. A consistent
   Python `sqlite3.Connection.backup()` snapshot was verified locally and in R2
   at `recovery/operations/operations-20260909T044548Z.db.gz`; the recurring
