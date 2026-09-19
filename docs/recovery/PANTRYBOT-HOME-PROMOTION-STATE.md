@@ -9,7 +9,7 @@ live changes and remaining gates.
 - The failover witness resource is `pantry:postgres`.
 - Home (`MinecraftMachine`) holds the current authority lease after the stale
   Oracle writer was fenced.
-- Home PostgreSQL is `postgres-authority-home-return-0` in namespace
+- Home PostgreSQL is `postgres-authority-home-failback-0` in namespace
   `pantry-bot`; it is labeled `pantrybot.postgres/role=primary`.
 - The home service selector requires both the home PostgreSQL name and the
   `primary` role label.
@@ -57,11 +57,13 @@ pass.
 - The tracked Oracle adapter now accepts separate pod/service namespaces,
   PostgreSQL data directory, and manually managed Endpoints (`--manual-endpoint`)
   for the live `canada-standby-prep` topology. Its focused test suite passes
-  (21 tests), and the corrected source was installed on Oracle. Automatic
-  service enablement remains gated on reviewing the existing operator hook
-  commands; the verified one-shot rehearsal remains the production evidence.
+  (22 tests), and the corrected source plus a topology-pinned disabled systemd
+  drop-in are installed on Oracle. A fixed-identity composite old-writer fence
+  now dry-runs successfully against both home and Canada. Automatic service
+  enablement remains gated on the local service-check hook proving writable
+  authority and on a full live rehearsal using that composite fence; the
+  verified one-shot rehearsal remains the production evidence.
 - The deployed site-neutral promoter had a readiness bug in an earlier copy
   (`_kubectl` was referenced instead of its configured closure); the live copy
-  was backed up, corrected, and py_compile-validated. The source-level fix
-  must be carried into the tracked promoter implementation before the next
-  promotion rehearsal.
+  was backed up, corrected, and py_compile-validated. The tracked source and
+  deployed copy now match.

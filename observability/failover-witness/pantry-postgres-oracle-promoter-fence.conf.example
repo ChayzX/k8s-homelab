@@ -1,2 +1,5 @@
 [Service]
-Environment="OLD_WRITER_FENCE_COMMAND=/usr/bin/ssh -i /home/ubuntu/.ssh/gcp-witness-oracle -o BatchMode=yes -o StrictHostKeyChecking=yes sa_105559435168833655240@136.113.178.106 sudo /usr/local/lib/failover-witness/gcp-fence-home-writer.sh"
+# The composite adapter positively fences both the home writer and the
+# Canada recovery writer before Oracle promotion. Keep the command fixed and
+# explicitly confirmed; the adapter rejects any other target identity.
+Environment="OLD_WRITER_FENCE_COMMAND=/usr/local/lib/failover-witness/fence-old-writers-from-oracle.sh --confirm"

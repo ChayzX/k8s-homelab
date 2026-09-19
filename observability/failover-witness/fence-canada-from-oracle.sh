@@ -7,14 +7,28 @@ set -euo pipefail
 : "${CANADA_ADMIN_KEY:?CANADA_ADMIN_KEY is required}"
 : "${CANADA_FENCE_SCRIPT:?CANADA_FENCE_SCRIPT is required}"
 
+mode="${1:-}"
+[[ "$mode" == "--confirm" || "$mode" == "--dry-run" ]] && [[ "$#" == 1 ]] || {
+  echo 'canada_writer_fence=failed reason=explicit_confirmation_required' >&2
+  exit 2
+}
+
 case "$CANADA_ADDRESS" in
   100.104.83.28) ;;
   *) echo 'refusing unexpected Canada identity' >&2; exit 1 ;;
 esac
 
-ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes \
+ssh_args=( /usr/bin/ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes \
   -o ConnectTimeout=10 -i "$CANADA_ADMIN_KEY" "BotAdmin@$CANADA_ADDRESS" \
-  powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+)
+if [[ "$mode" == "--dry-run" ]]; then
+  "${ssh_args[@]}" powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+    -Command "if (-not (Test-Path -LiteralPath '$CANADA_FENCE_SCRIPT')) { exit 1 }"
+  echo 'canada_writer_fence=dry-run transport=verified'
+  exit 0
+fi
+
+"${ssh_args[@]}" powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
   -File "$CANADA_FENCE_SCRIPT" -ConfirmFence
 
 echo 'canada_writer_fence=verified'
