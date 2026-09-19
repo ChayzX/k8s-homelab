@@ -45,12 +45,24 @@ jobs:
         run: |
           set -euo pipefail
           mc_version='${{ inputs.minecraft_version }}'
+          build=''
           if [ -z "$mc_version" ]; then
-            mc_version="$(curl -fsSL https://fill.papermc.io/v3/projects/paper | jq -r '.versions | keys | sort_by(split(".") | map(tonumber)) | last')"
+            # The newest Paper version can be alpha-only. Walk versions in
+            # descending semantic order and select the first version with a
+            # published STABLE build instead of treating null as a build.
+            while IFS= read -r candidate; do
+              candidate_build="$(curl -fsSL "https://fill.papermc.io/v3/projects/paper/versions/${candidate}/builds" | jq -r '[.[] | select(.channel == "STABLE")] | max_by(.id).id // empty')"
+              if [ -n "$candidate_build" ]; then
+                mc_version="$candidate"
+                build="$candidate_build"
+                break
+              fi
+            done < <(curl -fsSL https://fill.papermc.io/v3/projects/paper | jq -r '.versions | keys | sort_by(split(".") | map(tonumber)) | reverse[]')
+          else
+            build="$(curl -fsSL "https://fill.papermc.io/v3/projects/paper/versions/${mc_version}/builds" | jq -r '[.[] | select(.channel == "STABLE")] | max_by(.id).id // empty')"
           fi
           test -n "$mc_version"; test "$mc_version" != null
-          build="$(curl -fsSL "https://fill.papermc.io/v3/projects/paper/versions/${mc_version}/builds" | jq -r '[.[] | select(.channel == "STABLE")] | max_by(.id) | .id')"
-          test "$build" != null
+          test -n "$build"; test "$build" != null
           paper_meta="$(curl -fsSL "https://fill.papermc.io/v3/projects/paper/versions/${mc_version}/builds/${build}")"
           # Paper's Fill v3 schema names the default server artifact
           # `server:default`; it is not an `application` download.
