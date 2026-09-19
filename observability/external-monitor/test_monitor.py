@@ -57,7 +57,7 @@ assert monitor.parse_expected_statuses("") == frozenset({200})
 check_names = {item.name for item in monitor.CHECKS}
 assert {"commands", "mods"}.issubset(check_names)
 assert next(item for item in monitor.CHECKS if item.name == "commands").url == "https://commands.greeniespantry.uk/"
-assert next(item for item in monitor.CHECKS if item.name == "mods").url == "https://mods.greeniespantry.uk/"
+assert next(item for item in monitor.CHECKS if item.name == "mods").url == "https://mods.greeniespantry.uk/mod/"
 assert next(item for item in monitor.CHECKS if item.name == "overlay").url == "https://overlay.greeniespantry.uk/"
 
 # External continuity alerts have durable, per-check identities.  A changed

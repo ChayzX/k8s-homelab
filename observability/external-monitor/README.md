@@ -33,9 +33,9 @@ read-only monitoring credential is provisioned. Do not reuse a workload
 credential with write/delete access for this purpose.
 
 The default public checks include the split PantryBot surfaces:
-`commands.greeniespantry.uk` and `mods.greeniespantry.uk`. These validate that
-the OAuth-free viewer command guide and private moderator UI routes are
-reachable independently of the operator OAuth hostname. HTTP success and
+`commands.greeniespantry.uk/` and `mods.greeniespantry.uk/mod/`. These validate
+that the OAuth-free viewer command guide and documented private moderator UI
+entrypoint are reachable independently of the operator OAuth hostname. HTTP success and
 redirect responses are accepted because the monitor tests origin availability,
 not authenticated browser state.
 
