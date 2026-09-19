@@ -65,7 +65,10 @@ spec:
                 -D /var/lib/postgresql/data -Fp -Xs -P -R -S "$PRIMARY_SLOT_NAME"
               printf '%s:*:*:%s:%s\n' "$PRIMARY_HOST" "$REPLICATION_USER" "$REPLICATION_PASSWORD" > /var/lib/postgresql/data/.pgpass
               chmod 600 /var/lib/postgresql/data/.pgpass
+              sed -i '/^primary_conninfo[[:space:]]*=/d; /^primary_slot_name[[:space:]]*=/d' /var/lib/postgresql/data/postgresql.auto.conf
               sed -i 's#/tmp/pgpass#/var/lib/postgresql/data/.pgpass#g' /var/lib/postgresql/data/postgresql.auto.conf
+              printf "%s\n" "primary_conninfo = 'user=$REPLICATION_USER passfile=/var/lib/postgresql/data/.pgpass host=$PRIMARY_HOST port=$PRIMARY_PORT application_name=pantry-oracle-standby'" >> /var/lib/postgresql/data/postgresql.auto.conf
+              printf "%s\n" "primary_slot_name = '$PRIMARY_SLOT_NAME'" >> /var/lib/postgresql/data/postgresql.auto.conf
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data

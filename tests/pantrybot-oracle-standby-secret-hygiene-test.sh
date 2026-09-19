@@ -5,10 +5,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 for manifest in \
   "$ROOT/docs/recovery/pantrybot-postgres-standby-oracle.yaml" \
   "$ROOT/docs/recovery/pantrybot-postgres-authority-standby-oracle.yaml" \
-  "$ROOT/docs/recovery/pantrybot-postgres-standby-reseed-candidate.yaml"
+  "$ROOT/docs/recovery/pantrybot-postgres-standby-reseed-candidate.yaml" \
+  "$ROOT/docs/recovery/pantrybot-postgres-home-return.yaml"
 do
   grep -q 'data/.pgpass' "$manifest"
   grep -q 'chmod 600 /var/lib/postgresql/data/.pgpass' "$manifest"
+  grep -q 'primary_conninfo' "$manifest"
+  grep -q 'primary_slot_name' "$manifest" || [[ "$manifest" == *authority-standby-oracle.yaml ]]
   grep -q "sed -i 's#/tmp/pgpass#/var/lib/postgresql/data/.pgpass#g'" "$manifest"
   if grep -Eq 'primary_conninfo.*password=' "$manifest"; then
     echo "plaintext primary_conninfo password found in $manifest" >&2
