@@ -11,9 +11,9 @@ make Authentik a prerequisite for recovery.
   is not an equal public origin while its local PostgreSQL is a standby. This
   is active-active application capacity, not multi-primary database operation.
 - Authentik PostgreSQL has one writer per fencing epoch. The current live
-  authority is Oracle (`pg_is_in_recovery() = false`); home has no active
-  Authentik PostgreSQL writer. Promotion and old-writer fencing are not yet
-  proven end-to-end.
+  authority snapshot is home (`pg_is_in_recovery() = false`); Oracle is the
+  streaming standby (`pg_is_in_recovery() = true`). Promotion and old-writer
+  fencing are not yet proven end-to-end.
 - Oracle and ChaseBot use SSSD over LDAPS and resolve `chase` and
   `posix-admins` (UID/GID 2018/27557).
 - Local SSH/key recovery remains independent of Authentik.
@@ -42,6 +42,21 @@ authentication/account/password/session modules.
 The sudo rules are root-owned `/etc/sudoers.d/90-authentik-posix-admins` files;
 `visudo -cf` passed on both hosts and effective policy was checked for `chase`.
 No password or token values were recorded.
+
+### Live PostgreSQL authority snapshot — 2026-09-19
+
+Read-only queries against the live clusters reported:
+
+- home `auth-postgresql-home-primary-0`: PostgreSQL 17.10,
+  `pg_is_in_recovery() = false`;
+- Oracle `auth-postgresql-standby-0`: PostgreSQL 17.10,
+  `pg_is_in_recovery() = true`;
+- home `pg_stat_replication`: application `auth-oracle-standby`, state
+  `streaming`, asynchronous; write/flush/replay lag was approximately 0.13s at
+  capture.
+
+This is replication/freshness evidence only. It does not prove promotion,
+fencing, session reconstruction, routing convergence, or failback.
 
 An Authentik/PostgreSQL dump restore into an isolated PostgreSQL target reached
 the Authentik readiness endpoint with HTTP 200. The isolated target used no
