@@ -22,6 +22,18 @@ live changes and remaining gates.
   new PVC, standby.signal, the unique pantry_oracle_standby slot, and a
   streaming WAL receiver. Its separate service is not an application writer
   endpoint; the home service remains authoritative.
+- **Active reseed endpoint (live override):** Oracle's reseed candidate reaches
+  the current home writer through `100.84.89.87:30432`, the
+  `pantry-bot/postgres-authority-replication` NodePort. While home is the
+  writer, that live Service selector is explicitly
+  `app.kubernetes.io/name=pantry-postgres-authority-home-return,
+  pantrybot.postgres/role=primary`. This is an operational override of the
+  future-failback manifest in
+  `pantrybot-postgres-home-return.yaml`, whose selector intentionally remains
+  `role=standby`. Do **not** apply that manifest over the live Service while
+  the home writer is active: doing so would silently remove the replication
+  endpoint from the writable pod. Reconcile the selector and capture fresh
+  Endpoints/EndpointSlices before changing replication direction.
 - The home readiness probe expects `pg_is_in_recovery() = f`; the former
   standby-only seeding init container is not used after promotion.
 
