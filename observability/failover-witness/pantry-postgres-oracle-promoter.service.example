@@ -12,7 +12,13 @@ Type=simple
 # In normal operation the shared pantry:postgres lease is held by the active site and
 # this process only waits. It promotes Oracle after the lease expires, but only
 # after the independent old-writer fence command succeeds.
-ExecStart=/usr/bin/python3 /usr/local/lib/failover-witness/oracle_promoter.py
+ExecStart=/usr/bin/python3 /usr/local/lib/failover-witness/oracle_promoter.py \
+  --pod-namespace pantrybot-canada-replica-prep \
+  --service-namespace pantry-bot \
+  --pod canada-standby-prep-0 \
+  --service postgres-authority-standby \
+  --data-directory /var/lib/postgresql/data/pgdata \
+  --manual-endpoint
 EnvironmentFile=/etc/failover-witness/postgres-fence.env
 # The environment file must define these non-empty, executable commands:
 # OLD_WRITER_FENCE_COMMAND

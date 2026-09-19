@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Tests for the guarded Oracle PostgreSQL promotion sequence."""
 
+from pathlib import Path
+
 from oracle_promoter import (
     ActivationJournal,
     AuthorityLost,
@@ -9,6 +11,16 @@ from oracle_promoter import (
     PromotionAdapters,
     _postgres_promote_command,
 )
+
+
+def test_service_example_targets_live_oracle_standby_topology() -> None:
+    service = Path(__file__).with_name("pantry-postgres-oracle-promoter.service.example").read_text()
+    assert "--pod-namespace pantrybot-canada-replica-prep" in service
+    assert "--service-namespace pantry-bot" in service
+    assert "--pod canada-standby-prep-0" in service
+    assert "--service postgres-authority-standby" in service
+    assert "--data-directory /var/lib/postgresql/data/pgdata" in service
+    assert "--manual-endpoint" in service
 
 
 def test_promotion_endpoint_restart_covers_every_database_consumer() -> None:
