@@ -13,7 +13,9 @@ R2_CONTAINER=r2-sync
 BACKUP_ROOT=/mnt/nvme/recovery/postgresql
 R2_PREFIX='r2:pantry-bot-backups/recovery/auth-postgresql'
 RETENTION_DAYS=30
-RCLONE_NETWORK_FLAGS='--timeout=2m --contimeout=15s --retries=2 --low-level-retries=5'
+KUBECTL_DISCOVERY_TIMEOUT=30s
+KUBECTL_READY_TIMEOUT=45s
+UPLOAD_TIMEOUT=300s
 
 mkdir -p "$BACKUP_ROOT"
 chmod 700 "$BACKUP_ROOT"
@@ -41,21 +43,61 @@ mv "$tmp" "$local_path"
 # Keep a verified local recovery point even when the optional R2 sidecar is
 # unavailable. Return non-zero so the scheduler/monitor still records the
 # remote-upload gate as failed; never claim a remote backup that did not exist.
-R2_POD="$(kubectl get pod -n "$R2_NAMESPACE" -l "$R2_SELECTOR" -o jsonpath='{.items[0].metadata.name}')"
+R2_POD="$(timeout --kill-after=5s "$KUBECTL_DISCOVERY_TIMEOUT" kubectl get pod \
+  -n "$R2_NAMESPACE" -l "$R2_SELECTOR" --field-selector=status.phase=Running \
+  -o jsonpath='{.items[0].metadata.name}')"
 if [[ -z "$R2_POD" ]]; then
   echo "backup warning: local backup verified but R2 sidecar is unavailable: $local_path" >&2
   exit 2
 fi
+if ! timeout --kill-after=5s "$KUBECTL_READY_TIMEOUT" kubectl wait \
+  -n "$R2_NAMESPACE" --for=condition=Ready --timeout=30s "pod/$R2_POD"; then
+  echo "backup warning: local backup verified but R2 sidecar is not Ready: $R2_POD" >&2
+  exit 2
+fi
 
 echo "uploading $name to R2"
-timeout 300s kubectl exec -i -n "$R2_NAMESPACE" "$R2_POD" -c "$R2_CONTAINER" -- sh -c \
-  "cat > /tmp/$name && rclone copyto /tmp/$name '$R2_PREFIX/$name' --config=/dev/null --s3-no-check-bucket $RCLONE_NETWORK_FLAGS && rm -f /tmp/$name" \
-  < "$local_path"
+remote_tmp="/tmp/$name"
+cleanup_remote() {
+  timeout --kill-after=5s 30s kubectl exec -n "$R2_NAMESPACE" "$R2_POD" \
+    -c "$R2_CONTAINER" -- rm -f -- "$remote_tmp" >/dev/null 2>&1 || true
+}
+trap cleanup_remote EXIT
 
-remote_size="$(timeout 60s kubectl exec -n "$R2_NAMESPACE" "$R2_POD" -c "$R2_CONTAINER" -- \
-  rclone size "$R2_PREFIX/$name" --config=/dev/null --s3-no-check-bucket $RCLONE_NETWORK_FLAGS \
-  | awk '/Total size:/ {print $3; exit}')"
-test -n "$remote_size"
+# `kubectl exec -i` is prone to hanging while streaming a large dump through
+# the exec channel. kubectl cp uses the pod's tar implementation instead; the
+# rclone operation is then a separate bounded, observable command.
+timeout --kill-after=15s "$UPLOAD_TIMEOUT" kubectl cp "$local_path" \
+  "$R2_NAMESPACE/$R2_POD:$remote_tmp" -c "$R2_CONTAINER"
+
+timeout --kill-after=15s "$UPLOAD_TIMEOUT" kubectl exec -n "$R2_NAMESPACE" \
+  "$R2_POD" -c "$R2_CONTAINER" -- sh -ceu '
+    tmp_path="$1"
+    remote_path="$2"
+    expected_size="$3"
+    tmp_dir="${tmp_path%/*}"
+    remote_dir="${remote_path%/*}"
+    remote_name="${remote_path##*/}"
+    cleanup() { rm -f -- "$tmp_path"; }
+    trap cleanup EXIT HUP INT TERM
+    rclone copyto "$tmp_path" "$remote_path" --config=/dev/null \
+      --s3-no-check-bucket --timeout=2m --contimeout=15s --retries=2 \
+      --low-level-retries=5
+    # Verify the remote object using the backend hash, not just a successful
+    # HTTP upload. Fail closed if the provider cannot return a comparable hash.
+    # rclone check compares directory trees; constrain both sides to this
+    # exact basename rather than passing an object path as a filesystem root.
+    rclone check "$tmp_dir" "$remote_dir" --one-way --include "$remote_name" \
+      --s3-no-check-bucket --timeout=2m --contimeout=15s --retries=2 \
+      --low-level-retries=5
+    remote_size="$(rclone size "$remote_path" --json --config=/dev/null \
+      --s3-no-check-bucket --timeout=2m --contimeout=15s --retries=2 \
+      --low-level-retries=5 | awk -F: '\''/"bytes"/ {gsub(/[^0-9]/, "", $2); print $2; exit}'\'')"
+    test "$remote_size" = "$expected_size"
+    echo "remote_size=$remote_size"
+  ' sh "$remote_tmp" "$R2_PREFIX/$name" "$size"
+
+remote_size="$size"
 find "$BACKUP_ROOT" -type f -name 'authentik-*.dump.gz' -mtime +"$RETENTION_DAYS" -delete
 
 sha256sum "$local_path"
