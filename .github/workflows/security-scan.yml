@@ -20,7 +20,10 @@ concurrency:
 
 jobs:
   scan:
-    runs-on: ubuntu-latest
+    # Use the repo-scoped homelab runner for routine scans so normal CI does
+    # not consume hosted Actions minutes. This job is read-only and does not
+    # receive cluster credentials.
+    runs-on: [self-hosted, homelab-ci]
     steps:
       # Pin third-party actions to immutable commits; update only after review.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5

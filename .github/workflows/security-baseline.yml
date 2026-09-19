@@ -9,7 +9,8 @@ permissions:
 
 jobs:
   baseline:
-    runs-on: ubuntu-latest
+    # Manual, read-only baseline review on the repo-scoped homelab runner.
+    runs-on: [self-hosted, homelab-ci]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
