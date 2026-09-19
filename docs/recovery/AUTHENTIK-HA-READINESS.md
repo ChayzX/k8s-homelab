@@ -113,11 +113,13 @@ requires the external fencing, promotion, readiness, and rollback gates below.
 5. For issue #202, prove PostgreSQL promotion, measured RPO/RTO, old-writer
    fencing, session behavior, routing, and rollback without split-brain.
 
-Until these gates have issue evidence, Authentik remains Oracle-primary for
-database authority while both sites may serve application traffic. Returning
-authority to home requires the documented fence/promote/endpoint/rollback
-sequence; routing must not direct writes to a standby before that sequence has
-completed its fencing, promotion, endpoint switching, and readiness checks.
+Until these gates have issue evidence, Authentik remains home-primary for
+database authority while both sites may serve application capacity. Oracle is
+the streaming standby and is not an application write authority. Moving
+authority to Oracle, or returning it to home after a promotion, requires the
+documented fence/promote/endpoint/rollback sequence; routing must not direct
+writes to a standby before that sequence has completed its fencing, promotion,
+endpoint switching, and readiness checks.
 
 ## Safe verification commands
 
