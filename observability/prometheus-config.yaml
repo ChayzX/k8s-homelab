@@ -203,11 +203,11 @@ data:
           # targetPort 3000.
           - targets: ["grafana.observability.svc.cluster.local:3002"]
 
-      # promtail runs as a DaemonSet, so its pod IP is not stable. Scrape
-      # it through its headless-ish ClusterIP Service on 9080.
-      - job_name: promtail
+      # Alloy is the active log shipper. Scrape its health/metrics endpoint
+      # through a stable Service; the legacy Promtail target is retired.
+      - job_name: alloy-logs
         static_configs:
-          - targets: ["promtail.observability.svc.cluster.local:9080"]
+          - targets: ["alloy-logs.observability.svc.cluster.local:12345"]
 
       # ---------------------------------------------------------------
       # DROPPED FROM THE COMPOSE CONFIG, on purpose:
