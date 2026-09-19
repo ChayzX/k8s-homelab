@@ -50,8 +50,10 @@ if [[ -z "$R2_POD" ]]; then
   echo "backup warning: local backup verified but R2 sidecar is unavailable: $local_path" >&2
   exit 2
 fi
-if ! timeout --kill-after=5s "$KUBECTL_READY_TIMEOUT" kubectl wait \
-  -n "$R2_NAMESPACE" --for=condition=Ready --timeout=30s "pod/$R2_POD"; then
+R2_READY="$(timeout --kill-after=5s "$KUBECTL_READY_TIMEOUT" kubectl get pod \
+  -n "$R2_NAMESPACE" "$R2_POD" \
+  -o jsonpath='{.status.containerStatuses[?(@.name=="r2-sync")].ready}')"
+if [[ "$R2_READY" != true ]]; then
   echo "backup warning: local backup verified but R2 sidecar is not Ready: $R2_POD" >&2
   exit 2
 fi

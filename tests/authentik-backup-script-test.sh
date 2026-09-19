@@ -24,7 +24,7 @@ grep -q -- '--s3-no-check-bucket' "$SCRIPT" || fail "missing scoped-bucket uploa
 grep -q 'rclone check' "$SCRIPT" || fail "missing remote hash verification"
 grep -q 'rclone size' "$SCRIPT" || fail "missing exact remote size verification"
 grep -q -- '--json' "$SCRIPT" || fail "missing JSON remote size verification"
-grep -q -- '--for=condition=Ready' "$SCRIPT" || fail "missing sidecar readiness gate"
+grep -q 'containerStatuses' "$SCRIPT" || fail "missing sidecar container readiness gate"
 
 local_line="$(grep -n 'mv "\$tmp" "\$local_path"' "$SCRIPT" | cut -d: -f1)"
 r2_line="$(grep -n '^R2_POD=' "$SCRIPT" | cut -d: -f1)"
