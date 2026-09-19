@@ -41,8 +41,11 @@ pass.
   verified immutable images imported from the Oracle containerd cache or a
   locally built public-site target; credentials were not copied or invented.
 - Oracle application roles remain stopped while its old writer is fenced.
-- Controlled PostgreSQL failback to Oracle, followed by replication-direction
-  verification, is still required before declaring database HA complete.
+- Controlled Oracle promotion and home failback have now been exercised with
+  runtime roles stopped during the ownership transitions. Oracle acquired a
+  witness epoch and became writable; home then reacquired authority, promoted
+  the caught-up ChaseBot standby, switched the database URL, and restored all
+  home runtime roles. Oracle was reseeded afterward and is streaming again.
 - A prepared failback standby now runs on ChaseBot from a fresh PVC and
   streams from the home primary (`pg_is_in_recovery()=t`, WAL slot
   `pantry_home_failback`). Its service has no endpoint while it is standby;
@@ -51,11 +54,11 @@ pass.
   Tailscale `100.84.89.87:30432`. It is Ready and streaming with slot
   `oracle_from_home`; the home primary reports that slot active. Oracle
   application roles remain stopped while this standby is validated.
-- Oracle promotion is not yet safe to invoke through the legacy adapter: it
-  still assumes the former namespace/service and PostgreSQL data path. The
-  deployed site-neutral helper has the configured-kubectl closure fix, but a
-  source-level Oracle adapter integration must be completed before a writer
-  cutover or failback rehearsal.
+- The legacy automatic Oracle adapter still assumes the former namespace,
+  service, and PostgreSQL data path. The rehearsal used guarded one-shot
+  promotion/fencing commands while runtime roles were stopped. A tracked
+  source-level adapter integration is still needed to make that exact
+  promotion path unattended and repeatable.
 - The deployed site-neutral promoter had a readiness bug in an earlier copy
   (`_kubectl` was referenced instead of its configured closure); the live copy
   was backed up, corrected, and py_compile-validated. The source-level fix
