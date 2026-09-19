@@ -1,12 +1,14 @@
 # PantryBot production PostgreSQL authority bootstrap
 
 **Bootstrap status:** home authority bootstrap was applied and verified on
-2026-09-10. This document describes the bootstrap artifact, not the current
-production writer. As of the 2026-09-17 maintenance audit, Oracle
-(`100.78.181.15`) is the sole verified writable PantryBot PostgreSQL authority;
-home is the return/standby path, and the Canada Docker database is stopped and
-fenced as a stale historical branch. This does not move Minecraft or claim
-automatic HA promotion.
+2026-09-10. This document describes the bootstrap artifact and the current
+home production writer. As of the 2026-09-19 maintenance audit, home
+(`MinecraftMachine`) is the sole writable PantryBot PostgreSQL authority.
+Oracle has a separately named, read-only reseed candidate that is continuously
+streaming from home; the canonical Oracle standby object remains stopped while
+its stale PVC is retained. Canada remains fenced from database authority and
+external route ownership. This does not move Minecraft or claim automatic HA
+promotion.
 
 The current authority state is deliberately recorded here because a healthy
 home bootstrap pod or Service is not evidence that home currently owns the
@@ -14,16 +16,12 @@ writer lease. Before any production cutover, reconcile the live endpoint
 Secret, fencing epoch, replication direction, and route publication against
 GitHub Issues `ChayzX/pantry-bot#147` and `ChayzX/k8s-homelab#191`.
 
-The Oracle recovery-preparation object is a special case during the current
-failover state: `pantrybot-canada-replica-prep/canada-standby-prep-0` is being
-used as the promoted Oracle writer on port `25443`, while its preparation
-manifest still carries the historical `standby` label and recovery-only
-readiness probe. Consequently, the pod may report `pg_is_in_recovery() = f`
-and `0/1` readiness while the endpoint is intentionally serving the current
-writer. Do not treat that readiness result or the `postgres-authority-standby`
-name as proof of standby status. Before another promotion or failback, either
-restore the object to recovery mode or apply a reviewed role-specific manifest;
-do not silently change the probe or labels during an incident.
+No Oracle or Canada object is currently an application writer. The
+`postgres-authority-standby-reseed-0` candidate uses a fresh PVC and the
+`pantry_oracle_standby` slot, and its readiness probe requires
+`pg_is_in_recovery() = t`. Do not treat the stopped
+`postgres-authority-standby` object or its retained PVC as a valid standby
+until it is deliberately replaced from a verified backup.
 
 This path creates one PostgreSQL authority in the existing `pantry-bot`
 namespace. The pod is pinned to `chasebot`, uses the `local-path` StorageClass
@@ -146,10 +144,10 @@ non-production experiments. They must not be changed into a production
 promotion mechanism by editing this bootstrap path.
 
 The Oracle standby candidate is maintained separately in
-`pantrybot-postgres-standby-oracle.yaml`. It uses the encrypted Oracle forward
-on `100.78.181.15:25432` and the `pantry_oracle_standby` physical slot. The
-standby is a read-only recovery copy; it must not receive PantryBot writes or
-side-effect roles until the source-fencing gate passes.
+`pantrybot-postgres-standby-reseed-candidate.yaml`. It uses the encrypted
+Oracle forward on `100.78.181.15:25432` and the `pantry_oracle_standby`
+physical slot. The standby is a read-only recovery copy; it must not receive
+PantryBot writes or side-effect roles until the source-fencing gate passes.
 
 ## Scope guard
 
