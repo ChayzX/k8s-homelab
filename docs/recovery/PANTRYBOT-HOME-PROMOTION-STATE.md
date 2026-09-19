@@ -43,6 +43,10 @@ pass.
 - Oracle application roles remain stopped while its old writer is fenced.
 - Controlled PostgreSQL failback to Oracle, followed by replication-direction
   verification, is still required before declaring database HA complete.
+- A prepared failback standby now runs on ChaseBot from a fresh PVC and
+  streams from the home primary (`pg_is_in_recovery()=t`, WAL slot
+  `pantry_home_failback`). Its service has no endpoint while it is standby;
+  only the replication NodePort selects the current home primary.
 - The deployed site-neutral promoter had a readiness bug in an earlier copy
   (`_kubectl` was referenced instead of its configured closure); the live copy
   was backed up, corrected, and py_compile-validated. The source-level fix
