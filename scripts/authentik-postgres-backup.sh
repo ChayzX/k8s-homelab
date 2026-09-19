@@ -22,9 +22,6 @@ chmod 700 "$BACKUP_ROOT"
 exec 9>"/run/lock/homelab-authentik-backup.lock"
 flock -n 9 || { echo 'backup already running'; exit 0; }
 
-R2_POD="$(kubectl get pod -n "$R2_NAMESPACE" -l "$R2_SELECTOR" -o jsonpath='{.items[0].metadata.name}')"
-test -n "$R2_POD"
-
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 name="authentik-${stamp}.dump.gz"
 tmp="$(mktemp "$BACKUP_ROOT/.${name}.XXXXXX")"
@@ -41,12 +38,21 @@ test "$size" -gt 1000000
 chmod 600 "$tmp"
 mv "$tmp" "$local_path"
 
+# Keep a verified local recovery point even when the optional R2 sidecar is
+# unavailable. Return non-zero so the scheduler/monitor still records the
+# remote-upload gate as failed; never claim a remote backup that did not exist.
+R2_POD="$(kubectl get pod -n "$R2_NAMESPACE" -l "$R2_SELECTOR" -o jsonpath='{.items[0].metadata.name}')"
+if [[ -z "$R2_POD" ]]; then
+  echo "backup warning: local backup verified but R2 sidecar is unavailable: $local_path" >&2
+  exit 2
+fi
+
 echo "uploading $name to R2"
-kubectl exec -i -n "$R2_NAMESPACE" "$R2_POD" -c "$R2_CONTAINER" -- sh -c \
+timeout 300s kubectl exec -i -n "$R2_NAMESPACE" "$R2_POD" -c "$R2_CONTAINER" -- sh -c \
   "cat > /tmp/$name && rclone copyto /tmp/$name '$R2_PREFIX/$name' --config=/dev/null --s3-no-check-bucket $RCLONE_NETWORK_FLAGS && rm -f /tmp/$name" \
   < "$local_path"
 
-remote_size="$(kubectl exec -n "$R2_NAMESPACE" "$R2_POD" -c "$R2_CONTAINER" -- \
+remote_size="$(timeout 60s kubectl exec -n "$R2_NAMESPACE" "$R2_POD" -c "$R2_CONTAINER" -- \
   rclone size "$R2_PREFIX/$name" --config=/dev/null --s3-no-check-bucket $RCLONE_NETWORK_FLAGS \
   | awk '/Total size:/ {print $3; exit}')"
 test -n "$remote_size"
