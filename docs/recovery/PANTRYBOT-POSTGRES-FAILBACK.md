@@ -75,15 +75,15 @@ closed:
 
 ## Current evidence and remaining gate
 
-The reverse encrypted transport, disposable `pg_basebackup -R` path, and live
-PVC cutover have been exercised in the maintenance window. Oracle was fenced
-and promoted, home was reseeded and promoted on return, the stable endpoint was
-restored, and Oracle was reseeded as a read-only standby afterward. The current
-normal writer is home; Oracle remains a standby. Keep PantryBot's
-gateway/worker/dispatcher at zero on Oracle while standby posture is active.
-Remaining gates are GHCR-authenticated component rollout, broader failure
-testing, and external-side-effect semantics; evidence is recorded in Issues
-#147 and #191.
+The reverse encrypted transport, disposable `pg_basebackup -R` path, and
+isolated PVC cutover have been exercised in the maintenance window. A live
+Oracle-to-home promotion/failback, endpoint cutover, stale-writer rejection,
+and return-direction reseed have **not** been proven end-to-end. The current
+normal writer is home; Oracle remains a read-only reseed candidate. Keep
+PantryBot's gateway/worker/dispatcher at zero on Oracle while standby posture
+is active. The remaining gates are controlled promotion/fencing/failback,
+broader failure testing, and external-side-effect semantics; evidence is
+recorded in Issues #147 and #191.
 
 ## Known hazard: fence scope includes home-return standby
 
