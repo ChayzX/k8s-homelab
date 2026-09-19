@@ -1,8 +1,9 @@
 # PantryBot SQLite-to-PostgreSQL migration runbook
 
-Status: preparation only. Do not use this runbook for production cutover until
-the PostgreSQL rehearsal and fencing evidence are attached to GitHub Issues
-#147 and #191.
+Status: SQLite/domain-state parity and lineage work remain incomplete. The
+PostgreSQL authority promotion/failback and fencing rehearsal is separately
+production-verified; do not interpret this migration runbook as evidence that
+the current production PostgreSQL state equals the retired SQLite state.
 
 ## Invariants
 

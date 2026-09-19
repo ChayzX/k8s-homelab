@@ -43,11 +43,13 @@ site replicas are Ready.
 
 ## Remaining gates
 
-- GHCR package authentication is still unavailable from home. Recovery uses
-  verified immutable images imported from the Oracle containerd cache or a
-  locally built public-site target; credentials were not copied or invented.
-- Oracle application roles remain stopped while its standby-prep database is
-  reseeded and validated.
+- The worker-only component rollout reached Kubernetes but immutable GHCR image
+  pulls returned HTTP 403. Cached home workers remain healthy; the failed
+  ReplicaSet is removed and the worker Deployment is paused. A dedicated
+  least-privilege `read:packages` credential and one successful rollout remain
+  open.
+- Oracle application roles remain stopped in standby posture after reseeding;
+  the standby reports `pg_is_in_recovery()=t` and caught-up receive/replay LSNs.
 - The corrected promoter completed the guarded Oracle promotion path with the
   composite home+Canada fence, replication gate, database promotion, service
   check, and route publication. The promoter remains disabled after the

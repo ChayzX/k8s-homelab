@@ -75,15 +75,15 @@ closed:
 
 ## Current evidence and remaining gate
 
-The reverse encrypted transport and disposable `pg_basebackup -R` path are
-already proven. The new failback target manifest and ordering controller are
-repository-ready and client-side dry-run clean. The current normal writer is
-home; Oracle remains a standby. The production PVC cutover has not been run
-yet: it requires the controlled maintenance window and the ChaseBot host's
-writerless k3s maintenance mode. Keep PantryBot's
-gateway/worker/dispatcher at zero on Oracle until the first complete
-promotion, routing, stale-writer rejection, and return-home rehearsal is
-recorded in GitHub Issues #147 and #191.
+The reverse encrypted transport, disposable `pg_basebackup -R` path, and live
+PVC cutover have been exercised in the maintenance window. Oracle was fenced
+and promoted, home was reseeded and promoted on return, the stable endpoint was
+restored, and Oracle was reseeded as a read-only standby afterward. The current
+normal writer is home; Oracle remains a standby. Keep PantryBot's
+gateway/worker/dispatcher at zero on Oracle while standby posture is active.
+Remaining gates are GHCR-authenticated component rollout, broader failure
+testing, and external-side-effect semantics; evidence is recorded in Issues
+#147 and #191.
 
 ## Known hazard: fence scope includes home-return standby
 
