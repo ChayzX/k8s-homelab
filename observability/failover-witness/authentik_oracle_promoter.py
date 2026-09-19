@@ -18,7 +18,6 @@ import argparse
 import base64
 import json
 import os
-import shlex
 import subprocess
 import time
 from typing import Any
@@ -33,6 +32,55 @@ AUTHENTIK_DEPLOYMENTS = (
     "auth-authentik-server",
     "auth-authentik-worker",
 )
+
+
+def _parse_local_authentik_fence_command(raw: str | None) -> tuple[str, ...]:
+    """Validate the local fence executable before any witness lease is used.
+
+    Authentik must not accidentally run one of the PantryBot fence adapters.
+    The executable is local to the Authentik writer domain, so unlike the
+    remote old-writer command it must also exist and be executable at startup.
+    """
+
+    if not raw or not raw.strip():
+        raise ValueError("--fence-command is required for Authentik promotion")
+    try:
+        command = parse_operator_command(raw, "--fence-command")
+    except ValueError as error:
+        raise ValueError(str(error)) from error
+    lowered = tuple(token.lower() for token in command)
+    if any("pantry" in token for token in lowered):
+        raise ValueError("--fence-command must not use a Pantry-only fence command")
+    executable = command[0]
+    if not os.path.isfile(executable) or not os.access(executable, os.X_OK):
+        raise ValueError(f"--fence-command executable is missing or not executable: {executable}")
+    return command
+
+
+def _authentik_target_ready(kubectl: Any, namespace: str, pod: str, service: str) -> bool:
+    """Check the target pod and Service without mutating the cluster.
+
+    This is deliberately a small, injectable probe so unit tests can exercise
+    the fail-closed behavior without a production kubeconfig or API server.
+    """
+
+    try:
+        kubectl("version", "--request-timeout=5s")
+        pod_document = json.loads(
+            kubectl("-n", namespace, "get", "pod", pod, "-o", "json")
+        )
+        if pod_document.get("status", {}).get("phase") != "Running":
+            return False
+        postgres_ready = any(
+            status.get("name") == "postgres" and status.get("ready") is True
+            for status in pod_document.get("status", {}).get("containerStatuses", [])
+        )
+        if not postgres_ready:
+            return False
+        kubectl("-n", namespace, "get", "service", service, "-o", "name")
+        return True
+    except (AttributeError, OSError, TypeError, ValueError, KeyError, subprocess.SubprocessError):
+        return False
 
 
 def _post(base_url: str, secret: str, path: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -62,6 +110,9 @@ def _patch_secret_key(namespace: str, secret_name: str, key: str, value: str) ->
 
 def build_adapters(args: argparse.Namespace) -> PromotionAdapters:
     old_writer_fence_command = parse_operator_command(args.old_writer_fence_command, "--old-writer-fence-command")
+    local_fence_command = _parse_local_authentik_fence_command(
+        getattr(args, "fence_command", None)
+    )
 
     def acquire() -> dict[str, Any] | None:
         try:
@@ -140,11 +191,7 @@ def build_adapters(args: argparse.Namespace) -> PromotionAdapters:
             return False
 
     def ready() -> bool:
-        try:
-            _kubectl("version", "--request-timeout=5s")
-            return True
-        except Exception:
-            return False
+        return _authentik_target_ready(_kubectl, args.namespace, args.pod, args.service)
 
     def switch_endpoint() -> None:
         selector = {"app.kubernetes.io/name": "auth-postgresql-standby", "authentik.postgres/role": "primary"}
@@ -170,10 +217,9 @@ def build_adapters(args: argparse.Namespace) -> PromotionAdapters:
             _kubectl("-n", args.namespace, "rollout", "status", f"deployment/{deployment}", "--timeout=180s")
 
     def fence() -> None:
-        fence_command = parse_operator_command(args.fence_command, "--fence-command")
         # oculum-ignore-next-line [dangerous_function]: operator-supplied fence executable is argv-only and timeout-bounded
         subprocess.run(
-            [*fence_command, "k3s.service"],
+            [*local_fence_command, "k3s.service"],
             check=True,
             timeout=30,
         )
@@ -204,7 +250,11 @@ def run() -> None:
     args = parser.parse_args()
     if not args.witness_url or not args.secret:
         raise SystemExit("WITNESS_URL and WITNESS_SHARED_SECRET are required")
-    promoter = OraclePromoter(build_adapters(args))
+    try:
+        adapters = build_adapters(args)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+    promoter = OraclePromoter(adapters)
     while not promoter.run_once():
         time.sleep(max(1, args.lease_seconds // 3))
     while promoter.renew_or_fence():
