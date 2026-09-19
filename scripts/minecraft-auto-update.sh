@@ -91,18 +91,18 @@
 # ---------------------------------------------------------------------------
 # This script's log() output goes to stdout; the crontab line at the bottom
 # redirects it to /home/chase/minecraft/logs/mc-updater.log. That directory
-# is bind-mounted read-only into the standalone observability/promtail
+# is bind-mounted read-only into the standalone observability/Alloy
 # container (see /home/chase/docker/observability/docker-compose.yml,
 # `/home/chase/minecraft/logs:/var/log/minecraft:ro`), so no new logging
 # infrastructure is needed to get this script's log lines onto disk there.
 #
-# Honest caveat: as of this writing, promtail's `minecraft` scrape job (see
-# monitoring/promtail/promtail-config.yaml) has a static `__path__` pointing
+# Honest caveat: as of this writing, Alloy's `minecraft` scrape job (see
+# monitoring/Alloy/Alloy-config.yaml) has a static `__path__` pointing
 # at exactly `/var/log/minecraft/latest.log` -- a single named file, not a
 # glob. mc-updater.log will land in the mounted directory and be readable
 # with `kubectl`-adjacent host tools, but it will NOT reach Loki until that
 # scrape config is changed to a glob (e.g. `/var/log/minecraft/*.log`) or
-# gets a dedicated job of its own. That promtail config lives outside this
+# gets a dedicated job of its own. That Alloy config lives outside this
 # repo and outside this task's scope -- flagging it here so it doesn't look
 # like a broken promise later.
 #

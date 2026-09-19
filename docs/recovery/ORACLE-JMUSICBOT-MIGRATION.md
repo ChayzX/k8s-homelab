@@ -90,7 +90,7 @@ stopping the agent:
 2. Capture the Oracle agent unit, k3s version, network addresses, and a list of
    current support workloads. The current Oracle workload set includes the
    shared Cloudflare connector, LDAP outpost, ServiceLB pods, node-exporter,
-   promtail, and Opsbot.
+   alloy, and Opsbot.
 3. Ensure home Cloudflare connector capacity is scheduled on
    `minecraftmachine` and chasebot; do not leave the shared tunnel with only
    one unverified connector.

@@ -1,8 +1,8 @@
-# Namespace for the observability stack (loki, promtail, prometheus,
+# Namespace for the observability stack (loki, alloy, prometheus,
 # grafana, kube-state-metrics, and the in-cluster monitoring components).
 #
 # Pod Security Admission is set to "privileged" DELIBERATELY, not by
-# omission: the promtail DaemonSet mounts hostPath volumes
+# omission: the Alloy DaemonSet reads pod logs through the Kubernetes API
 # (/var/log/pods, /var/log/containers, /home/chase/minecraft/logs) and
 # runs as UID 0 so it can read root-owned container log files. That
 # violates both the "baseline" and "restricted" PSA profiles. Every other

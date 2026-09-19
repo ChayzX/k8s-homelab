@@ -62,6 +62,13 @@ data:
               site: oracle
               role: dispatcher
 
+      - job_name: alloy-logs-oracle
+        static_configs:
+          - targets: ["alloy-logs.observability.svc.cluster.local:12345"]
+            labels:
+              site: oracle
+              role: logs
+
       - job_name: kubernetes-kubelet-oracle
         scheme: https
         tls_config:

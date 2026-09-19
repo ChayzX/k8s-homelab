@@ -691,7 +691,7 @@
       "id": 12,
       "type": "timeseries",
       "title": "Error Rate by Namespace",
-      "description": "Error-line volume per namespace (promtail extracts the level label). A red block here that lines up with a crash-loop bar above is the 'what actually broke' pairing for that outage.",
+      "description": "Error-line volume per namespace (Alloy extracts the level label). A red block here that lines up with a crash-loop bar above is the 'what actually broke' pairing for that outage.",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 43 },
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "targets": [
@@ -769,7 +769,7 @@
       "id": 14,
       "type": "logs",
       "title": "Recent Errors (live stream)",
-      "description": "Compact error-only stream, all namespaces, level label from promtail. Click a line to expand its labels. Head to the Logs dashboard for full search/filter controls.",
+      "description": "Compact error-only stream, all namespaces, level label from Alloy. Click a line to expand its labels. Head to the Logs dashboard for full search/filter controls.",
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 51 },
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "targets": [

@@ -11,8 +11,8 @@ effect of an unrelated apply.
 
 Every container's stdout/stderr is captured by containerd to
 `/var/log/containers/*.log` (symlinked from `/var/log/pods/<ns>_<pod>_<uid>/<container>/*.log`),
-which is exactly what promtail tails (see `observability/promtail-config.yaml`
-and the `promtail` DaemonSet's hostPath mount in ARCHITECTURE.md section 4).
+which is exactly what Alloy tails through the Kubernetes API (see
+`observability/alloy-logs-home.yaml`).
 kubelet — not containerd — owns rotation of these files, via two settings:
 
 | Setting | What it controls |
@@ -58,7 +58,7 @@ second configuration mechanism (a `KubeletConfiguration` file) for one setting.
 
 Roughly, yes — with ~11 containers across all namespaces (jmusicbot,
 jmusicbot-release-notifier, pantry-bot, cloudflared, loki, prometheus,
-grafana, uptime-kuma, promtail, kube-state-metrics, minecraft, keel), worst
+grafana, uptime-kuma, alloy, kube-state-metrics, minecraft), worst
 case is on the order of ~550Mi total, trivial next to the 20Gi/20Gi/10Gi PVCs
 already provisioned for Loki/Prometheus/Minecraft on the same HDD. This is
 **not an urgent risk** the way Loki's retention was (fix #1) — it's already a

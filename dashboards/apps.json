@@ -336,7 +336,7 @@
       "id": 11,
       "type": "logs",
       "title": "Minecraft Server Logs",
-      "description": "Paper/Log4j format, level extracted by promtail. Use the Logs dashboard for full severity-filter/search controls -- this is a fixed quick view scoped to this pod.",
+      "description": "Paper/Log4j format, level extracted by Alloy. Use the Logs dashboard for full severity-filter/search controls -- this is a fixed quick view scoped to this pod.",
       "gridPos": { "h": 10, "w": 24, "x": 6, "y": 20 },
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "{namespace=\"minecraft\"}", "maxLines": 1000 }],

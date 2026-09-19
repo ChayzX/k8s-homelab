@@ -99,7 +99,7 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # Stdout-only Log4j2 config — see log4j2.xml's own header for the full
 # rationale. Replaces Paper's bundled default (which also writes
 # logs/latest.log, unbounded, on the same PVC as the world) now that
-# containerd->promtail->Loki is the durable, retention-bounded copy.
+# containerd->Alloy->Loki is the durable, retention-bounded copy.
 COPY log4j2.xml /opt/minecraft/log4j2.xml
 RUN chmod 0755 /usr/local/bin/entrypoint.sh \
  && chmod 0444 /opt/minecraft/paper.jar /opt/minecraft/plugins/*.jar /opt/minecraft/rcon.jar /opt/minecraft/log4j2.xml
@@ -122,7 +122,7 @@ ENV MC_DATA_DIR=/data \
 #                              the 0.6 heap:limit ratio honest.
 #   -XX:MaxMetaspaceSize=256M  the other unbounded native region.
 #   -Dterminal.jline=false     no TTY in a pod; disable JLine and ANSI so stdout
-#   -Dterminal.ansi=false      is plain, line-oriented text that promtail and
+#   -Dterminal.ansi=false      is plain, line-oriented text that Alloy and
 #                              `kubectl logs` can parse without escape codes.
 #   -Dlog4j.configurationFile  points at the stdout-only config above instead
 #                              of Paper's bundled default, which also writes
