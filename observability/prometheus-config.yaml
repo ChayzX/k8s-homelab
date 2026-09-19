@@ -162,14 +162,33 @@ data:
         metrics_path: /metrics
         static_configs:
           - targets: ["pantry-private-api.pantry-bot.svc.cluster.local:3000"]
+            labels:
+              site: home
+              role: api
 
-      - job_name: canada-pantry-bot-api
+      - job_name: pantry-bot-gateway
         metrics_path: /metrics
         static_configs:
-          - targets: ["192.168.40.208:13101"]
+          - targets: ["pantry-twitch-gateway.pantry-bot.svc.cluster.local:3001"]
             labels:
-              site: canada
-              role: recovery
+              site: home
+              role: gateway
+
+      - job_name: pantry-bot-worker
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["pantry-chat-worker.pantry-bot.svc.cluster.local:3001"]
+            labels:
+              site: home
+              role: worker
+
+      - job_name: pantry-bot-dispatcher
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["pantry-twitch-dispatcher.pantry-bot.svc.cluster.local:3001"]
+            labels:
+              site: home
+              role: dispatcher
 
       # ---------------------------------------------------------------
       # The observability stack scraping itself

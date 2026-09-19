@@ -30,6 +30,38 @@ data:
         static_configs:
           - targets: ["kube-state-metrics.observability.svc.cluster.local:8080"]
 
+      - job_name: pantry-bot-api-oracle
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["pantry-private-api.pantry-bot.svc.cluster.local:3000"]
+            labels:
+              site: oracle
+              role: api
+
+      - job_name: pantry-bot-gateway-oracle
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["pantry-twitch-gateway.pantry-bot.svc.cluster.local:3001"]
+            labels:
+              site: oracle
+              role: gateway
+
+      - job_name: pantry-bot-worker-oracle
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["pantry-chat-worker.pantry-bot.svc.cluster.local:3001"]
+            labels:
+              site: oracle
+              role: worker
+
+      - job_name: pantry-bot-dispatcher-oracle
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["pantry-twitch-dispatcher.pantry-bot.svc.cluster.local:3001"]
+            labels:
+              site: oracle
+              role: dispatcher
+
       - job_name: kubernetes-kubelet-oracle
         scheme: https
         tls_config:
