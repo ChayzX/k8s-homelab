@@ -270,7 +270,7 @@ spec:
                   rclone copyto /tmp/.jmusicbot-r2-heartbeat \
                     r2:pantry-bot-backups/jmusicbot/.jmusicbot-r2-heartbeat \
                     --config=/dev/null --timeout=2m --contimeout=15s \
-                    --retries=2 --low-level-retries=5 --quiet
+                    --retries=2 --low-level-retries=5 --s3-no-check-bucket --quiet
                 fi
                 sleep 300
               done

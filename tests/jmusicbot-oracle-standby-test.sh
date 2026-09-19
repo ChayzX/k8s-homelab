@@ -54,6 +54,9 @@ assert "date -u +%Y-%m-%dT%H:%M:%SZ > /tmp/.jmusicbot-r2-heartbeat" in deploymen
 assert "rclone copyto /tmp/.jmusicbot-r2-heartbeat" in deployment, (
     "the owner must publish the heartbeat after a successful state sync"
 )
+assert "--s3-no-check-bucket" in deployment, (
+    "heartbeat upload must not require bucket-create permission"
+)
 PY
 
 echo "jmusicbot-oracle-active-active-test: all assertions passed"
