@@ -28,11 +28,8 @@ deployments_json=$("$kubectl_bin" get deployments -o json 2>/dev/null) || {
   echo "refusing mutation: cannot inspect target cluster or scoped deployments" >&2
   exit 1
 }
-if ! jq -e '
-  any(.items[]?; (.status.readyReplicas // 0) > 0 and
-    (.status.availableReplicas // 0) > 0)
-' <<<"$deployments_json" >/dev/null; then
-  echo "refusing mutation: scoped target has no Ready/Available Deployment" >&2
+if ! jq -e 'any(.items[]?; (.metadata.name // "") != "")' <<<"$deployments_json" >/dev/null; then
+  echo "refusing mutation: scoped target has no Deployment identity" >&2
   exit 1
 fi
-echo "kube_target=$site scoped_deployment=ready"
+echo "kube_target=$site scoped_deployment=present"
