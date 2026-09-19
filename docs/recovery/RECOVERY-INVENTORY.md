@@ -114,6 +114,25 @@ freshness-monitor gate because the credential is still a workload credential.
   AMD64-only, so any Oracle ARM64 deployment requires a multi-architecture
   image or an explicit AMD64 placement constraint.
 
+## Canada recovery host
+
+Canada is a Windows/WSL recovery host at Tailscale `100.104.83.28`, reached
+for administration through the MinecraftMachine proxy with the dedicated
+maintenance key. The BotAdmin profile has Docker Desktop and a pinned
+`PantryBotCanadaPrep` safe-stage bundle. The safe stage starts only the
+loopback-bound public and private site images, uses no authority or production
+secrets, and has been validated after a controlled reboot. Containers use
+`restart: unless-stopped`; a delayed `PantryBot Canada Safe Stage` logon task
+restarts the bundle after an interactive BotAdmin logon.
+
+The 2026-09-19 reboot test also showed that Docker Desktop itself did not
+start before an interactive user session, so unattended host-start recovery is
+not yet proven. Do not claim Canada as a fully unattended production recovery
+writer until a supported privileged Docker startup/autologon mechanism is
+installed and tested. Production database promotion, Twitch ownership, and
+external route publication remain separately gated by the witness/fencing
+protocol.
+
 ## Management-path remediation
 
 The exact root-gated chasebot remediation and rollback procedure is in
