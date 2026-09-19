@@ -10,6 +10,7 @@ from oracle_promoter import (
     OraclePromoter,
     PromotionAdapters,
     _postgres_promote_command,
+    _postgres_query_command,
 )
 
 
@@ -43,6 +44,12 @@ def test_postgres_promotion_runs_as_postgres_user() -> None:
         "-D",
         "/var/lib/postgresql/data",
         "promote",
+    )
+
+
+def test_postgres_query_pins_live_oracle_database_topology() -> None:
+    assert _postgres_query_command(25443, "pantry", "pantry", "select pg_is_in_recovery();") == (
+        "sh", "-ec", "psql -h 127.0.0.1 -p 25443 -U pantry -d pantry -Atc 'select pg_is_in_recovery();'"
     )
 
 

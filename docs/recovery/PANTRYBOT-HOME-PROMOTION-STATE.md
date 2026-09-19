@@ -41,15 +41,18 @@ pass.
   verified immutable images imported from the Oracle containerd cache or a
   locally built public-site target; credentials were not copied or invented.
 - Oracle application roles remain stopped while its old writer is fenced.
-- Controlled Oracle promotion and home failback have now been exercised with
-  runtime roles stopped during the ownership transitions. Oracle acquired a
-  witness epoch and became writable; home then reacquired authority, promoted
-  the caught-up ChaseBot standby, switched the database URL, and restored all
-  home runtime roles. Oracle was reseeded afterward and is streaming again.
-- A prepared failback standby now runs on ChaseBot from a fresh PVC and
-  streams from the home primary (`pg_is_in_recovery()=t`, WAL slot
-  `pantry_home_failback`). Its service has no endpoint while it is standby;
-  only the replication NodePort selects the current home primary.
+- A controlled rehearsal reached the guarded Oracle promotion path, but the
+  deployed promoter stopped before database mutation because its validation
+  query used absent container environment variables and its local-fence hook
+  still named an obsolete StatefulSet. No Oracle promotion was claimed from
+  that attempt; the home writer and runtime were restored and re-verified.
+- The previous failback PVC was verified to contain the authoritative home
+  primary data after the interrupted rehearsal. Its StatefulSet init guard was
+  restored to a fail-closed primary-data/standby-data check, the pod was
+  recreated without touching the PVC, and the live pod is labeled `primary`.
+  The service now has a Ready endpoint and reports
+  `pg_is_in_recovery()=f`; the original standby seeding manifest remains
+  standby-only for future fresh-PVC failback runs.
 - The fenced Oracle replica has also been reseeded from the home primary over
   Tailscale `100.84.89.87:30432`. It is Ready and streaming with slot
   `oracle_from_home`; the home primary reports that slot active. Oracle

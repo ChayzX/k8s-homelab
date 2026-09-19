@@ -92,6 +92,12 @@ spec:
           args:
             - |
               if [ -n "$(find /var/lib/postgresql/data -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+                if [ -f /var/lib/postgresql/data/standby.signal ]; then exit 0; fi
+                test -f /var/lib/postgresql/data/PG_VERSION || {
+                  echo 'refusing to start: existing PVC is not PostgreSQL data' >&2
+                  exit 1
+                }
+                echo 'using existing PostgreSQL primary data'
                 exit 0
               fi
               until pg_isready -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER"; do sleep 3; done

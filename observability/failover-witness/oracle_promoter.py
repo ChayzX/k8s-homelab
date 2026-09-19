@@ -273,6 +273,11 @@ def _postgres_promote_command(data_directory: str) -> tuple[str, ...]:
     return ("su-exec", "postgres", "pg_ctl", "-D", data_directory, "promote")
 
 
+def _postgres_query_command(port: int, user: str, database: str, query: str) -> tuple[str, ...]:
+    """Build a deterministic in-pod psql command for the live Oracle topology."""
+    return ("sh", "-ec", f"psql -h 127.0.0.1 -p {port} -U {shlex.quote(user)} -d {shlex.quote(database)} -Atc {shlex.quote(query)}")
+
+
 def run() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--witness-url", default=os.environ.get("WITNESS_URL"))
@@ -284,6 +289,9 @@ def run() -> None:
     parser.add_argument("--pod", default="postgres-authority-standby-0")
     parser.add_argument("--service", default="postgres-authority-standby")
     parser.add_argument("--data-directory", default="/var/lib/postgresql/data")
+    parser.add_argument("--postgres-port", type=int, default=int(os.environ.get("PANTRY_ORACLE_POSTGRES_PORT", "25443")))
+    parser.add_argument("--postgres-user", default=os.environ.get("PANTRY_ORACLE_POSTGRES_USER", "pantry"))
+    parser.add_argument("--postgres-database", default=os.environ.get("PANTRY_ORACLE_POSTGRES_DATABASE", "pantry"))
     parser.add_argument("--manual-endpoint", action="store_true", help="retain a manually managed Endpoints object instead of changing Service selectors")
     parser.add_argument("--old-writer-fence-command", default=os.environ.get("OLD_WRITER_FENCE_COMMAND"))
     parser.add_argument("--local-writer-fence-command", default=os.environ.get("LOCAL_WRITER_FENCE_COMMAND"))
@@ -340,12 +348,12 @@ def run() -> None:
         return result.get("ok") is True
 
     def promote(_token: dict[str, Any]) -> None:
-        recovery = _kubectl("-n", pod_namespace, "exec", args.pod, "--", "sh", "-ec", "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select pg_is_in_recovery();\"")
+        recovery = _kubectl("-n", pod_namespace, "exec", args.pod, "--", *_postgres_query_command(args.postgres_port, args.postgres_user, args.postgres_database, "select pg_is_in_recovery();"))
         if recovery == "t":
             activation_kubectl("-n", pod_namespace, "exec", args.pod, "--", *_postgres_promote_command(args.data_directory))
             deadline = time.monotonic() + 60
             while time.monotonic() < deadline:
-                if _kubectl("-n", pod_namespace, "exec", args.pod, "--", "sh", "-ec", "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select pg_is_in_recovery();\"") == "f":
+                if _kubectl("-n", pod_namespace, "exec", args.pod, "--", *_postgres_query_command(args.postgres_port, args.postgres_user, args.postgres_database, "select pg_is_in_recovery();")) == "f":
                     break
                 time.sleep(1)
             else:
@@ -356,7 +364,7 @@ def run() -> None:
 
     def is_primary() -> bool:
         try:
-            return _kubectl("-n", pod_namespace, "exec", args.pod, "--", "sh", "-ec", "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select pg_is_in_recovery();\"") == "f"
+            return _kubectl("-n", pod_namespace, "exec", args.pod, "--", *_postgres_query_command(args.postgres_port, args.postgres_user, args.postgres_database, "select pg_is_in_recovery();")) == "f"
         except Exception:
             return False
 
@@ -399,7 +407,7 @@ def run() -> None:
             journal.record(generation["epoch"], generation["system_identifier"], "fenced")
 
     def validate_generation(token: dict[str, Any]) -> None:
-        identity = _kubectl("-n", pod_namespace, "exec", args.pod, "--", "sh", "-ec", "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select system_identifier from pg_control_system();\"")
+        identity = _kubectl("-n", pod_namespace, "exec", args.pod, "--", *_postgres_query_command(args.postgres_port, args.postgres_user, args.postgres_database, "select system_identifier from pg_control_system();"))
         if not identity.isdigit():
             raise RuntimeError("target database identity is unknown")
         primary = is_primary()
