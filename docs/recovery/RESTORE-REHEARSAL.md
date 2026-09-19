@@ -114,16 +114,15 @@ The R2 upload requires Rclone's `--s3-no-check-bucket` option because the
 scoped credential may write the existing bucket but may not create buckets.
 An R2 download was verified at 13,727,556 bytes with SHA-256
 `351e38304f1ae37a7994420c7302dd3f702f1b57cf9fa6e71823eeda3537b7b2`.
-The source procedure is `scripts/authentik-postgres-backup.sh`. A 02:30
-crontab entry still exists on MinecraftMachine, but it runs a stale checkout
-and has failed since the Authentik primary rename; the current R2 upload path
-and automated freshness are not yet verified. The canonical implementation
+The source procedure is `scripts/authentik-postgres-backup.sh`. The 02:30
+crontab entry on MinecraftMachine now runs the corrected checkout; a fresh
+production-path run on 2026-09-20 uploaded
+`authentik-20260919T222509Z.dump.gz` successfully. The canonical implementation
 creates and verifies the local dump first, then selects a Running/Ready R2
 sidecar and uses `kubectl cp` instead of streaming the large dump through
 `kubectl exec -i`. The remote object is accepted only after bounded Rclone
-hash verification and an exact JSON byte-count check. Installing this version
-on the scheduled host and observing a successful fresh run remains an explicit
-production gate.
+hash verification and an exact JSON byte-count check. The local and remote
+byte counts matched at 47,137,647 bytes.
 Restore procedure:
 
 1. Download the selected R2 object to an isolated host.
