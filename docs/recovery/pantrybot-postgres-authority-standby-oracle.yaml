@@ -76,9 +76,9 @@ spec:
               PGPASSFILE=/tmp/pgpass pg_basebackup \
                 -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER" \
                 -D /var/lib/postgresql/data -Fp -Xs -P -R
-              printf "primary_conninfo = 'host=%s port=%s user=%s password=%s application_name=oracle-rehearsal'\n" \
-                "$PRIMARY_HOST" "$PRIMARY_PORT" "$REPLICATION_USER" "$REPLICATION_PASSWORD" \
-                >> /var/lib/postgresql/data/postgresql.auto.conf
+              printf '%s:*:*:%s:%s\n' "$PRIMARY_HOST" "$REPLICATION_USER" "$REPLICATION_PASSWORD" > /var/lib/postgresql/data/.pgpass
+              chmod 600 /var/lib/postgresql/data/.pgpass
+              sed -i 's#/tmp/pgpass#/var/lib/postgresql/data/.pgpass#g' /var/lib/postgresql/data/postgresql.auto.conf
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
