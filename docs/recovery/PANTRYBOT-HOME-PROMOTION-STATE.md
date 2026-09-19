@@ -15,12 +15,13 @@ live changes and remaining gates.
   `primary` role label.
 - `PANTRY_DATABASE_URL` points at the in-cluster home service.
 - The replication NodePort selector is pointed at the current primary
-  `home-return` pod for a future Oracle reseed. Oracle's Pantry standby
-  StatefulSet is currently scaled to zero; do not describe it as continuously
-  streaming until a live pod is running and freshness is captured. A read-only
-  inspection on 2026-09-19 found PostgreSQL 16 data and a backup manifest on
-  the retained Oracle PVC but no `standby.signal`; starting it before a
-  backup-verified `pg_basebackup -R` reseed could create a stale writable copy.
+  home-return pod for Oracle reseeding. The original
+  postgres-authority-standby StatefulSet remains scaled to zero and its
+  retained PVC is deliberately untouched. A fresh, separately named
+  postgres-authority-standby-reseed-0 candidate now runs on Oracle with a
+  new PVC, standby.signal, the unique pantry_oracle_standby slot, and a
+  streaming WAL receiver. Its separate service is not an application writer
+  endpoint; the home service remains authoritative.
 - The home readiness probe expects `pg_is_in_recovery() = f`; the former
   standby-only seeding init container is not used after promotion.
 
@@ -36,12 +37,14 @@ The controlled promotion sequence is:
 5. Start only the home runtime components whose immutable images are available.
 
 The controlled promotion/failback rehearsal exercised both directions and
-proved the application lease/fencing sequence, but it did not leave an Oracle
-Pantry standby continuously enabled. The current live snapshot (2026-09-19)
-is home `postgres-authority-home-return-0` as the writable primary; the Oracle
-`postgres-authority-standby` StatefulSet is `0/0`. Home PostgreSQL reports
-`pg_is_in_recovery()=f` and `transaction_read_only=off`; home runtime
-deployments and both commands-site replicas are Ready.
+proved the application lease/fencing sequence. The current live snapshot
+(2026-09-19) is home postgres-authority-home-return-0 as the writable primary;
+the canonical Oracle postgres-authority-standby StatefulSet is still 0/0,
+while the separately named reseed candidate is 1/1, reports
+pg_is_in_recovery()=t, and reports pg_stat_wal_receiver.status=streaming.
+Home PostgreSQL reports pg_is_in_recovery()=f and
+transaction_read_only=off; home runtime deployments and both commands-site
+replicas are Ready.
 
 ## Remaining gates
 
@@ -49,12 +52,12 @@ deployments and both commands-site replicas are Ready.
   GHCR images successfully using the least-privilege `read:packages` secret.
   The worker Deployment remains paused as an intentional rollout-control
   decision; cached workers are healthy.
-- Oracle application roles remain stopped in standby posture. The Pantry
-  PostgreSQL standby is currently scaled to zero, and its retained PVC is not
-  currently a valid standby (`standby.signal` absent). Reseed it from the
-  current home primary with a unique replication slot, verify
-  `pg_is_in_recovery()=true`, and recapture receive/replay LSN freshness before
-  reactivation.
+- Oracle application roles remain stopped in standby posture. The canonical
+  Pantry PostgreSQL standby remains scaled to zero with its old PVC retained;
+  the fresh reseed candidate is continuously streaming from home. Before
+  replacing the canonical StatefulSet, capture repeated receive/replay LSN
+  freshness, verify service/secret wiring, and perform the documented
+  old-writer fencing checks.
 - The corrected promoter completed the guarded Oracle promotion path with the
   composite home+Canada fence, replication gate, database promotion, service
   check, and route publication. The promoter remains disabled after the
