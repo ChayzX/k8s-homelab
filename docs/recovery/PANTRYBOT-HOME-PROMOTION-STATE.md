@@ -44,7 +44,8 @@ while the separately named reseed candidate is 1/1, reports
 pg_is_in_recovery()=t, and reports pg_stat_wal_receiver.status=streaming.
 Home PostgreSQL reports pg_is_in_recovery()=f and
 transaction_read_only=off; home runtime deployments and both commands-site
-replicas are Ready.
+replicas are Ready. Three samples at 20:33:35Z, 20:33:48Z, and 20:34:00Z
+showed matching receive/replay LSNs and approximately 0.20–0.23s replay lag.
 
 ## Remaining gates
 
