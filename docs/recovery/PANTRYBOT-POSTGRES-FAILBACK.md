@@ -57,6 +57,22 @@ The state-machine policy is implemented in
 that a non-primary Oracle, an unfenced home, an uncaught-up standby, a missing
 home lease, or a lost renewal cannot result in home promotion.
 
+## Evidence boundary
+
+Repository tests, manifest validation, and controller dry-runs verify policy
+contracts only; they do not prove that a live promotion or failback is safe.
+The maintenance record must include all of the following before this gate is
+closed:
+
+- one confirmed PostgreSQL writer and an externally fenced old writer whose
+  stale writes are rejected;
+- a newer witness/fencing epoch acquired only after the old writer is fenced;
+- successful standby promotion and a committed test transaction;
+- endpoint and application cutover with stale-writer rejection verified;
+- measured failover RTO and replication/data-loss RPO; and
+- controlled failback with replication direction and the final sole writer
+  verified afterward.
+
 ## Current evidence and remaining gate
 
 The reverse encrypted transport and disposable `pg_basebackup -R` path are
