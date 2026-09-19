@@ -47,6 +47,10 @@ pass.
   streams from the home primary (`pg_is_in_recovery()=t`, WAL slot
   `pantry_home_failback`). Its service has no endpoint while it is standby;
   only the replication NodePort selects the current home primary.
+- The fenced Oracle replica has also been reseeded from the home primary over
+  Tailscale `100.84.89.87:30432`. It is Ready and streaming with slot
+  `oracle_from_home`; the home primary reports that slot active. Oracle
+  application roles remain stopped while this standby is validated.
 - The deployed site-neutral promoter had a readiness bug in an earlier copy
   (`_kubectl` was referenced instead of its configured closure); the live copy
   was backed up, corrected, and py_compile-validated. The source-level fix
