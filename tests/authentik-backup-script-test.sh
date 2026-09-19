@@ -25,6 +25,8 @@ grep -q 'rclone check' "$SCRIPT" || fail "missing remote hash verification"
 grep -q 'rclone size' "$SCRIPT" || fail "missing exact remote size verification"
 grep -q -- '--json' "$SCRIPT" || fail "missing JSON remote size verification"
 grep -q 'containerStatuses' "$SCRIPT" || fail "missing sidecar container readiness gate"
+grep -q '"bytes"' "$SCRIPT" || fail "missing exact JSON byte parsing"
+grep -q 'sed -n' "$SCRIPT" || fail "missing exact JSON byte extraction"
 
 local_line="$(grep -n 'mv "\$tmp" "\$local_path"' "$SCRIPT" | cut -d: -f1)"
 r2_line="$(grep -n '^R2_POD=' "$SCRIPT" | cut -d: -f1)"
