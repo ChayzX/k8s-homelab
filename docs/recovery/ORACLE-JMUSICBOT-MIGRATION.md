@@ -57,8 +57,11 @@ Discord logs, marker, or sidecar behavior contradicts this contract.
   Oracle reclamation, verify they are on `minecraftmachine` and chasebot.
 - [x] Home CI connector remains available or is explicitly accepted as
   unavailable during the maintenance window.
-- [x] R2 contains a fresh JMusicBot generation and the required independent R2
-  credential is available without copying its value into Git.
+- [ ] R2 contains a fresh JMusicBot generation and the required independent R2
+  credential is available without copying its value into Git. The latest
+  observed `serversettings.json` object is dated 2026-09-08, so freshness and
+  the automated sync path remain open until a post-change object generation is
+  captured.
 - [x] The current home JMusicBot pod is healthy and its exact image digest,
   Secret names, and R2 object listing are recorded.
 - [x] A Discord-side duplicate-work check is prepared; only one JMusicBot
