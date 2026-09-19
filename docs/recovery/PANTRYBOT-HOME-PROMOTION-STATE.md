@@ -17,7 +17,10 @@ live changes and remaining gates.
 - The replication NodePort selector is pointed at the current primary
   `home-return` pod for a future Oracle reseed. Oracle's Pantry standby
   StatefulSet is currently scaled to zero; do not describe it as continuously
-  streaming until a live pod is running and freshness is captured.
+  streaming until a live pod is running and freshness is captured. A read-only
+  inspection on 2026-09-19 found PostgreSQL 16 data and a backup manifest on
+  the retained Oracle PVC but no `standby.signal`; starting it before a
+  backup-verified `pg_basebackup -R` reseed could create a stale writable copy.
 - The home readiness probe expects `pg_is_in_recovery() = f`; the former
   standby-only seeding init container is not used after promotion.
 
@@ -47,8 +50,11 @@ deployments and both commands-site replicas are Ready.
   The worker Deployment remains paused as an intentional rollout-control
   decision; cached workers are healthy.
 - Oracle application roles remain stopped in standby posture. The Pantry
-  PostgreSQL standby is currently scaled to zero, so receive/replay LSN
-  freshness must be recaptured after reactivation.
+  PostgreSQL standby is currently scaled to zero, and its retained PVC is not
+  currently a valid standby (`standby.signal` absent). Reseed it from the
+  current home primary with a unique replication slot, verify
+  `pg_is_in_recovery()=true`, and recapture receive/replay LSN freshness before
+  reactivation.
 - The corrected promoter completed the guarded Oracle promotion path with the
   composite home+Canada fence, replication gate, database promotion, service
   check, and route publication. The promoter remains disabled after the
