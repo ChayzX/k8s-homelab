@@ -70,14 +70,11 @@ kubectl -n observability create secret generic grafana-admin \
 
 ---
 
-## 3. `grafana-cloud-loki` — Grafana Cloud Loki push credential (promtail)
+## 3. `grafana-cloud-loki` — Grafana Cloud Loki push credential (alloy)
 
-Consumed by the promtail DaemonSet (`promtail.yaml`) as a mounted file, and
-referenced from `promtail-config.yaml`'s second `clients` entry via
-`password_file: /etc/promtail/secrets/grafana-cloud-loki-password` — kept out
-of the ConfigMap so the credential never sits in plaintext config.
+Consumed by the alloy DaemonSet (`alloy-logs-home.yaml` / `alloy-logs-oracle.yaml`) as a mounted file.
 
-**This Secret MUST exist before `promtail.yaml` is applied**, or the pod sits
+**This Secret MUST exist before `alloy-logs-*.yaml` is applied**, or the pod sits
 in `CreateContainerConfigError` (the volume references it directly, not
 `optional: true`).
 
@@ -87,17 +84,17 @@ kubectl -n observability create secret generic grafana-cloud-loki \
 ```
 
 The key must be exactly `grafana-cloud-loki-password` — that's the filename
-promtail's config expects under the mount. Username (`1769810`) and the push
+alloy's config expects under the mount. Username (`1769810`) and the push
 URL (`https://logs-prod-036.grafana.net/loki/api/v1/push`) are not secret and
-are already in `promtail-config.yaml` directly.
+are configured in the alloy DaemonSet manifests.
 
-This is currently a **dual-write**: promtail sends to both the local `loki`
+This is currently a **dual-write**: alloy sends to both the local `loki`
 service and Grafana Cloud. Once Grafana Cloud is confirmed receiving data
 (check `{job=~".+"}` in Grafana Cloud's Explore, or the local Grafana's Loki
 datasource repointed at `logs-prod-036.grafana.net`), the local `loki` client
 entry can be removed and the in-cluster Loki Deployment decommissioned to
 actually free its RAM and stop the HDD-compaction latency noted in
-`promtail-config.yaml`. That cutover is a separate, deliberate follow-up, not
+the previous collector configuration. That cutover is a separate, deliberate follow-up, not
 done here.
 
 ---

@@ -169,7 +169,7 @@ spec:
           # with stdin closed it sees EOF immediately at startup. Holding the
           # pipe open makes the reader simply block forever, which is the quiet,
           # correct behaviour. tty stays false so log lines reach stdout as
-          # plain text for promtail rather than as terminal-control soup.
+          # plain text for Alloy rather than as terminal-control soup.
           stdin: true
           tty: false
 

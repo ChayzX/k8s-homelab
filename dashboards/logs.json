@@ -1,7 +1,7 @@
 {
   "uid": "homelab-logs",
   "title": "Logs — Search & Severity",
-  "description": "Log exploration across every pod in the cluster. Filter by severity (the `level` label that promtail's pipeline_stages extracts), by namespace/pod, and by free-text regex. The log-volume graph is broken down by level so an error spike is visible before you read a single line.",
+  "description": "Log exploration across every pod in the cluster. Filter by severity (the `level` label that Alloy extracts), by namespace/pod, and by free-text regex. The log-volume graph is broken down by level so an error spike is visible before you read a single line.",
   "tags": ["homelab", "k3s", "logs", "loki"],
   "timezone": "browser",
   "editable": true,
@@ -64,7 +64,7 @@
       {
         "name": "level",
         "label": "Severity",
-        "description": "Wired straight into the LogQL stream selector as level=~\"$level\". 'All' uses the regex .* which also matches lines promtail could not classify (no level label at all).",
+        "description": "Wired straight into the LogQL stream selector as level=~\"$level\". 'All' uses the regex .* which also matches lines Alloy could not classify (no level label at all).",
         "type": "custom",
         "query": "debug,info,warn,error",
         "options": [
@@ -216,7 +216,7 @@
       "id": 4,
       "type": "stat",
       "title": "Unclassified lines (no level label)",
-      "description": "Streams where promtail's pipeline_stages did not extract a level at all — LogQL matcher level=\"\". These lines are INVISIBLE to any severity filter, so a large number here means the severity filter is not to be trusted for that app and its promtail pipeline needs a regex/json stage. Expect some from k8s system components.",
+      "description": "Streams where Alloy did not extract a level at all — LogQL matcher level=\"\". These lines are INVISIBLE to any severity filter, so a large number here means the severity filter is not to be trusted for that app and its parsing pipeline needs a regex/json stage. Expect some from k8s system components.",
       "gridPos": { "h": 5, "w": 5, "x": 15, "y": 1 },
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "targets": [

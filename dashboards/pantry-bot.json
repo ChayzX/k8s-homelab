@@ -59,7 +59,7 @@
       {
         "name": "level",
         "label": "Severity",
-        "description": "Wired straight into the LogQL stream selector as level=~\"$level\". 'All' uses the regex .* which also matches lines promtail could not classify (no level label at all). The ERROR panels ignore this variable on purpose so 'how many errors right now' never depends on resetting the filter.",
+        "description": "Wired straight into the LogQL stream selector as level=~\"$level\". 'All' uses the regex .* which also matches lines Alloy could not classify (no level label at all). The ERROR panels ignore this variable on purpose so 'how many errors right now' never depends on resetting the filter.",
         "type": "custom",
         "query": "debug,info,warn,error",
         "options": [
@@ -190,7 +190,7 @@
       "id": 4,
       "type": "stat",
       "title": "ERROR lines (this range)",
-      "description": "Deliberately ignores the Severity variable — this always counts level=\"error\" so it stays meaningful no matter how the filter is set. Honors the Pod variable. Caveat: pantry-bot logs are plain console output with no structured severity, so promtail classifies them by keyword heuristic — a line is only counted here if it positively matched error vocabulary (error/exception/fatal, unhandled rejection, or a libuv errno like ENOTFOUND).",
+      "description": "Deliberately ignores the Severity variable — this always counts level=\"error\" so it stays meaningful no matter how the filter is set. Honors the Pod variable. Caveat: pantry-bot logs are plain console output with no structured severity, so Alloy classifies them by keyword heuristic — a line is only counted here if it positively matched error vocabulary (error/exception/fatal, unhandled rejection, or a libuv errno like ENOTFOUND).",
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "targets": [

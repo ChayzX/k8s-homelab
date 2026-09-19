@@ -339,7 +339,7 @@ data:
           "id": 11,
           "type": "logs",
           "title": "Minecraft Server Logs",
-          "description": "Paper/Log4j format, level extracted by promtail. Use the Logs dashboard for full severity-filter/search controls -- this is a fixed quick view scoped to this pod.",
+          "description": "Paper/Log4j format, level extracted by Alloy. Use the Logs dashboard for full severity-filter/search controls -- this is a fixed quick view scoped to this pod.",
           "gridPos": { "h": 10, "w": 24, "x": 6, "y": 20 },
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
           "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "{namespace=\"minecraft\"}", "maxLines": 1000 }],
@@ -592,7 +592,7 @@ data:
     {
       "uid": "homelab-cloudflared",
       "title": "Cloudflare Tunnel — cloudflared Health",
-      "description": "Kubernetes and Loki visibility for the cloudflared connector that serves the dashboard-managed Cloudflare Tunnel. These panels deliberately use only signals this repository already collects: kube-state-metrics, cAdvisor, and promtail/Loki. cloudflared's native :2000 endpoint is used for probes but is not a Prometheus scrape target.",
+      "description": "Kubernetes and Loki visibility for the cloudflared connector that serves the dashboard-managed Cloudflare Tunnel. These panels deliberately use only signals this repository already collects: kube-state-metrics, cAdvisor, and Alloy/Loki. cloudflared's native :2000 endpoint is used for probes but is not a Prometheus scrape target.",
       "tags": ["homelab", "k3s", "cloudflare", "cloudflared", "tunnel"],
       "timezone": "browser",
       "editable": true,
@@ -617,7 +617,7 @@ data:
         { "id": 5, "type": "timeseries", "title": "Memory Working Set vs Limit / Request", "description": "Solid cAdvisor working set, dashed 128Mi limit, and dotted 64Mi request.", "gridPos": { "h": 9, "w": 12, "x": 0, "y": 7 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(container_memory_working_set_bytes{namespace=\"pantry-bot\", container=\"cloudflared\"})", "legendFormat": "working set" }, { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(kube_pod_container_resource_limits{namespace=\"pantry-bot\", container=\"cloudflared\", resource=\"memory\"})", "legendFormat": "LIMIT" }, { "refId": "C", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(kube_pod_container_resource_requests{namespace=\"pantry-bot\", container=\"cloudflared\", resource=\"memory\"})", "legendFormat": "request" }], "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }, "fieldConfig": { "defaults": { "unit": "bytes", "min": 0, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false } }, "overrides": [] } },
         { "id": 6, "type": "timeseries", "title": "CPU Usage vs Limit (cores)", "description": "Solid cAdvisor CPU usage and dashed 200m CPU limit.", "gridPos": { "h": 9, "w": 12, "x": 12, "y": 7 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"pantry-bot\", container=\"cloudflared\"}[5m]))", "legendFormat": "usage" }, { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(kube_pod_container_resource_limits{namespace=\"pantry-bot\", container=\"cloudflared\", resource=\"cpu\"})", "legendFormat": "LIMIT" }], "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }, "fieldConfig": { "defaults": { "unit": "none", "min": 0, "decimals": 3, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "cores" } }, "overrides": [] } },
         { "type": "row", "title": "Connector logs", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 }, "panels": [] },
-        { "id": 7, "type": "timeseries", "title": "Log Volume by Severity", "description": "Zerolog severity is extracted by promtail. Warning or error spikes around an edge disconnect are visible before the connector has accumulated enough failures for a liveness restart.", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 }, "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "sum by (level) (count_over_time({namespace=\"pantry-bot\", container=\"cloudflared\", pod=~\"$pod\", level=~\"$level\"} [$__auto]))", "queryType": "range", "legendFormat": "{{level}}" }], "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["sum", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }, "fieldConfig": { "defaults": { "unit": "short", "min": 0, "decimals": 0, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "bars", "lineWidth": 0, "fillOpacity": 85, "showPoints": "never", "spanNulls": false, "barAlignment": 0, "stacking": { "mode": "normal", "group": "A" } } }, "overrides": [] } },
+        { "id": 7, "type": "timeseries", "title": "Log Volume by Severity", "description": "Zerolog severity is extracted by Alloy. Warning or error spikes around an edge disconnect are visible before the connector has accumulated enough failures for a liveness restart.", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 }, "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "sum by (level) (count_over_time({namespace=\"pantry-bot\", container=\"cloudflared\", pod=~\"$pod\", level=~\"$level\"} [$__auto]))", "queryType": "range", "legendFormat": "{{level}}" }], "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["sum", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }, "fieldConfig": { "defaults": { "unit": "short", "min": 0, "decimals": 0, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "bars", "lineWidth": 0, "fillOpacity": 85, "showPoints": "never", "spanNulls": false, "barAlignment": 0, "stacking": { "mode": "normal", "group": "A" } } }, "overrides": [] } },
         { "id": 8, "type": "logs", "title": "cloudflared Logs", "description": "Live connector log stream. The Cloudflare warning 'accept stream listener encountered a failure' is directly visible here alongside reconnect and registration messages.", "gridPos": { "h": 12, "w": 12, "x": 12, "y": 17 }, "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "{namespace=\"pantry-bot\", container=\"cloudflared\", pod=~\"$pod\", level=~\"$level\"}", "maxLines": 2000 }], "options": { "showTime": true, "showLabels": true, "showCommonLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" }, "fieldConfig": { "defaults": {}, "overrides": [] } }
       ]
     }
@@ -2534,7 +2534,7 @@ data:
     {
       "uid": "homelab-logs",
       "title": "Logs — Search & Severity",
-      "description": "Log exploration across every pod in the cluster. Filter by severity (the `level` label that promtail's pipeline_stages extracts), by namespace/pod, and by free-text regex. The log-volume graph is broken down by level so an error spike is visible before you read a single line.",
+      "description": "Log exploration across every pod in the cluster. Filter by severity (the `level` label that Alloy's pipeline_stages extracts), by namespace/pod, and by free-text regex. The log-volume graph is broken down by level so an error spike is visible before you read a single line.",
       "tags": ["homelab", "k3s", "logs", "loki"],
       "timezone": "browser",
       "editable": true,
@@ -2597,7 +2597,7 @@ data:
           {
             "name": "level",
             "label": "Severity",
-            "description": "Wired straight into the LogQL stream selector as level=~\"$level\". 'All' uses the regex .* which also matches lines promtail could not classify (no level label at all).",
+            "description": "Wired straight into the LogQL stream selector as level=~\"$level\". 'All' uses the regex .* which also matches lines Alloy could not classify (no level label at all).",
             "type": "custom",
             "query": "debug,info,warn,error",
             "options": [
@@ -2749,7 +2749,7 @@ data:
           "id": 4,
           "type": "stat",
           "title": "Unclassified lines (no level label)",
-          "description": "Streams where promtail's pipeline_stages did not extract a level at all — LogQL matcher level=\"\". These lines are INVISIBLE to any severity filter, so a large number here means the severity filter is not to be trusted for that app and its promtail pipeline needs a regex/json stage. Expect some from k8s system components.",
+          "description": "Streams where Alloy's pipeline_stages did not extract a level at all — LogQL matcher level=\"\". These lines are INVISIBLE to any severity filter, so a large number here means the severity filter is not to be trusted for that app and its Alloy pipeline needs a regex/json stage. Expect some from k8s system components.",
           "gridPos": { "h": 5, "w": 5, "x": 15, "y": 1 },
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
           "targets": [
@@ -3067,7 +3067,7 @@ data:
         { "id": 9, "type": "timeseries", "title": "World Size on Disk", "description": "minecraft_world_size_bytes is intentionally collected every ten minutes to avoid adding HDD load by walking region files on every scrape.", "gridPos": { "h": 7, "w": 8, "x": 16, "y": 13 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_world_size_bytes", "legendFormat": "{{world}}" }], "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } }, "fieldConfig": { "defaults": { "unit": "bytes", "min": 0, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false } }, "overrides": [] } },
         { "type": "row", "title": "Kubernetes lifecycle and logs", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 }, "panels": [] },
         { "id": 10, "type": "stat", "title": "Pod Restarts (24h)", "description": "Minecraft intentionally has no liveness probe because restarting a wedged JVM mid-tick risks world corruption. A restart means an actual process exit or OOMKill.", "gridPos": { "h": 5, "w": 6, "x": 0, "y": 21 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"minecraft\"}[24h])) or vector(0)", "legendFormat": "restarts" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" }, "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "#EAB839", "value": 1 }, { "color": "red", "value": 2 }] } }, "overrides": [] } },
-        { "id": 11, "type": "logs", "title": "Minecraft Server Logs", "description": "Paper/Log4j logs with severity extracted by promtail. Use the Logs dashboard for full cross-workload filtering.", "gridPos": { "h": 10, "w": 18, "x": 6, "y": 21 }, "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "{namespace=\"minecraft\"}", "maxLines": 1000 }], "options": { "showTime": true, "showLabels": false, "showCommonLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" }, "fieldConfig": { "defaults": {}, "overrides": [] } }
+        { "id": 11, "type": "logs", "title": "Minecraft Server Logs", "description": "Paper/Log4j logs with severity extracted by Alloy. Use the Logs dashboard for full cross-workload filtering.", "gridPos": { "h": 10, "w": 18, "x": 6, "y": 21 }, "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "{namespace=\"minecraft\"}", "maxLines": 1000 }], "options": { "showTime": true, "showLabels": false, "showCommonLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" }, "fieldConfig": { "defaults": {}, "overrides": [] } }
       ]
     }
   overview.json: |
@@ -3764,7 +3764,7 @@ data:
           "id": 12,
           "type": "timeseries",
           "title": "Error Rate by Namespace",
-          "description": "Error-line volume per namespace (promtail extracts the level label). A red block here that lines up with a crash-loop bar above is the 'what actually broke' pairing for that outage.",
+          "description": "Error-line volume per namespace (Alloy extracts the level label). A red block here that lines up with a crash-loop bar above is the 'what actually broke' pairing for that outage.",
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 43 },
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
           "targets": [
@@ -3842,7 +3842,7 @@ data:
           "id": 14,
           "type": "logs",
           "title": "Recent Errors (live stream)",
-          "description": "Compact error-only stream, all namespaces, level label from promtail. Click a line to expand its labels. Head to the Logs dashboard for full search/filter controls.",
+          "description": "Compact error-only stream, all namespaces, level label from Alloy. Click a line to expand its labels. Head to the Logs dashboard for full search/filter controls.",
           "gridPos": { "h": 10, "w": 24, "x": 0, "y": 51 },
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
           "targets": [
@@ -4638,7 +4638,7 @@ data:
           {
             "name": "level",
             "label": "Severity",
-            "description": "Wired straight into the LogQL stream selector as level=~\"$level\". 'All' uses the regex .* which also matches lines promtail could not classify (no level label at all). The ERROR panels ignore this variable on purpose so 'how many errors right now' never depends on resetting the filter.",
+            "description": "Wired straight into the LogQL stream selector as level=~\"$level\". 'All' uses the regex .* which also matches lines Alloy could not classify (no level label at all). The ERROR panels ignore this variable on purpose so 'how many errors right now' never depends on resetting the filter.",
             "type": "custom",
             "query": "debug,info,warn,error",
             "options": [
@@ -4769,7 +4769,7 @@ data:
           "id": 4,
           "type": "stat",
           "title": "ERROR lines (this range)",
-          "description": "Deliberately ignores the Severity variable — this always counts level=\"error\" so it stays meaningful no matter how the filter is set. Honors the Pod variable. Caveat: pantry-bot logs are plain console output with no structured severity, so promtail classifies them by keyword heuristic — a line is only counted here if it positively matched error vocabulary (error/exception/fatal, unhandled rejection, or a libuv errno like ENOTFOUND).",
+          "description": "Deliberately ignores the Severity variable — this always counts level=\"error\" so it stays meaningful no matter how the filter is set. Honors the Pod variable. Caveat: pantry-bot logs are plain console output with no structured severity, so Alloy classifies them by keyword heuristic — a line is only counted here if it positively matched error vocabulary (error/exception/fatal, unhandled rejection, or a libuv errno like ENOTFOUND).",
           "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
           "targets": [

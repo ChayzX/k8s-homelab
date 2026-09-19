@@ -21,8 +21,7 @@
   the per-day index counter, not retention).
 
   Once Minecraft runs as a pod, stdout is captured by containerd the
-  standard k8s way and shipped to Loki via promtail
-  (observability/promtail-config.yaml), which is now the durable,
+  standard k8s way and shipped to Loki via Alloy, which is now the durable,
   retention-bounded copy (observability/loki-config.yaml,
   limits_config.retention_period: 720h). Keeping the file appender on top
   of that would mean two independent, unbounded-by-default copies of the
@@ -32,7 +31,7 @@
   bolting a retention policy onto a copy nothing reads.
 
   TRADEOFF, RECORDED DELIBERATELY: this means there is no local on-disk
-  log if promtail/Loki is ever down, or if disk-level `grep` access is
+  log if Alloy/Loki is ever down, or if disk-level `grep` access is
   wanted without a Loki round-trip. `kubectl logs -n minecraft
   deploy/minecraft` still works regardless — that's containerd's stdout
   capture, independent of this file — so that command (not a file under

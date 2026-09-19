@@ -50,7 +50,20 @@ data:
     }
     loki.source.kubernetes "pods" {
       targets    = discovery.relabel.pods.output
+      forward_to = [loki.process.pods.receiver]
+    }
+    loki.process "pods" {
       forward_to = [loki.write.local.receiver]
+      stage.regex {
+        expression = "(?i)(?P<level>debug|info|warn(?:ing)?|error|fatal)"
+      }
+      stage.template {
+        source = "level"
+        template = "{{ ToLower .Value }}"
+      }
+      stage.labels {
+        values = { level = "" }
+      }
     }
     loki.write "local" {
       endpoint {

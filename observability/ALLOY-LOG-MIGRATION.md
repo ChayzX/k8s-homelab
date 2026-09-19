@@ -5,4 +5,4 @@ Alloy now runs as a per-node DaemonSet on MinecraftMachine and Oracle. It tails 
 - MinecraftMachine: `http://loki.observability.svc.cluster.local:3100/loki/api/v1/push`
 - Oracle: `http://100.84.89.87:31100/loki/api/v1/push`
 
-Promtail is EOL and has been removed from both live clusters. Grafana Cloud log and metrics forwarding remains disabled. The Windows Alloy Cloudflare metrics tunnel is scaled to zero until a self-hosted metrics endpoint is selected.
+Alloy is EOL and has been removed from both live clusters. Grafana Cloud log and metrics forwarding remains disabled. The Windows Alloy Cloudflare metrics tunnel is scaled to zero until a self-hosted metrics endpoint is selected.

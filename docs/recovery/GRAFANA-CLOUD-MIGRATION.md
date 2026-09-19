@@ -18,7 +18,7 @@ local dashboards or log collection.
 | Signal | Current path | Target path |
 | --- | --- | --- |
 | Metrics | Local Prometheus on MinecraftMachine | Local Prometheus at each site; no Grafana Cloud remote-write stream |
-| Logs | Promtail to local Loki and Grafana Cloud | Promtail dual-write during validation, then Cloud-first with bounded local retention |
+| Logs | Alloy to local Loki and Grafana Cloud | Alloy dual-write during validation, then Cloud-first with bounded local retention |
 | Dashboards | Local Grafana PVC | Tracked `dashboards/*.json` files provisioned into on-prem Grafana |
 | External checks | GCP monitor/UptimeRobot | Retained; Grafana Cloud is not the only failure detector |
 
@@ -30,7 +30,7 @@ and [current pricing](https://grafana.com/pricing/).
 
 ## Completed
 
-`observability/promtail-config.yaml` already sends logs to both the local Loki
+`observability/alloy-logs-*.yaml` already sends logs to both the local Loki
 service and the Grafana Cloud Loki endpoint. The credential is mounted from
 the `grafana-cloud-loki` Secret and is not committed. Keep this dual-write
 until Cloud Explore verifies logs from MinecraftMachine and Oracle.
@@ -46,7 +46,7 @@ rule referenced them.
 
 The home and Oracle Prometheus collectors now retain metrics locally and no
 longer mount or use the `grafana-cloud-metrics` Secret. This is the deliberate
-on-prem cutover and stops metric ingestion charges. Promtail may continue
+on-prem cutover and stops metric ingestion charges. alloy may continue
 dual-writing the explicitly selected logs to Cloud while local Loki remains
 available for dashboards and local incident response.
 

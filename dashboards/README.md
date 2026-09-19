@@ -201,7 +201,7 @@ Everything the plan's log-search requirement asked for:
 
 - **`level` variable** (custom, multi-select `debug`/`info`/`warn`/`error`,
   `includeAll` with `allValue: ".*"`) wired directly into every LogQL
-  stream selector as `level=~"$level"`. This is the label promtail's
+  stream selector as `level=~"$level"`. This is the label alloy's
   `pipeline_stages` extracts at ingest — filtering happens at the Loki
   query layer, not client-side text matching, so it actually scales and
   actually works for Java/Log4j (jmusicbot, minecraft) and Node.js
@@ -222,22 +222,21 @@ Everything the plan's log-search requirement asked for:
   set to, so "how many errors right now" never depends on remembering to
   reset a dropdown.
 - **"Unclassified lines" stat** (panel 4): counts `level=""` — lines
-  promtail could not classify at all. These are invisible to the
+  alloy could not classify at all. These are invisible to the
   severity filter by construction (an empty label can't match a
   non-empty regex the user typed), so a large number here is the signal
-  that some app's promtail pipeline stage needs a regex/JSON stage
+  that some app's alloy pipeline stage needs a regex/JSON stage
   written for it, not that the dashboard is broken.
 
-**How the severity filter mechanically works**: promtail's
+**How the severity filter mechanically works**: alloy's
 `pipeline_stages` (in
-`/home/chase/k8s-homelab/observability/promtail-config.yaml` /
-`promtail.yaml`) run a regex or JSON stage per job that extracts a
+`observability/alloy-logs-home.yaml`) run a regex or JSON stage per job that extracts a
 `level` value from each line and promotes it to a Loki **label** (not
 just a parsed field) via a `labels:` stage. Because it's a label, every
 LogQL query in this dashboard can select on it directly in the stream
 selector — `{namespace=~"$namespace", pod=~"$pod", level=~"$level"}` —
 which Loki resolves at the index/chunk level before it even starts
-reading log bodies. If that promtail stage is ever removed or breaks for
+reading log bodies. If that Alloy stage is ever removed or breaks for
 one app, that app's logs don't disappear — they just stop carrying a
 `level` label and fall into the "unclassified" bucket above, which is
 exactly what panel 4 exists to catch.

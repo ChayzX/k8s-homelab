@@ -1,7 +1,7 @@
 # observability namespace
 
 Kubernetes manifests for the `observability` namespace of the single-node
-k3s home-lab migration (loki, promtail, prometheus, grafana,
+k3s home-lab migration (loki, alloy, prometheus, grafana,
 kube-state-metrics). Ported from
 `/home/chase/docker/observability/docker-compose.yml` per
 `~/.claude/plans/i-d-love-to-run-cuddly-flurry.md`.
@@ -12,10 +12,10 @@ Node LAN IP: `192.168.40.208`. StorageClass: `local-path`.
 
 | File | What it is |
 |---|---|
-| `namespace.yaml` | The `observability` Namespace (PSA `enforce: privileged` -- see the comment in the file for why promtail needs that). |
+| `namespace.yaml` | The `observability` Namespace (PSA `enforce: privileged` -- see the comment in the file for why alloy needs that). |
 | `loki.yaml` | Loki SA, PVC (20Gi), Deployment, ClusterIP Service (3100). |
 | `loki-config.yaml` | ConfigMap: Loki's `loki-config.yaml`. |
-| `loki-external-nodeport.yaml` | **Migration-window only.** NodePort 31100 so the old Docker-side promtail can keep pushing to the new Loki. |
+| `loki-external-nodeport.yaml` | **Retired migration-window manifest.** No external log push is required after the Alloy cutover. |
 | `prometheus.yaml` | Prometheus SA, ClusterRole/Binding (API access for `kubernetes_sd_configs`), PVC (20Gi), Deployment, ClusterIP Service (9090). |
 | `oracle-prometheus.yaml` | Lightweight Oracle Prometheus collector with an 8Gi local buffer. Apply to the independent Oracle k3s cluster, not home. |
 | `oracle-prometheus-config.yaml` | Oracle-only scrape configuration with `site=oracle` external labels. |
@@ -24,13 +24,12 @@ Node LAN IP: `192.168.40.208`. StorageClass: `local-path`.
 | `grafana.yaml` | Grafana SA, PVC (2Gi), Deployment, primary `LoadBalancer` Service (3002). |
 | `grafana-provisioning.yaml` | ConfigMaps: `grafana-provisioning-datasources`, `grafana-provisioning-dashboards`, `grafana-provisioning-alerting`, and a placeholder `grafana-dashboards`. **See "Grafana dashboard ConfigMap" below before applying.** |
 | `grafana-verify-nodeport.yaml` | **Verification only.** NodePort 30002. |
-| `promtail.yaml` | promtail SA, ClusterRole/Binding (API access for pod discovery), DaemonSet, ClusterIP Service (9080, metrics only). |
-| `promtail-config.yaml` | ConfigMap: promtail's config, incl. severity-extraction `pipeline_stages`. |
+| `alloy-logs-home.yaml` / `alloy-logs-oracle.yaml` | Alloy Kubernetes log collectors for the home and Oracle sites. |
 | `kube-state-metrics.yaml` | kube-state-metrics SA, ClusterRole/Binding, Deployment, headless Service (8080/8081). |
 
 Every stateful app (loki, prometheus, grafana) is a
 `Deployment` with `strategy: Recreate` and a `ReadWriteOnce` PVC -- never
-a StatefulSet, never `RollingUpdate`. promtail is a DaemonSet (no PVC).
+a StatefulSet, never `RollingUpdate`. Alloy is a DaemonSet (no PVC).
 kube-state-metrics is a stateless `Deployment` with ordinary
 `RollingUpdate` (no PVC, nothing to lose during a rollout).
 
@@ -102,7 +101,7 @@ kubectl apply -f namespace.yaml
 kubectl apply -f loki-config.yaml
 kubectl apply -f prometheus-config.yaml
 kubectl apply -f grafana-provisioning.yaml   # see ownership note above
-kubectl apply -f promtail-config.yaml
+kubectl apply -f alloy-logs-home.yaml
 
 # Stateful stores. For EACH of these: stop the corresponding Docker
 # container, copy its data dir into the new PVC, chown it (see below),
@@ -120,7 +119,7 @@ kubectl apply -f grafana.yaml
 
 # Cluster-facing collectors/exporters. No PVCs, no data migration.
 kubectl apply -f kube-state-metrics.yaml
-kubectl apply -f promtail.yaml
+kubectl apply -f alloy-logs-home.yaml
 ```
 
 ## Oracle collector
@@ -157,13 +156,13 @@ The watcher also takes a non-blocking singleton lock, so duplicate watcher
 processes exit instead of sending duplicate Discord alerts. If duplicate
 notifications recur, inspect the systemd user unit/process list and the lock
 path before changing alert patterns. Keep this source mapping in mind when
-reviewing a future repo PR: changing `promtail` labels or container names can
+reviewing a future repo PR: changing Alloy labels or container names can
 silently defeat the scoped suppression.
 
 #### Safe follow-up design for QUIC teardown noise
 
 The suppression should remain a two-stage decision, implemented in the
-host-side watcher (not in Promtail):
+host-side watcher (not in Alloy):
 
 1. Match the exact `cloudflared` container label and a narrow teardown pattern.
 2. Before suppressing, query the connector's `/ready` endpoint through its
@@ -230,7 +229,7 @@ it" possible in the meantime:
 | File | NodePort | URL | Apply | Delete |
 |---|---|---|---|---|
 | `grafana-verify-nodeport.yaml` | 30002 | `http://192.168.40.208:30002` | Any time after `grafana.yaml` is applied and its pod is Ready. | Immediately after `kubectl -n observability get svc grafana` shows `EXTERNAL-IP 192.168.40.208`. |
-| `loki-external-nodeport.yaml` | 31100 | (internal, used by the old Docker promtail) | During Phase 1, once the new Loki is verified. | At Phase 5, once Docker Desktop (and its promtail) is retired. |
+| `loki-external-nodeport.yaml` | 31100 | (retired migration endpoint) | During the migration only. | After the Alloy cutover. |
 
 Both 30001/30002 are inside k3s's default NodePort range
 (30000-32767) -- rev. 1 of this plan proposed an out-of-range port
@@ -319,9 +318,9 @@ pod. `docker-desktop-exporter` (:9201) is marked in that file as
 **to-be-removed at Phase 5** -- delete that scrape job in the same
 change that retires Docker Desktop, or it alerts "target down" forever.
 
-## Log severity parsing (promtail)
+## Log severity parsing (Alloy)
 
-`promtail-config.yaml` adds `pipeline_stages` per job to extract a
+Alloy's processing pipeline can add `level` labels per job to extract a
 `level` label (`debug`/`info`/`warn`/`error`), with a regex/multiline
 strategy tailored to each app's log format (Log4j-bracketed for
 jmusicbot/Minecraft, keyword-heuristic for pantry-bot's plain

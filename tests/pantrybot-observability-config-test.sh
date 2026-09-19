@@ -44,8 +44,8 @@ for config in "${configs[@]}"; do
     echo "Stale Canada target address found in $config" >&2
     exit 1
   }
-  ! grep -q '^      - job_name: promtail' "$config" || {
-    echo "Retired Promtail scrape target found in $config" >&2
+  grep -q '^      - job_name: alloy-logs' "$config" || {
+    echo "Alloy scrape target missing in $config" >&2
     exit 1
   }
 done

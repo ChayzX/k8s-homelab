@@ -42,7 +42,7 @@ def _audit(interaction: discord.Interaction, authorized: bool, result: str = "")
     """One structured stdout line per command attempt: who, what, args,
     authorized y/n, and (once known) the result. No separate logging
     framework -- plain print(), matching this repo's existing scripts
-    (minecraft_backup.py, minecraft_exporter.py). promtail ships stdout to
+    (minecraft_backup.py, minecraft_exporter.py). Alloy ships stdout to
     Loki, so this line alone is the audit trail (bi6.5). Never let a
     logging-line failure take down the command it's describing.
     """

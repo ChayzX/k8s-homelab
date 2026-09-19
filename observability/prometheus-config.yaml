@@ -204,7 +204,7 @@ data:
           - targets: ["grafana.observability.svc.cluster.local:3002"]
 
       # Alloy is the active log shipper. Scrape its health/metrics endpoint
-      # through a stable Service; the legacy Promtail target is retired.
+      # through a stable Alloy Service.
       - job_name: alloy-logs
         static_configs:
           - targets: ["alloy-logs.observability.svc.cluster.local:12345"]

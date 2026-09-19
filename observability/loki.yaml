@@ -168,7 +168,7 @@ metadata:
     app.kubernetes.io/part-of: observability
 spec:
   # ClusterIP on purpose. The name "loki" on port 3100 keeps the existing
-  # Grafana datasource URL (http://loki:3100) and promtail client URL
+  # Grafana datasource URL (http://loki:3100) and Alloy client URL
   # working verbatim from the Compose stack.
   type: ClusterIP
   selector:

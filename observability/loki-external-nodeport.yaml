@@ -1,25 +1,23 @@
 # ============================================================
 # MIGRATION-WINDOW ONLY -- DELETE AT PHASE 5
 # ============================================================
-# The plan keeps the OLD Docker promtail running in parallel with the new
+# The plan kept the old Docker collector running in parallel with the new
 # in-cluster DaemonSet from Phase 1 through Phase 4, so that apps still
 # living in Docker (jmusicbot, pantry-bot, cloudflared, the bespoke
 # watchers) don't go dark for the whole migration window.
 #
-# That old promtail runs inside Docker Desktop's VM. It CANNOT resolve or
+# That old collector ran inside Docker Desktop's VM. It CANNOT resolve or
 # reach the in-cluster ClusterIP Service "loki". This NodePort is the
 # bridge: it exposes the new Loki on the node's LAN IP so the old
-# promtail can keep pushing to a single, unified log store.
+# the old collector could keep pushing to a single, unified log store.
 #
-# After applying this, edit the OLD stack's promtail config at
-#   /home/chase/docker/observability/monitoring/promtail/promtail-config.yaml
+# This migration-only endpoint is retired after the Alloy cutover.
 # and change:
 #     clients:
 #       - url: http://loki:3100/loki/api/v1/push
 # to:
 #     clients:
 #       - url: http://192.168.40.208:31100/loki/api/v1/push
-# then `docker compose up -d promtail` in that directory.
 #
 # NOTE: this puts an unauthenticated Loki push endpoint on the LAN.
 # Acceptable for a home lab behind ufw; delete this Service the moment
