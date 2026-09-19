@@ -110,6 +110,19 @@ spec:
                   name: grafana-admin
                   key: admin-password
                   optional: true
+            # Pantry Postgres datasource password (provisioned datasource
+            # PantryPostgres interpolates $PANTRY_GRAFANA_DB_PASSWORD).
+            # Secret is created imperatively, never in git:
+            #   kubectl -n observability create secret generic \
+            #     grafana-postgres-pantry --from-literal=password="$(kubectl \
+            #     -n pantry-bot get secret pantry-bot-postgres-home-return \
+            #     -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)"
+            - name: PANTRY_GRAFANA_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-postgres-pantry
+                  key: password
+                  optional: false
             - name: GF_PATHS_PROVISIONING
               value: /etc/grafana/provisioning
             - name: GF_ANALYTICS_REPORTING_ENABLED

@@ -1,6 +1,6 @@
 # Grafana dashboards for the k3s home-lab
 
-Nine dashboards, built to replace the four that ran under Docker Desktop
+Twelve dashboards, built to replace the four that ran under Docker Desktop
 (`host-overview`, `container-resources`, `minecraft`, `logs-overview` — see
 `/home/chase/docker/observability/monitoring/grafana/dashboards/` for the
 originals, kept read-only for reference) with equivalents that understand
@@ -59,6 +59,7 @@ kubectl create configmap grafana-dashboards -n observability \
   --from-file=logs.json=logs.json \
   --from-file=overview.json=overview.json \
   --from-file=pantry-bot.json=pantry-bot.json \
+  --from-file=pantry-bot-postgres.json=pantry-bot-postgres.json \
   --from-file=pantry-bot-usage.json=pantry-bot-usage.json \
   --from-file=pods-and-workloads.json=pods-and-workloads.json \
   --dry-run=client -o yaml
@@ -68,7 +69,7 @@ its existing `metadata:` (labels included), or just `kubectl apply -f -`
 the command's output directly against a live cluster — same object,
 same name, same namespace, it overwrites in place.
 
-**Size**: all nine dashboards remain comfortably below the 1 MiB ConfigMap
+**Size**: all twelve dashboards remain comfortably below the 1 MiB ConfigMap
 etcd/API object-size ceiling for a ConfigMap is 1 MiB, so one ConfigMap
 comfortably hold them in one object — no split needed. If more dashboards get
 added later and this approaches ~900 KiB, split by file and add one
@@ -95,6 +96,21 @@ process-local and reset on a bot restart, so panels use `increase()`/`rate()`;
 participant history and first-time participation remain durable in SQLite.
 
 Open it at `/d/homelab-pantry-bot-usage/pantry-bot-usage` after Grafana loads the
+provisioned dashboard.
+
+### `pantry-bot-postgres.json` — Pantry Bot — Usage (Postgres)
+
+Obs-only workaround for the empty Prometheus usage dashboard (no code
+rebuild): reads the bot's PostgreSQL tables through the home standby
+replica instead of `/metrics` scraping. Covers ingest rate, queue depth,
+dead-letter outbox, community game actions, boss damage/outcomes, daily
+bot messages, outbound deliveries by target, and distinct participants.
+Needs the `PantryPostgres` datasource (`observability/grafana-provisioning.yaml`,
+password from the imperative `grafana-postgres-pantry` Secret — see
+`observability/grafana.yaml`). Extension routes and per-command panels
+have no backing table and stay pending the per-role `/metrics` code fix.
+
+Open it at `/d/homelab-pantry-bot-postgres/pantry-bot-usage-postgres` after Grafana loads the
 provisioned dashboard.
 
 ### `host-pc.json` — Main PC — Bare-Metal Health

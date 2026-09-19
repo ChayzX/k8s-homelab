@@ -3345,6 +3345,668 @@ data:
         }
       ]
     }
+  pantry-bot-postgres.json: |
+    {
+      "uid": "homelab-pantry-bot-postgres",
+      "title": "Pantry Bot — Usage (Postgres)",
+      "description": "Application usage read from Pantry Bot's PostgreSQL tables through the home standby replica (postgres-authority-home-return), which streams from the Oracle writer. No Prometheus scrape required, so this works while the home app plane is parked and Oracle holds the Twitch leases. Standby reads lag the writer by seconds; extension-route and per-command counters have no table and remain pending the /metrics-per-role code fix.",
+      "tags": [
+        "homelab",
+        "twitch",
+        "pantry-bot",
+        "usage",
+        "postgres"
+      ],
+      "timezone": "browser",
+      "editable": true,
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "1m",
+      "graphTooltip": 1,
+      "time": {
+        "from": "now-24h",
+        "to": "now"
+      },
+      "templating": {
+        "list": [
+          {
+            "name": "DS_POSTGRES",
+            "label": "Postgres",
+            "type": "datasource",
+            "query": "postgres",
+            "current": {},
+            "hide": 0,
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false
+          }
+        ]
+      },
+      "panels": [
+        {
+          "type": "row",
+          "title": "Ingest — is Twitch reaching the bot?",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "panels": []
+        },
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Events ingested (1h)",
+          "description": "Rows appended to pantry_events in the last hour, all sources. This is raw Twitch ingest (chat messages, redemptions, subs), not game actions.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 1
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
+              },
+              "format": "table",
+              "rawSql": "SELECT count(*) AS \"events\" FROM pantry_events WHERE created_at > now() - interval '1 hour'",
+              "rawQuery": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "value_and_name",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Pending events now",
+          "description": "pantry_events rows still awaiting a worker. Sustained non-zero means workers are behind or stopped on the writer site.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 1
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
+              },
+              "format": "table",
+              "rawSql": "SELECT count(*) AS \"pending\" FROM pantry_events WHERE status = 'pending'",
+              "rawQuery": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "value_and_name",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "#EAB839",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 50
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Dead-letter outbox",
+          "description": "pantry_outbox rows that exhausted retries. Any non-zero row deserves a look at last_error on the writer.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 1
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
+              },
+              "format": "table",
+              "rawSql": "SELECT count(*) AS \"dead_letter\" FROM pantry_outbox WHERE status = 'dead_letter'",
+              "rawQuery": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "value_and_name",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Distinct community participants",
+          "description": "Distinct user_ids in community_participants (all time on this DB generation). first_time counts users whose first recorded game was here — the distinct-participant answer the Prometheus dashboard cannot give.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 18,
+            "y": 1
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
+              },
+              "format": "table",
+              "rawSql": "SELECT count(DISTINCT user_id) AS \"participants\", count(*) FILTER (WHERE first_time) AS \"first_time_rows\" FROM community_participants",
+              "rawQuery": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "horizontal",
+            "textMode": "value_and_name",
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Ingested events by source/type",
+          "description": "pantry_events rows per interval, split by source and event type. chat.message is the steady background; redemption/raid/cheer spikes are the interesting overlays.",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 5
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
+              },
+              "format": "time_series",
+              "rawSql": "SELECT $__timeGroup(created_at,$__interval) AS \"time\", source || '/' || event_type AS metric, count(*) AS \"events\" FROM pantry_events WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1,2 ORDER BY 1",
+              "rawQuery": true
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": [
+                "sum"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 12,
+                "showPoints": "never",
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Community game actions by action",
+          "description": "community_actions rows per interval (at is epoch millis). Attacks, joins, shields, combos — the actual game mix. Flat here means a quiet game, not a broken pipeline; cross-check panel 5 ingest first.",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 5
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
+              },
+              "format": "time_series",
+              "rawSql": "SELECT $__timeGroup(to_timestamp(at/1000.0),$__interval) AS \"time\", action AS metric, count(*) AS \"actions\" FROM community_actions WHERE to_timestamp(at/1000.0) BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1,2 ORDER BY 1",
+              "rawQuery": true
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": [
+                "sum"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 12,
+                "showPoints": "never",
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "row",
+          "title": "Boss activity and bot messages",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 13
+          },
+          "panels": []
+        },
+        {
+          "id": 7,
+          "type": "stat",
+          "title": "Boss damage (24h)",
+          "description": "Sum of damage_dealt in boss_contributions over the last 24 hours. Real dealt damage, not the legacy donation-path counter.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 14
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
+              },
+              "format": "table",
+              "rawSql": "SELECT coalesce(sum(damage_dealt),0) AS \"damage\" FROM boss_contributions WHERE created_at > now() - interval '24 hours'",
+              "rawQuery": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "value_and_name",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 8,
+          "type": "stat",
+          "title": "Boss outcomes (7d)",
+          "description": "boss_events resolutions in the last seven days by status. defeated vs expired is the real outcome mix.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 14
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
+              },
+              "format": "table",
+              "rawSql": "SELECT status AS \"outcome\", count(*) AS \"fights\" FROM boss_events WHERE start_time > now() - interval '7 days' GROUP BY 1 ORDER BY 2 DESC",
+              "rawQuery": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "horizontal",
+            "textMode": "value_and_name",
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Bot messages by status (daily)",
+          "description": "engagement_message_counts is a daily rollup (day/status/count) written by the bot itself — daily grain, not per-second. Use for 7d/30d ranges.",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 14
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
+              },
+              "format": "time_series",
+              "rawSql": "SELECT day AS \"time\", status AS metric, sum(count)::bigint AS \"messages\" FROM engagement_message_counts WHERE day BETWEEN $__timeFrom()::date - interval '1 day' AND $__timeTo()::date GROUP BY 1,2 ORDER BY 1",
+              "rawQuery": true
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "bars",
+                "lineWidth": 0,
+                "fillOpacity": 85,
+                "showPoints": "never",
+                "spanNulls": false,
+                "barAlignment": 0,
+                "stacking": {
+                  "mode": "normal",
+                  "group": "A"
+                }
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 10,
+          "type": "table",
+          "title": "Outbound deliveries by target/status",
+          "description": "pantry_outbox lifetime mix per dispatch target. completed is delivered; anything else (pending lease-held, retrying, dead_letter) is dispatcher backlog.",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 18
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
+              },
+              "format": "table",
+              "rawSql": "SELECT target AS \"target\", status AS \"status\", count(*) AS \"messages\" FROM pantry_outbox GROUP BY 1,2 ORDER BY 3 DESC",
+              "rawQuery": true
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false,
+              "reducer": [
+                "sum"
+              ],
+              "countRows": false,
+              "fields": ""
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                }
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 11,
+          "type": "text",
+          "title": "About this dashboard",
+          "gridPos": {
+            "h": 4,
+            "w": 24,
+            "x": 0,
+            "y": 26
+          },
+          "options": {
+            "mode": "markdown",
+            "content": "Reads the **home standby replica** (`postgres-authority-home-return`, streaming from the Oracle writer), so numbers lag real time by seconds and stay visible while the home app plane is parked. If Oracle fails over, repoint the `PantryPostgres` datasource at the new primary. **Not here on purpose:** Extension requests by route and commands by name have no backing table — they only exist as process-local Prometheus counters in unscraped worker processes, and need the per-role `/metrics` code fix before any dashboard can show them."
+          }
+        }
+      ]
+    }
   pantry-bot-usage.json: |
     {
       "uid": "homelab-pantry-bot-usage",
