@@ -69,20 +69,25 @@ contained `serversettings.json` updated 2026-09-08. This verifies object
 presence and current retention visibility, but it is not the independent R2
 freshness-monitor gate because the credential is still a workload credential.
 
-- A compressed custom-format Authentik/Postgres dump was created at
-  `/mnt/nvme/recovery/postgresql/authentik-20260909T044050Z.dump.gz` with mode
-  600. `pg_restore --list` parsed the archive successfully; no restore was
-  applied to the live database.
+- A fresh compressed custom-format Authentik/Postgres dump was created on
+  2026-09-19 at
+  `/mnt/nvme/recovery/postgresql/authentik-current-20260919T213106Z.dump.gz`
+  with mode 600, size 47,119,338 bytes, and SHA-256
+  `7942fbedd0ae59060673a0326e5d7d35c813e78a8c1f5c4f136f993ce3fe38f6`.
+  `pg_restore` successfully restored it into a disposable PostgreSQL pod in
+  namespace `auth-backup-rehearsal-20260919`; the namespace was isolated from
+  production and is removed after evidence capture.
 - The current R2 credential initially rejected writes because Rclone attempted
   `CreateBucket`; using `--s3-no-check-bucket` succeeded. The compressed dump
   is now also present at
   `r2:pantry-bot-backups/recovery/auth-postgresql/authentik-20260909T044050Z.dump.gz`
   with verified size 13,727,556 bytes. The R2 write path must be retained in
   the documented backup procedure.
-- The recurring implementation is `scripts/authentik-postgres-backup.sh`. It
-  retains 30 days on the mounted NVMe, uploads through the R2 sidecar with
-  `--s3-no-check-bucket`, verifies a remote object size, and never reads secret
-  values into the host shell.
+- The recurring implementation is `scripts/authentik-postgres-backup.sh`; its
+  database target was corrected to `auth-postgresql-home-primary-0` and the
+  current `POSTGRES_PASSWORD` environment contract. No deployed timer or R2
+  sidecar is currently present on MinecraftMachine, so automated freshness and
+  remote-upload verification remain open.
 - Operations audit data is SQLite at `/data/operations.db`. A consistent
   Python `sqlite3.Connection.backup()` snapshot was verified locally and in R2
   at `recovery/operations/operations-20260909T044548Z.db.gz`; the recurring

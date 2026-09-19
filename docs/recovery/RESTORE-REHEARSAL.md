@@ -105,15 +105,18 @@ uses emptyDir only and has no production PVC mount.
 
 ## Authentik/Postgres backup currently available
 
-The 2026-09-09 dump is stored locally at
-`/mnt/nvme/recovery/postgresql/authentik-20260909T044050Z.dump.gz` and in R2 at
-`r2:pantry-bot-backups/recovery/auth-postgresql/authentik-20260909T044050Z.dump.gz`.
+The latest verified local dump is
+`/mnt/nvme/recovery/postgresql/authentik-current-20260919T213106Z.dump.gz`
+(47,119,338 bytes; SHA-256
+`7942fbedd0ae59060673a0326e5d7d35c813e78a8c1f5c4f136f993ce3fe38f6`). The
+older 2026-09-09 dump remains in the documented R2 location.
 The R2 upload requires Rclone's `--s3-no-check-bucket` option because the
 scoped credential may write the existing bucket but may not create buckets.
 An R2 download was verified at 13,727,556 bytes with SHA-256
 `351e38304f1ae37a7994420c7302dd3f702f1b57cf9fa6e71823eeda3537b7b2`.
-The recurring source backup is `scripts/authentik-postgres-backup.sh`,
-scheduled daily at 02:30 in the tower user's crontab.
+The source procedure is `scripts/authentik-postgres-backup.sh`, but its
+deployed timer and current R2 upload path are not yet verified after the
+AuthPostgres primary rename.
 Restore procedure:
 
 1. Download the selected R2 object to an isolated host.

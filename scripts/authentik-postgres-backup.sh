@@ -5,8 +5,8 @@ export PATH=/usr/local/bin:/usr/bin:/bin
 # Daily Authentik/Postgres backup. Credentials stay inside the database and R2
 # pods; this script only handles the dump stream and object paths.
 NAMESPACE=auth
-DB_POD=auth-postgresql-0
-DB_CONTAINER=postgresql
+DB_POD=auth-postgresql-home-primary-0
+DB_CONTAINER=postgres
 R2_NAMESPACE=jmusicbot
 R2_SELECTOR='app.kubernetes.io/name=jmusicbot'
 R2_CONTAINER=r2-sync
@@ -33,7 +33,7 @@ trap 'rm -f "$tmp"' EXIT
 
 echo "creating $name"
 kubectl exec -n "$NAMESPACE" "$DB_POD" -c "$DB_CONTAINER" -- sh -c \
-  'PGPASSWORD="$(cat "$POSTGRES_PASSWORD_FILE")" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' \
+  'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' \
   | gzip -c > "$tmp"
 gzip -t "$tmp"
 size="$(stat -c '%s' "$tmp")"
