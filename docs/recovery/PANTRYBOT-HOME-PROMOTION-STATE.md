@@ -51,6 +51,11 @@ pass.
   Tailscale `100.84.89.87:30432`. It is Ready and streaming with slot
   `oracle_from_home`; the home primary reports that slot active. Oracle
   application roles remain stopped while this standby is validated.
+- Oracle promotion is not yet safe to invoke through the legacy adapter: it
+  still assumes the former namespace/service and PostgreSQL data path. The
+  deployed site-neutral helper has the configured-kubectl closure fix, but a
+  source-level Oracle adapter integration must be completed before a writer
+  cutover or failback rehearsal.
 - The deployed site-neutral promoter had a readiness bug in an earlier copy
   (`_kubectl` was referenced instead of its configured closure); the live copy
   was backed up, corrected, and py_compile-validated. The source-level fix
