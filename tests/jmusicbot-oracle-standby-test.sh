@@ -45,6 +45,15 @@ assert "if [ -f /musicbot/.jmusicbot-lease-owner ]; then" in deployment, (
 assert "--exclude '.jmusicbot-lease-owner'" in deployment, (
     "R2 restore/sync must never copy the ownership marker"
 )
+assert deployment.count("--exclude '.jmusicbot-r2-heartbeat'") >= 2, (
+    "R2 restore and sync must not copy or delete the heartbeat object"
+)
+assert "date -u +%Y-%m-%dT%H:%M:%SZ > /tmp/.jmusicbot-r2-heartbeat" in deployment, (
+    "the owner must write a timestamped heartbeat outside the state volume"
+)
+assert "rclone copyto /tmp/.jmusicbot-r2-heartbeat" in deployment, (
+    "the owner must publish the heartbeat after a successful state sync"
+)
 PY
 
 echo "jmusicbot-oracle-active-active-test: all assertions passed"

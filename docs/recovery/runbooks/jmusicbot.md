@@ -14,6 +14,12 @@ open a Discord session or write mutable R2 state.
   Discord and its `jmusicbot-health` endpoint must remain not ready (`503`).
 - The `r2-sync` sidecar may write only when the lease marker exists; it excludes
   `.jmusicbot-lease-owner` from restore and sync. The marker is not authority.
+- After a successful state sync, the owner publishes the small
+  `.jmusicbot-r2-heartbeat` object under the same R2 prefix. It is written from
+  the sidecar's temporary filesystem, never restored into bot state, and is
+  excluded from `rclone sync` deletion. Its object `LastModified` is the
+  freshness signal for the sync loop; the heartbeat is not a lease or fencing
+  authority.
 - `Recreate` is required for a site-local rollout. Do not use a rolling update
   for the Discord writer.
 - Never scale or restart both sites as a handoff mechanism. Fencing and a
@@ -48,9 +54,11 @@ kubectl -n jmusicbot logs deploy/jmusicbot -c r2-sync --since=30m \
   | grep -E 'sync|generation|timestamp|completed|skipped' | tail -50
 ```
 
-Record the newest generation identifier, object timestamp, and observed lag as
-metadata only. The acceptable RPO is the measured lag at the handoff boundary;
-do not claim zero RPO from a successful sync log.
+Record the `.jmusicbot-r2-heartbeat` object timestamp together with the newest
+mutable-state object and observed lag as metadata only. A fresh heartbeat proves
+that the current lease holder completed a sync cycle; it does not prove that a
+particular state file changed or that RPO is zero. The acceptable RPO is the
+measured lag at the handoff boundary.
 
 ## Controlled Oracle -> home return
 

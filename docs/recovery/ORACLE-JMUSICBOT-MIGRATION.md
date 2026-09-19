@@ -59,9 +59,11 @@ Discord logs, marker, or sidecar behavior contradicts this contract.
   unavailable during the maintenance window.
 - [ ] R2 contains a fresh JMusicBot generation and the required independent R2
   credential is available without copying its value into Git. The latest
-  observed `serversettings.json` object is dated 2026-09-08, so freshness and
-  the automated sync path remain open until a post-change object generation is
-  captured.
+  observed `serversettings.json` object is dated 2026-09-08. The sidecar now
+  publishes `.jmusicbot-r2-heartbeat` after every successful owner sync, so
+  verify that heartbeat's `LastModified` and the automated sync path before
+  closing this gate; a heartbeat alone is not a state-generation or zero-RPO
+  claim.
 - [x] The current home JMusicBot pod is healthy and its exact image digest,
   Secret names, and R2 object listing are recorded.
 - [x] A Discord-side duplicate-work check is prepared; only one JMusicBot

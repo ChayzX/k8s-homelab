@@ -104,7 +104,7 @@ spec:
           command:
             - sh
             - -c
-            - rclone copy r2:pantry-bot-backups/jmusicbot/ /musicbot/ --exclude '.jmusicbot-lease-owner' --config=/dev/null --timeout=2m --contimeout=15s --retries=2 --low-level-retries=5
+            - rclone copy r2:pantry-bot-backups/jmusicbot/ /musicbot/ --exclude '.jmusicbot-lease-owner' --exclude '.jmusicbot-r2-heartbeat' --config=/dev/null --timeout=2m --contimeout=15s --retries=2 --low-level-retries=5
           env: &r2-env
             - name: RCLONE_CONFIG_R2_TYPE
               value: s3
@@ -249,7 +249,11 @@ spec:
           # more than tight enough and far simpler than an inotify watcher.
           # Only the Java owner writes .jmusicbot-lease-owner after acquiring
           # the witness lease. A standby therefore restores but never syncs
-          # its stale state back into the shared R2 prefix.
+          # its stale state back into the shared R2 prefix. The heartbeat is
+          # written outside the read-only state volume so its object
+          # LastModified advances even when mutable files do not change. It is
+          # lease-gated, proves a completed sync cycle, and is never restored
+          # into bot state or treated as authority.
           command:
             - sh
             - -c
@@ -259,6 +263,12 @@ spec:
                   rclone sync /musicbot r2:pantry-bot-backups/jmusicbot/ \
                     --exclude 'config.txt' --exclude 'config.txt.bak*' \
                     --exclude '.jmusicbot-lease-owner' \
+                    --exclude '.jmusicbot-r2-heartbeat' \
+                    --config=/dev/null --timeout=2m --contimeout=15s \
+                    --retries=2 --low-level-retries=5 --quiet && \
+                  date -u +%Y-%m-%dT%H:%M:%SZ > /tmp/.jmusicbot-r2-heartbeat && \
+                  rclone copyto /tmp/.jmusicbot-r2-heartbeat \
+                    r2:pantry-bot-backups/jmusicbot/.jmusicbot-r2-heartbeat \
                     --config=/dev/null --timeout=2m --contimeout=15s \
                     --retries=2 --low-level-retries=5 --quiet
                 fi
