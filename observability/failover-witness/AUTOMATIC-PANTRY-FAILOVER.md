@@ -1,9 +1,10 @@
 # PantryBot automatic failover: activation contract
 
 This document describes required behavior and the workspace implementation as
-of 2026-09-14. It is not evidence of a production deployment. The Canada laptop
-is the last reported active site; Oracle automatic promotion must stay disabled
-until the evidence below is collected. This work must not interrupt streaming.
+of 2026-09-19. It is not evidence of a production deployment. Home is the
+current primary site; Oracle is the prepared standby/recovery site. Oracle
+automatic promotion must stay disabled until the evidence below is collected.
+This work must not interrupt streaming.
 
 ## What the controller now implements
 

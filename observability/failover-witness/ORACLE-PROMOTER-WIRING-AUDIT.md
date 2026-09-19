@@ -1,6 +1,6 @@
 # Oracle promoter wiring audit
 
-This audit records the Oracle host wiring on 2026-09-15. The obsolete GCP-only
+This audit records the Oracle host wiring on 2026-09-19. The obsolete GCP-only
 drop-in was removed and systemd was reloaded; the promoter remains disabled and
 inactive. No application service was restarted.
 
@@ -19,8 +19,8 @@ still intentionally disabled until positive rehearsal evidence exists:
 
 | Hook | Current evidence | Required before enablement |
 |---|---|---|
-| `OLD_WRITER_FENCE_COMMAND` | `/usr/local/lib/failover-witness/fence-canada-from-oracle.sh`; positive rehearsal remains unproven | Fence Canada and home, verify database and side-effect lanes are stopped |
-| `LOCAL_WRITER_FENCE_COMMAND` | `/usr/local/lib/failover-witness/fence-pantry-postgres.sh --confirm` | Fence Oracle PantryBot writers and routes, then verify |
+| `OLD_WRITER_FENCE_COMMAND` | `/usr/local/lib/failover-witness/fence-old-writers-from-oracle.sh --confirm`; dry-run transport checks pass, positive rehearsal remains unproven | Fence Canada and home, verify database and side-effect lanes are stopped |
+| `LOCAL_WRITER_FENCE_COMMAND` | `/usr/local/lib/failover-witness/fence-pantry-postgres.sh --confirm`; deployed local topology still requires validation | Fence Oracle PantryBot writers and routes, then verify |
 | `REPLICATION_CHECK_COMMAND` | `/usr/local/lib/failover-witness/oracle-replication-check.sh` | Verify system identity, timeline, replay freshness, schema, and approved RPO |
 | `SERVICE_CHECK_COMMAND` | `/usr/local/lib/failover-witness/oracle-service-check.sh` | Verify local database authority, all roles, readiness, and commands URL |
 | `PUBLISH_ROUTES_COMMAND` | `/usr/local/lib/failover-witness/publish-cloudflare-routes.sh` | Invoke the Cloudflare route adapter and verify public origin markers |

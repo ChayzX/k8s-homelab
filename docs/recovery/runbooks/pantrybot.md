@@ -23,25 +23,26 @@ The legacy SQLite deployment in `k8s/deployment.yaml` and homelab
 `pantry-bot/40-deployment.yaml` is not the HA path and must not be started as a
 second writer during an incident.
 
-## Current recovery state (2026-09-12)
+## Current recovery state (2026-09-19)
 
-The live system is in an Oracle-primary recovery window, not normal
-home-primary operation:
+The live system is in the normal home-primary posture; Oracle is a prepared
+standby/recovery site, not the current writer:
 
-- `pantry-bot-platform/PANTRY_DATABASE_URL` points to the Oracle database
-  endpoint; do not print the Secret value while checking this.
-- Oracle `postgres-authority-standby-0` reports `pg_is_in_recovery() = false`.
-- Home `postgres-authority-home-return-0` reports `pg_is_in_recovery() = true`
-  and is intentionally not selected by the production application endpoint.
-- Oracle currently owns the Twitch ingress, Twitch outbound, and overlay lease
-  rows. Home application capacity may remain Ready, but it must not acquire a
-  second external-side-effect owner.
+- Home `postgres-authority-home-failback-0` is the writable authority selected
+  by the home application endpoint. Do not print the Secret value while
+  checking the endpoint.
+- Oracle's `canada-standby-prep-0` reports `pg_is_in_recovery() = true` and is
+  not a writable application endpoint. Oracle application roles remain
+  stopped except for explicitly documented standby/safe-stage capacity.
+- The Oracle promoter unit is disabled and inactive. Its service check must
+  fail while Oracle is still a standby; this is expected and is not promotion
+  evidence.
 
-Do not switch the application Secret, promote the home standby, or reseed
-Oracle from home until the current Oracle writer is fenced, the home standby
-is verified current, and the controlled return-home sequence below has an
-explicit maintenance record in GitHub Issue #147 or #191. A healthy pod or a
-successful readiness probe is not a fencing proof.
+Do not promote Oracle, switch the application Secret, or reseed either site
+until the current home writer is fenced, Oracle freshness is verified, and a
+controlled promotion plus return-home sequence has an explicit maintenance
+record in GitHub Issue #147 or #191. A healthy pod or a successful readiness
+probe is not a fencing proof.
 
 ## Normal health check
 
@@ -159,13 +160,13 @@ live writer.
 | Adapter | Target | Status |
 |---|---|---|
 | `fence-pantry-postgres.sh` | Home `pantry-bot` namespace PostgreSQL StatefulSets | Installed/enabled |
-| `fence-canada-from-oracle.sh` | Canada writer (PowerShell) | Installed/enabled |
+| `fence-old-writers-from-oracle.sh` | Composite home and Canada old-writer fence | Installed; confirm path exists, positive live rehearsal remains open |
 
-### Oracle canada-standby-prep fence adapter (not yet installed)
+### Oracle canada-standby-prep fence adapter (live installation pending)
 
 | Adapter | Target | Status |
 |---|---|---|
-| `fence-pantry-postgres-oracle.sh` | Oracle `pantrybot-canada-replica-prep` namespace `canada-standby-prep` StatefulSet, via fixed SSH transport | **Not yet installed/enabled** |
+| `fence-pantry-postgres-oracle.sh` | Oracle `pantrybot-canada-replica-prep` namespace `canada-standby-prep` StatefulSet, via fixed SSH transport | Repository adapter present; live installation and positive rehearsal remain open |
 
 The Oracle fence adapter runs on the home controller and targets only the
 `canada-standby-prep` StatefulSet in the `pantrybot-canada-replica-prep` namespace
