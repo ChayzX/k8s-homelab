@@ -36,9 +36,11 @@ The controlled promotion sequence is:
 4. Switch the service selector and platform database URL.
 5. Start only the home runtime components whose immutable images are available.
 
-The controlled promotion/failback rehearsal exercised both directions and
-proved the application lease/fencing sequence. The current live snapshot
-(2026-09-19) is home postgres-authority-home-return-0 as the writable primary;
+The isolated/application-level ownership rehearsal exercised both directions
+and proved the application lease/fencing sequence. A live production
+PostgreSQL promotion, stale-writer rejection, endpoint cutover, and return-home
+failback have **not** been proven; the current live snapshot (2026-09-19) is
+home postgres-authority-home-return-0 as the writable primary;
 the canonical Oracle postgres-authority-standby StatefulSet is still 0/0,
 while the separately named reseed candidate is 1/1, reports
 pg_is_in_recovery()=t, and reports pg_stat_wal_receiver.status=streaming.
@@ -59,10 +61,11 @@ showed matching receive/replay LSNs and approximately 0.20–0.23s replay lag.
   replacing the canonical StatefulSet, capture repeated receive/replay LSN
   freshness, verify service/secret wiring, and perform the documented
   old-writer fencing checks.
-- The corrected promoter completed the guarded Oracle promotion path with the
-  composite home+Canada fence, replication gate, database promotion, service
-  check, and route publication. The promoter remains disabled after the
-  controlled rehearsal; automatic failover is not enabled.
+- The corrected promoter and composite home+Canada fence have passed source-level
+  contract tests, dry-run checks, and isolated/controller rehearsal coverage.
+  A live production Oracle promotion, service cutover, route publication, and
+  return-home failback are not yet proven. The promoter remains disabled and
+  automatic failover is not enabled.
 - The stale home-return PVC was deleted only after backup and replacement state
   were verified. The canonical standby manifest was reapplied, the replication
   credential was synchronized from the Oracle secret, and the fresh PVC
@@ -75,8 +78,9 @@ showed matching receive/replay LSNs and approximately 0.20–0.23s replay lag.
   for the live `canada-standby-prep` topology. Its focused test suite passes
   (23 tests), and the corrected source plus a topology-pinned disabled systemd
   drop-in are installed on Oracle. A fixed-identity composite old-writer fence
-  completed successfully against both home and Canada in the controlled
-  rehearsal. Automatic service enablement remains disabled pending repeated
+  has verified its transport and dry-run contracts for both home and Canada; a
+  fresh live promotion-window fence rehearsal remains an explicit gate.
+  Automatic service enablement remains disabled pending repeated
   failure-domain testing and external-side-effect/RTO-RPO evidence.
 - The deployed site-neutral promoter had a readiness bug in an earlier copy
   (`_kubectl` was referenced instead of its configured closure); the live copy
