@@ -88,14 +88,10 @@ alloy's config expects under the mount. Username (`1769810`) and the push
 URL (`https://logs-prod-036.grafana.net/loki/api/v1/push`) are not secret and
 are configured in the alloy DaemonSet manifests.
 
-This is currently a **dual-write**: alloy sends to both the local `loki`
-service and Grafana Cloud. Once Grafana Cloud is confirmed receiving data
-(check `{job=~".+"}` in Grafana Cloud's Explore, or the local Grafana's Loki
-datasource repointed at `logs-prod-036.grafana.net`), the local `loki` client
-entry can be removed and the in-cluster Loki Deployment decommissioned to
-actually free its RAM and stop the HDD-compaction latency noted in
-the previous collector configuration. That cutover is a separate, deliberate follow-up, not
-done here.
+The live Alloy manifests currently write only to the local `loki` service.
+Enabling Grafana Cloud as a second destination requires a separate reviewed
+change and a receipt/freshness check; do not infer that forwarding is active
+from this Secret contract alone.
 
 ---
 

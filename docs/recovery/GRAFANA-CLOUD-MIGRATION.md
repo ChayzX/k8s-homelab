@@ -18,7 +18,7 @@ local dashboards or log collection.
 | Signal | Current path | Target path |
 | --- | --- | --- |
 | Metrics | Local Prometheus on MinecraftMachine | Local Prometheus at each site; no Grafana Cloud remote-write stream |
-| Logs | Alloy to local Loki and Grafana Cloud | Alloy dual-write during validation, then Cloud-first with bounded local retention |
+| Logs | Alloy to local Loki | Grafana Cloud log copy remains an optional, separately enabled follow-up |
 | Dashboards | Local Grafana PVC | Tracked `dashboards/*.json` files provisioned into on-prem Grafana |
 | External checks | GCP monitor/UptimeRobot | Retained; Grafana Cloud is not the only failure detector |
 
@@ -30,25 +30,24 @@ and [current pricing](https://grafana.com/pricing/).
 
 ## Completed
 
-`observability/alloy-logs-*.yaml` already sends logs to both the local Loki
-service and the Grafana Cloud Loki endpoint. The credential is mounted from
-the `grafana-cloud-loki` Secret and is not committed. Keep this dual-write
-until Cloud Explore verifies logs from MinecraftMachine and Oracle.
+`observability/alloy-logs-*.yaml` currently sends logs only to the local Loki
+service. Grafana Cloud log forwarding is not enabled in the live manifests;
+the credential contract remains documented for a future, deliberate
+dual-write experiment.
 
 The tracked dashboards are portable JSON under `dashboards/`; no local
 Grafana database migration is required for the dashboard definitions.
 
-Grafana Cloud now contains the homelab dashboards, with their datasource
+Grafana Cloud may contain historical homelab dashboards, with their datasource
 variables mapped to the managed `grafanacloud-prom` and `grafanacloud-logs`
 datasources. The temporary migrated `Prometheus` and `Loki` datasources that
 pointed at in-cluster URLs were removed after confirming no dashboard or alert
 rule referenced them.
 
-The home and Oracle Prometheus collectors now retain metrics locally and no
+The home and Oracle Prometheus collectors retain metrics locally and no
 longer mount or use the `grafana-cloud-metrics` Secret. This is the deliberate
-on-prem cutover and stops metric ingestion charges. alloy may continue
-dual-writing the explicitly selected logs to Cloud while local Loki remains
-available for dashboards and local incident response.
+on-prem cutover and stops metric ingestion charges. Alloy currently keeps
+local Loki available for dashboards and local incident response.
 
 ## Secret contract
 
