@@ -1,6 +1,7 @@
 # Free-Tier Capacity Baseline
 
-**Measured:** 2026-09-13 05:45 CDT; refreshed after the PantryBot HA overlays and the current Oracle authority state
+**Measured:** 2026-09-13 05:45 CDT; live authority/capacity reconciliation
+continued through 2026-09-19
 
 This is the initial capacity gate for the free active-active design. It is an observation record, not an authorization to deploy production failover.
 
@@ -9,7 +10,7 @@ This is the initial capacity gate for the free active-active design. It is an ob
 | Host | CPU | Memory | Disk | Current observation | Gate |
 |---|---:|---:|---:|---|---|
 | `minecraftmachine` | 16 logical CPUs | 15 GiB total, 5.5 GiB available at check | Root 3.4 TiB free; `/mnt/nvme` 188 GiB free | Home control plane and Minecraft host; Minecraft excluded from this project | Do not alter Minecraft placement |
-| `pantry-bot-oracle` | 2 vCPU; 2 allocatable k3s CPU | 11 GiB total, 7.7 GiB available at host check; k3s 35% CPU / 41% memory | 33 GiB free | Independent arm64 Oracle k3s Ready; split PantryBot capacity and writable authority pod are running | Keep resource limits explicit; recheck with side-effect roles and egress |
+| `pantry-bot-oracle` | 2 vCPU; 2 allocatable k3s CPU | 11 GiB total, 7.7 GiB available at host check; k3s 35% CPU / 41% memory | 33 GiB free | Independent arm64 Oracle k3s Ready; split PantryBot capacity and a read-only PostgreSQL reseed candidate are running | Keep resource limits explicit; recheck with side-effect roles and egress |
 | `discordmusicbot` | 2 vCPU | 969 MiB total, 578 MiB available at check | 3.3 GiB free | x86_64 observer host; no swap, k3s, or Docker active; OS Login SSH and passwordless sudo verified | Observer-only; any coordination witness must be lightweight and pass a measured memory/network test |
 | `chasebot` | 2 allocatable CPU | 1,015 MiB currently used (30% of node memory); 215m CPU (10%) | Local-path storage only; current PVCs are RWO and node-local | Ready second home k3s node; hosts no current PantryBot database pod | Use for stateless replicas and home-local capacity only; do not treat it as an independent site |
 
@@ -35,19 +36,19 @@ Oracle k3s is also currently a single Ready arm64 control-plane node with 2
 allocatable CPU and 11,932 MiB total memory. After deploying the stateless
 PantryBot public/private UI, API, and overlay capacity plus the persistent
 physical standby, the live host check reports 714m CPU (35%) and 4,940Mi memory
-(41%), with 33GiB free on the root filesystem. The authority pod is accepting
-connections and reports `pg_is_in_recovery = false`; the home PantryBot
-PostgreSQL StatefulSets are currently scaled to zero. The old disposable
+(41%), with 33GiB free on the root filesystem. The reseed candidate is
+accepting read-only connections and reports `pg_is_in_recovery = true`; home
+remains the sole PantryBot PostgreSQL writer. The old disposable
 `pantry-bot-db-rehearsal` namespace was removed after this measurement. Both
-sites now run the
-side-effecting gateway, worker, and dispatcher roles under target-scoped
-witness fencing; Oracle is the current writable authority and home is fenced.
-This confirms free-tier capacity and current single-writer placement, not
-automatic cross-site failover.
+sites have application capacity under target-scoped witness fencing; Oracle
+database and side-effect authority remain fenced. This confirms free-tier
+capacity and current single-writer placement, not automatic cross-site
+failover.
 
 The home cluster currently reports `chasebot` at 215m CPU and 1,015Mi memory
 (10% and 30%) and `minecraftmachine` at 850m CPU and 10,130Mi memory (5% and
-82%). Oracle is the current writable authority. These readings are
+82%). Home is the current PantryBot writable authority; Oracle is read-only
+recovery capacity. These readings are
 a point-in-time observation and do not authorize adding workloads to the
 Minecraft node or declaring the database automatically redundant.
 
