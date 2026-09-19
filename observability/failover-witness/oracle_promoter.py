@@ -279,8 +279,12 @@ def run() -> None:
     parser.add_argument("--secret", default=os.environ.get("WITNESS_SHARED_SECRET"))
     parser.add_argument("--lease-seconds", type=int, default=30)
     parser.add_argument("--namespace", default="pantry-bot")
+    parser.add_argument("--pod-namespace", default=None, help="namespace containing the PostgreSQL pod")
+    parser.add_argument("--service-namespace", default=None, help="namespace containing the application Service and platform Secret")
     parser.add_argument("--pod", default="postgres-authority-standby-0")
     parser.add_argument("--service", default="postgres-authority-standby")
+    parser.add_argument("--data-directory", default="/var/lib/postgresql/data")
+    parser.add_argument("--manual-endpoint", action="store_true", help="retain a manually managed Endpoints object instead of changing Service selectors")
     parser.add_argument("--old-writer-fence-command", default=os.environ.get("OLD_WRITER_FENCE_COMMAND"))
     parser.add_argument("--local-writer-fence-command", default=os.environ.get("LOCAL_WRITER_FENCE_COMMAND"))
     parser.add_argument("--replication-check-command", default=os.environ.get("REPLICATION_CHECK_COMMAND"))
@@ -296,6 +300,9 @@ def run() -> None:
             raise SystemExit(f"{name.upper()} is required before automatic promotion")
     if not 15 <= args.lease_seconds <= 30:
         raise SystemExit("--lease-seconds must match the witness TTL (15..30)")
+
+    pod_namespace = args.pod_namespace or args.namespace
+    service_namespace = args.service_namespace or args.namespace
 
     journal = ActivationJournal(args.state_path)
     generation: dict[str, Any] = {}
@@ -333,23 +340,23 @@ def run() -> None:
         return result.get("ok") is True
 
     def promote(_token: dict[str, Any]) -> None:
-        recovery = _kubectl("-n", args.namespace, "exec", args.pod, "--", "sh", "-ec", "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select pg_is_in_recovery();\"")
+        recovery = _kubectl("-n", pod_namespace, "exec", args.pod, "--", "sh", "-ec", "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select pg_is_in_recovery();\"")
         if recovery == "t":
-            activation_kubectl("-n", args.namespace, "exec", args.pod, "--", *_postgres_promote_command("/var/lib/postgresql/data"))
+            activation_kubectl("-n", pod_namespace, "exec", args.pod, "--", *_postgres_promote_command(args.data_directory))
             deadline = time.monotonic() + 60
             while time.monotonic() < deadline:
-                if _kubectl("-n", args.namespace, "exec", args.pod, "--", "sh", "-ec", "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select pg_is_in_recovery();\"") == "f":
+                if _kubectl("-n", pod_namespace, "exec", args.pod, "--", "sh", "-ec", "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select pg_is_in_recovery();\"") == "f":
                     break
                 time.sleep(1)
             else:
                 raise RuntimeError("Oracle PostgreSQL did not leave recovery mode")
         elif recovery != "f":
             raise RuntimeError(f"unexpected Oracle recovery state: {recovery!r}")
-        activation_kubectl("-n", args.namespace, "label", "pod", args.pod, "pantrybot.postgres/role=primary", "--overwrite")
+        activation_kubectl("-n", pod_namespace, "label", "pod", args.pod, "pantrybot.postgres/role=primary", "--overwrite")
 
     def is_primary() -> bool:
         try:
-            return _kubectl("-n", args.namespace, "exec", args.pod, "--", "sh", "-ec", "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select pg_is_in_recovery();\"") == "f"
+            return _kubectl("-n", pod_namespace, "exec", args.pod, "--", "sh", "-ec", "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select pg_is_in_recovery();\"") == "f"
         except Exception:
             return False
 
@@ -361,17 +368,18 @@ def run() -> None:
             return False
 
     def switch_endpoint() -> None:
-        selector = json.dumps({"app.kubernetes.io/name": "pantry-postgres-authority-standby", "pantrybot.postgres/role": "primary"}, separators=(",", ":"))
-        activation_kubectl("-n", args.namespace, "patch", "service", args.service, "--type=merge", "-p", json.dumps({"spec": {"selector": json.loads(selector)}}))
-        encoded = _kubectl("-n", args.namespace, "get", "secret", "pantry-bot-platform", "-o", "jsonpath={.data.PANTRY_DATABASE_URL}")
+        if not args.manual_endpoint:
+            selector = json.dumps({"app.kubernetes.io/name": "pantry-postgres-authority-standby", "pantrybot.postgres/role": "primary"}, separators=(",", ":"))
+            activation_kubectl("-n", service_namespace, "patch", "service", args.service, "--type=merge", "-p", json.dumps({"spec": {"selector": json.loads(selector)}}))
+        encoded = _kubectl("-n", service_namespace, "get", "secret", "pantry-bot-platform", "-o", "jsonpath={.data.PANTRY_DATABASE_URL}")
         current = base64.b64decode(encoded).decode()
         if "@" not in current:
             raise RuntimeError("PANTRY_DATABASE_URL has no authority component")
         userinfo = current.rsplit("@", 1)[0]
         database = current.rsplit("/", 1)[-1]
-        local = f"{userinfo}@{args.service}.{args.namespace}.svc.cluster.local:5432/{database}"
+        local = f"{userinfo}@{args.service}.{service_namespace}.svc.cluster.local:5432/{database}"
         replacement = base64.b64encode(local.encode()).decode()
-        activation_kubectl("-n", args.namespace, "patch", "secret", "pantry-bot-platform", "--type=merge", "-p", json.dumps({"data": {"PANTRY_DATABASE_URL": replacement}}))
+        activation_kubectl("-n", service_namespace, "patch", "secret", "pantry-bot-platform", "--type=merge", "-p", json.dumps({"data": {"PANTRY_DATABASE_URL": replacement}}))
 
     def verify_promoted() -> bool:
         # Promotion must be observed from the database before routing or
@@ -381,9 +389,9 @@ def run() -> None:
 
     def enable_roles() -> None:
         for deployment in ORACLE_PROMOTION_DEPLOYMENTS:
-            activation_kubectl("-n", args.namespace, "scale", f"deployment/{deployment}", "--replicas=1")
-            activation_kubectl("-n", args.namespace, "rollout", "restart", f"deployment/{deployment}")
-            _kubectl("-n", args.namespace, "rollout", "status", f"deployment/{deployment}", "--timeout=180s")
+            activation_kubectl("-n", service_namespace, "scale", f"deployment/{deployment}", "--replicas=1")
+            activation_kubectl("-n", service_namespace, "rollout", "restart", f"deployment/{deployment}")
+            _kubectl("-n", service_namespace, "rollout", "status", f"deployment/{deployment}", "--timeout=180s")
 
     def fence() -> None:
         run_hook(args.local_writer_fence_command)
@@ -391,7 +399,7 @@ def run() -> None:
             journal.record(generation["epoch"], generation["system_identifier"], "fenced")
 
     def validate_generation(token: dict[str, Any]) -> None:
-        identity = _kubectl("-n", args.namespace, "exec", args.pod, "--", "sh", "-ec", "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select system_identifier from pg_control_system();\"")
+        identity = _kubectl("-n", pod_namespace, "exec", args.pod, "--", "sh", "-ec", "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select system_identifier from pg_control_system();\"")
         if not identity.isdigit():
             raise RuntimeError("target database identity is unknown")
         primary = is_primary()

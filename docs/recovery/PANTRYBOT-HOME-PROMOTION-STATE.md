@@ -54,11 +54,12 @@ pass.
   Tailscale `100.84.89.87:30432`. It is Ready and streaming with slot
   `oracle_from_home`; the home primary reports that slot active. Oracle
   application roles remain stopped while this standby is validated.
-- The legacy automatic Oracle adapter still assumes the former namespace,
-  service, and PostgreSQL data path. The rehearsal used guarded one-shot
-  promotion/fencing commands while runtime roles were stopped. A tracked
-  source-level adapter integration is still needed to make that exact
-  promotion path unattended and repeatable.
+- The tracked Oracle adapter now accepts separate pod/service namespaces,
+  PostgreSQL data directory, and manually managed Endpoints (`--manual-endpoint`)
+  for the live `canada-standby-prep` topology. Its focused test suite passes
+  (21 tests), and the corrected source was installed on Oracle. Automatic
+  service enablement remains gated on reviewing the existing operator hook
+  commands; the verified one-shot rehearsal remains the production evidence.
 - The deployed site-neutral promoter had a readiness bug in an earlier copy
   (`_kubectl` was referenced instead of its configured closure); the live copy
   was backed up, corrected, and py_compile-validated. The source-level fix
