@@ -7,12 +7,15 @@ multi-primary writes are not provided by the free homelab design.
 
 ## Current topology
 
-- Current live authority: Oracle `auth-postgresql-standby-0` is the writable
-  primary for the current fencing epoch. This is a temporary controlled state;
-  it is not evidence that automatic promotion is safe.
-- Normal home target: `auth-postgresql-home-primary` is a separately named,
-  one-replica PostgreSQL target for a controlled logical restore. It uses a new
-  PVC and must not be started alongside the current authority.
+- Current live authority: Home `auth-postgresql-home-primary-0` is the sole
+  writable primary for the current fencing epoch. This is the normal home
+  authority; it is not evidence that automatic promotion is safe.
+- Oracle target: `auth-postgresql-standby-0` is the streaming physical standby
+  for a controlled Oracle promotion. It must remain read-only and must not be
+  started as a writer alongside the home authority.
+- Normal home restore target: `auth-postgresql-home-primary` is a separately
+  named, one-replica PostgreSQL target for a controlled logical restore. It uses
+  a new PVC and must not be started alongside the current authority.
 - Home return standby: `auth-postgresql-home-return-0` is a fresh-PVC physical
   standby target for a controlled return-home rehearsal. It remains scaled to
   zero until a maintenance window and must not reuse the fenced primary PVC.
