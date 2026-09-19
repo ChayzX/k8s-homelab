@@ -1,0 +1,104 @@
+# Fresh Oracle standby candidate used during the 2026-09 maintenance window.
+#
+# This intentionally has a distinct StatefulSet/PVC from
+# postgres-authority-standby. Apply only after the home backup, replication
+# slot, and reverse tunnel checks in PANTRYBOT-HOME-PROMOTION-STATE.md pass.
+# The candidate is read-only recovery capacity; application authority remains
+# on home until the cutover gate is explicitly completed.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-authority-standby-reseed
+  namespace: pantry-bot
+  labels:
+    homelab/production: "true"
+    pantrybot.postgres/role: standby
+spec:
+  selector:
+    app.kubernetes.io/name: pantry-postgres-authority-standby-reseed
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-authority-standby-reseed
+  namespace: pantry-bot
+  labels:
+    homelab/production: "true"
+    pantrybot.postgres/role: standby
+spec:
+  serviceName: postgres-authority-standby-reseed
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pantry-postgres-authority-standby-reseed
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pantry-postgres-authority-standby-reseed
+        pantrybot.postgres/role: standby
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: basebackup
+          image: postgres:16-alpine
+          envFrom:
+            - secretRef:
+                name: pantry-bot-postgres-standby
+          command: ["sh", "-ec"]
+          args:
+            - |
+              test -z "$(find /var/lib/postgresql/data -mindepth 1 -maxdepth 1 -print -quit)"
+              until pg_isready -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER"; do sleep 3; done
+              printf '%s:*:*:%s:%s\n' "$PRIMARY_HOST" "$REPLICATION_USER" "$REPLICATION_PASSWORD" > /tmp/pgpass
+              chmod 600 /tmp/pgpass
+              PGPASSFILE=/tmp/pgpass pg_basebackup \
+                -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER" \
+                -D /var/lib/postgresql/data -Fp -Xs -P -R -S "$PRIMARY_SLOT_NAME"
+              printf '%s:*:*:%s:%s\n' "$PRIMARY_HOST" "$REPLICATION_USER" "$REPLICATION_PASSWORD" > /var/lib/postgresql/data/.pgpass
+              chmod 600 /var/lib/postgresql/data/.pgpass
+              sed -i 's#/tmp/pgpass#/var/lib/postgresql/data/.pgpass#g' /var/lib/postgresql/data/postgresql.auto.conf
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          args:
+            - -c
+            - hot_standby=on
+            - -c
+            - wal_receiver_timeout=10s
+          envFrom:
+            - secretRef:
+                name: pantry-bot-postgres-standby
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -ec
+                - test "$(psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "select pg_is_in_recovery()")" = t
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 8Gi

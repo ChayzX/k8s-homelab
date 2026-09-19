@@ -4,7 +4,8 @@ set -Eeuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 for manifest in \
   "$ROOT/docs/recovery/pantrybot-postgres-standby-oracle.yaml" \
-  "$ROOT/docs/recovery/pantrybot-postgres-authority-standby-oracle.yaml"
+  "$ROOT/docs/recovery/pantrybot-postgres-authority-standby-oracle.yaml" \
+  "$ROOT/docs/recovery/pantrybot-postgres-standby-reseed-candidate.yaml"
 do
   grep -q 'data/.pgpass' "$manifest"
   grep -q 'chmod 600 /var/lib/postgresql/data/.pgpass' "$manifest"
