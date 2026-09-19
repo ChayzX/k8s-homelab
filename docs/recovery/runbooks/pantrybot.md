@@ -160,13 +160,13 @@ live writer.
 | Adapter | Target | Status |
 |---|---|---|
 | `fence-pantry-postgres.sh` | Home `pantry-bot` namespace PostgreSQL StatefulSets | Installed/enabled |
-| `fence-old-writers-from-oracle.sh` | Composite home and Canada old-writer fence | Installed; confirm path exists, positive live rehearsal remains open |
+| `fence-old-writers-from-oracle.sh` | Composite home and Canada old-writer fence | Installed on Oracle; dry-run and controlled rehearsal evidence recorded; automatic promotion remains disabled |
 
-### Oracle canada-standby-prep fence adapter (live installation pending)
+### Oracle canada-standby-prep fence adapter
 
 | Adapter | Target | Status |
 |---|---|---|
-| `fence-pantry-postgres-oracle.sh` | Oracle `pantrybot-canada-replica-prep` namespace `canada-standby-prep` StatefulSet, via fixed SSH transport | Repository adapter present; live installation and positive rehearsal remain open |
+| `fence-pantry-postgres-oracle.sh` | Oracle `pantrybot-canada-replica-prep` namespace `canada-standby-prep` StatefulSet, via fixed SSH transport | Installed on the home controller; fixed-identity transport and dry-run are verified; a fresh live home-to-Oracle fence rehearsal remains an explicit gate |
 
 The Oracle fence adapter runs on the home controller and targets only the
 `canada-standby-prep` StatefulSet in the `pantrybot-canada-replica-prep` namespace
