@@ -95,7 +95,7 @@ timeout --kill-after=15s "$UPLOAD_TIMEOUT" kubectl exec -n "$R2_NAMESPACE" \
     remote_size="$(rclone size "$remote_path" --json --config=/dev/null \
       --s3-no-check-bucket --timeout=2m --contimeout=15s --retries=2 \
       --low-level-retries=5 \
-      | sed -n 's/.*"bytes"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p')"
+      | grep -o "\\\"bytes\\\":[0-9]*" | cut -d: -f2)"
     test "$remote_size" = "$expected_size"
     echo "remote_size=$remote_size"
   ' sh "$remote_tmp" "$R2_PREFIX/$name" "$size"
