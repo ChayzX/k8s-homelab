@@ -125,13 +125,13 @@ secrets, and has been validated after a controlled reboot. Containers use
 `restart: unless-stopped`; a delayed `PantryBot Canada Safe Stage` logon task
 restarts the bundle after an interactive BotAdmin logon.
 
-The 2026-09-19 reboot test also showed that Docker Desktop itself did not
-start before an interactive user session, so unattended host-start recovery is
-not yet proven. Do not claim Canada as a fully unattended production recovery
-writer until a supported privileged Docker startup/autologon mechanism is
-installed and tested. Production database promotion, Twitch ownership, and
-external route publication remain separately gated by the witness/fencing
-protocol.
+The 2026-09-19 reboot test initially exposed the interactive-session
+dependency. A second controlled reboot after installing the reversible
+`PantryBot Docker Desktop` Task Scheduler task (BotAdmin, `AtStartup`, S4U)
+proved unattended Docker startup: Docker 29.8.0 became available and both
+safe-stage containers recovered without an interactive login. Production
+database promotion, Twitch ownership, and external route publication remain
+separately gated by the witness/fencing protocol.
 
 ## Management-path remediation
 
