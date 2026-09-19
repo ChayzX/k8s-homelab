@@ -117,7 +117,13 @@ An R2 download was verified at 13,727,556 bytes with SHA-256
 The source procedure is `scripts/authentik-postgres-backup.sh`. A 02:30
 crontab entry still exists on MinecraftMachine, but it runs a stale checkout
 and has failed since the Authentik primary rename; the current R2 upload path
-and automated freshness are not yet verified.
+and automated freshness are not yet verified. The canonical implementation
+creates and verifies the local dump first, then selects a Running/Ready R2
+sidecar and uses `kubectl cp` instead of streaming the large dump through
+`kubectl exec -i`. The remote object is accepted only after bounded Rclone
+hash verification and an exact JSON byte-count check. Installing this version
+on the scheduled host and observing a successful fresh run remains an explicit
+production gate.
 Restore procedure:
 
 1. Download the selected R2 object to an isolated host.

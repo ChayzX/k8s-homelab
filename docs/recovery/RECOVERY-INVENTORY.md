@@ -88,7 +88,13 @@ freshness-monitor gate because the credential is still a workload credential.
   current `POSTGRES_PASSWORD` environment contract. MinecraftMachine still
   has a 02:30 crontab entry, but it runs a stale checkout that has failed since
   the primary rename; no successful automated backup has been recorded after
-  2026-09-13. R2 sidecar/upload freshness remains open.
+  2026-09-13. The canonical script preserves the local dump before attempting
+  the remote gate, waits for a Running/Ready R2 sidecar, transfers through
+  `kubectl cp` (rather than an unbounded `kubectl exec -i` stream), applies
+  bounded timeouts, and requires both an Rclone hash check and an exact remote
+  byte-count check. These changes are repository-only until the scheduled
+  checkout is deliberately installed and a fresh automated run is observed.
+  R2 sidecar/upload freshness remains open.
 - Operations audit data is SQLite at `/data/operations.db`. A consistent
   Python `sqlite3.Connection.backup()` snapshot was verified locally and in R2
   at `recovery/operations/operations-20260909T044548Z.db.gz`; the recurring
