@@ -14,9 +14,10 @@ live changes and remaining gates.
 - The home service selector requires both the home PostgreSQL name and the
   `primary` role label.
 - `PANTRY_DATABASE_URL` points at the in-cluster home service.
-- The replication NodePort selector is temporarily pointed at the current
-  primary `home-return` pod so Oracle can be reseeded; the standby manifest
-  switches that selector back when a new return standby is prepared.
+- The replication NodePort selector is pointed at the current primary
+  `home-return` pod for a future Oracle reseed. Oracle's Pantry standby
+  StatefulSet is currently scaled to zero; do not describe it as continuously
+  streaming until a live pod is running and freshness is captured.
 - The home readiness probe expects `pg_is_in_recovery() = f`; the former
   standby-only seeding init container is not used after promotion.
 
@@ -31,25 +32,23 @@ The controlled promotion sequence is:
 4. Switch the service selector and platform database URL.
 5. Start only the home runtime components whose immutable images are available.
 
-The sequence has been exercised in production in both directions. During the
-Oracle promotion rehearsal, the composite old-writer fence completed at
-16:30:02 UTC, Oracle promoted at 16:30:04 UTC, and the Oracle service check
-passed with all mutating roles Ready. During controlled failback, Oracle was
-fenced, home reacquired a newer witness epoch, the fresh home-return PVC was
-seeded from Oracle and promoted, and the stable home endpoint was restored.
-Home PostgreSQL now reports `pg_is_in_recovery()=f` and
-`transaction_read_only=off`; all home runtime deployments and both commands
-site replicas are Ready.
+The controlled promotion/failback rehearsal exercised both directions and
+proved the application lease/fencing sequence, but it did not leave an Oracle
+Pantry standby continuously enabled. The current live snapshot (2026-09-19)
+is home `postgres-authority-home-return-0` as the writable primary; the Oracle
+`postgres-authority-standby` StatefulSet is `0/0`. Home PostgreSQL reports
+`pg_is_in_recovery()=f` and `transaction_read_only=off`; home runtime
+deployments and both commands-site replicas are Ready.
 
 ## Remaining gates
 
-- The worker-only component rollout reached Kubernetes but immutable GHCR image
-  pulls returned HTTP 403. Cached home workers remain healthy; the failed
-  ReplicaSet is removed and the worker Deployment is paused. A dedicated
-  least-privilege `read:packages` credential and one successful rollout remain
-  open.
-- Oracle application roles remain stopped in standby posture after reseeding;
-  the standby reports `pg_is_in_recovery()=t` and caught-up receive/replay LSNs.
+- The worker-only component rollout and public-site rollout now pull immutable
+  GHCR images successfully using the least-privilege `read:packages` secret.
+  The worker Deployment remains paused as an intentional rollout-control
+  decision; cached workers are healthy.
+- Oracle application roles remain stopped in standby posture. The Pantry
+  PostgreSQL standby is currently scaled to zero, so receive/replay LSN
+  freshness must be recaptured after reactivation.
 - The corrected promoter completed the guarded Oracle promotion path with the
   composite home+Canada fence, replication gate, database promotion, service
   check, and route publication. The promoter remains disabled after the
