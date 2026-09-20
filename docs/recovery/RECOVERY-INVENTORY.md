@@ -83,10 +83,11 @@ freshness-monitor gate because the credential is still a workload credential.
   `r2:pantry-bot-backups/recovery/auth-postgresql/authentik-20260909T044050Z.dump.gz`
   with verified size 13,727,556 bytes. The R2 write path must be retained in
   the documented backup procedure.
-- The recurring implementation is `scripts/authentik-postgres-backup.sh`; its
-  repository target was corrected to `auth-postgresql-home-primary-0` and the
-  current `POSTGRES_PASSWORD` environment contract. MinecraftMachine still
-  has a 02:30 crontab entry invoking the root-owned script through `sudo -n`. The canonical script preserves the local dump before attempting
+- The recurring implementation is `scripts/authentik-postgres-backup.sh`; it
+  discovers the Ready pod labeled `authentik.postgres/role=primary` and uses
+  the current `POSTGRES_PASSWORD` environment contract. MinecraftMachine
+  still has a 02:30 crontab entry invoking the root-owned script through
+  `sudo -n`. The canonical script preserves the local dump before attempting
   the remote gate, waits for a Running/Ready R2 sidecar, transfers through
   `kubectl cp` (rather than an unbounded `kubectl exec -i` stream), applies
   bounded timeouts, and requires both an Rclone hash check and an exact remote
