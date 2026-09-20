@@ -91,7 +91,7 @@ showed matching receive/replay LSNs and approximately 0.20–0.23s replay lag.
   (23 tests), and the corrected source plus a topology-pinned disabled systemd
   drop-in are installed on Oracle. A fixed-identity composite old-writer fence
   has verified its transport and dry-run contracts for both home and Canada; a
-  a live Home-only fence rehearsal was completed on 2026-09-20: the adapter
+  live Home-only fence rehearsal was completed on 2026-09-20: the adapter
   removed all named home PostgreSQL endpoints in 1.972s, and the writable
   home-return StatefulSet was restored in 16.853s with runtime readiness
   recovered. A cross-site promotion-window rehearsal, stale physical-writer
