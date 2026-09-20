@@ -7,8 +7,8 @@ set -Eeuo pipefail
 NAMESPACE="${PANTRY_NAMESPACE:-pantry-bot}"
 POD="${PANTRY_STANDBY_POD:-postgres-authority-standby-reseed-v2-0}"
 CONTAINER="${PANTRY_POSTGRES_CONTAINER:-postgres}"
-DB="${PANTRY_POSTGRES_DB:-pantrybot}"
-USER_NAME="${PANTRY_POSTGRES_USER:-postgres}"
+DB="${PANTRY_POSTGRES_DB:-pantry}"
+USER_NAME="${PANTRY_POSTGRES_USER:-pantry}"
 PORT="${PANTRY_POSTGRES_PORT:-5432}"
 psql=(kubectl -n "$NAMESPACE" exec "$POD" -c "$CONTAINER" -- psql -h 127.0.0.1 -p "$PORT" -U "$USER_NAME" -d "$DB" -Atqc)
 recovery="$("${psql[@]}" 'select pg_is_in_recovery();')"
