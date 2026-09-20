@@ -160,7 +160,7 @@ live writer.
 | Adapter | Target | Status |
 |---|---|---|
 | `fence-pantry-postgres.sh` | Home `pantry-bot` namespace PostgreSQL StatefulSets | Installed/enabled |
-| `fence-old-writers-from-oracle.sh` | Composite home and Canada old-writer fence | Installed on Oracle; dry-run and controlled rehearsal evidence recorded; automatic promotion remains disabled |
+| `fence-old-writers-from-oracle.sh` | Composite home and Canada old-writer fence | Installed on Oracle; read-only dry-run revalidated 2026-09-20 with home and Canada transports verified; automatic promotion remains disabled pending a live promotion-window fence and stale physical-writer rejection |
 
 ### Oracle standby-reseed fence adapter
 
