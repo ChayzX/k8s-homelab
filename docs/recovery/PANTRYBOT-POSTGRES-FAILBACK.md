@@ -86,6 +86,11 @@ is active. The remaining gates are controlled promotion/fencing/failback,
 broader failure testing, and external-side-effect semantics; evidence is
 recorded in Issues #147 and #191.
 
+On 2026-09-20, a Home-side postgres probe confirmed both the Oracle reverse
+failback endpoint (`192.168.40.200:25433`) and the home replication NodePort
+(`192.168.40.200:30432`) were accepting connections. This is transport
+reachability evidence only, not failback or writer-cutover proof.
+
 ## Known hazard: fence scope includes home-return standby
 
 **Regression guard:** `test_failback_fence_scope_document_hazard_with_home_return` in
