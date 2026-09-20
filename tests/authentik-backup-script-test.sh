@@ -25,6 +25,7 @@ grep -q 'rclone check' "$SCRIPT" || fail "missing remote hash verification"
 grep -q 'rclone size' "$SCRIPT" || fail "missing exact remote size verification"
 grep -q -- '--json' "$SCRIPT" || fail "missing JSON remote size verification"
 grep -q 'containerStatuses' "$SCRIPT" || fail "missing sidecar container readiness gate"
+grep -q "authentik.postgres/role=primary" "$SCRIPT" || fail "missing primary-role discovery"
 grep -q 'grep -o' "$SCRIPT" || fail "missing exact JSON byte parsing"
 grep -q 'cut -d: -f2' "$SCRIPT" || fail "missing exact JSON byte extraction"
 

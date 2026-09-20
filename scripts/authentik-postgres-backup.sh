@@ -5,7 +5,6 @@ export PATH=/usr/local/bin:/usr/bin:/bin
 # Daily Authentik/Postgres backup. Credentials stay inside the database and R2
 # pods; this script only handles the dump stream and object paths.
 NAMESPACE=auth
-DB_POD=auth-postgresql-home-primary-0
 DB_CONTAINER=postgres
 R2_NAMESPACE=jmusicbot
 R2_SELECTOR='app.kubernetes.io/name=jmusicbot'
@@ -16,6 +15,23 @@ RETENTION_DAYS=30
 KUBECTL_DISCOVERY_TIMEOUT=30s
 KUBECTL_READY_TIMEOUT=45s
 UPLOAD_TIMEOUT=300s
+
+# The active primary StatefulSet changes during controlled failover/failback.
+# Discover the Ready primary by its role label instead of pinning a historical
+# pod name; fail closed if the authority is absent or ambiguous.
+DB_POD="$(timeout --kill-after=5s "$KUBECTL_DISCOVERY_TIMEOUT" kubectl get pod \
+  -n "$NAMESPACE" -l 'authentik.postgres/role=primary' \
+  --field-selector=status.phase=Running \
+  -o jsonpath='{range .items[?(@.status.containerStatuses[0].ready==true)]}{.metadata.name}{"\n"}{end}' \
+  | sed '/^$/d' | head -n 2)"
+if [[ -z "$DB_POD" ]]; then
+  echo "backup failed: no Ready Authentik PostgreSQL primary found" >&2
+  exit 1
+fi
+if [[ "$(printf '%s\n' "$DB_POD" | wc -l)" -ne 1 ]]; then
+  echo "backup failed: multiple Ready Authentik PostgreSQL primaries found: $DB_POD" >&2
+  exit 1
+fi
 
 mkdir -p "$BACKUP_ROOT"
 chmod 700 "$BACKUP_ROOT"
