@@ -12,6 +12,19 @@ caller must still prove that the old PostgreSQL writer is stopped or rejects
 writes before promoting a new writer. Automatic failover remains disabled
 until that proof exists.
 
+## Oracle promotion preflight
+
+Before any controlled Oracle promotion, run the read-only guard on Oracle:
+
+```sh
+sudo /usr/local/lib/failover-witness/oracle-promotion-preflight.sh
+```
+
+It must report the candidate as a read-only standby with non-empty receive and
+replay LSNs, the live PostgreSQL data directory, and an inactive promoter. It
+does not acquire authority, fence a writer, promote PostgreSQL, patch a
+Service, or scale workloads.
+
 ## Minecraft-safe PantryBot writer fence
 
 `fence-pantry-postgres.sh` is the source-side fence contract for the home
