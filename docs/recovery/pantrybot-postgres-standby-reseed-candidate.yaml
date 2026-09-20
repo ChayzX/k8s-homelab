@@ -1,14 +1,15 @@
 # Fresh Oracle standby candidate used during the 2026-09 maintenance window.
 #
-# This intentionally has a distinct StatefulSet/PVC from
-# postgres-authority-standby. Apply only after the home backup, replication
+# This intentionally has a distinct StatefulSet/PVC from the retired
+# postgres-authority-standby and the stale promoted reseed candidate. Apply
+# only after the home backup, replication
 # slot, and reverse tunnel checks in PANTRYBOT-HOME-PROMOTION-STATE.md pass.
 # The candidate is read-only recovery capacity; application authority remains
 # on home until the cutover gate is explicitly completed.
 apiVersion: v1
 kind: Service
 metadata:
-  name: postgres-authority-standby-reseed
+  name: postgres-authority-standby-reseed-v2
   namespace: pantry-bot
   labels:
     homelab/production: "true"
@@ -24,13 +25,13 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: postgres-authority-standby-reseed
+  name: postgres-authority-standby-reseed-v2
   namespace: pantry-bot
   labels:
     homelab/production: "true"
     pantrybot.postgres/role: standby
 spec:
-  serviceName: postgres-authority-standby-reseed
+  serviceName: postgres-authority-standby-reseed-v2
   replicas: 1
   selector:
     matchLabels:

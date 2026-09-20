@@ -19,8 +19,8 @@ def test_service_example_targets_live_oracle_standby_topology() -> None:
     service = Path(__file__).with_name("pantry-postgres-oracle-promoter.service.example").read_text()
     assert "--pod-namespace pantry-bot" in service
     assert "--service-namespace pantry-bot" in service
-    assert "--pod postgres-authority-standby-reseed-0" in service
-    assert "--service postgres-authority-standby-reseed" in service
+    assert "--pod postgres-authority-standby-reseed-v2-0" in service
+    assert "--service postgres-authority-standby-reseed-v2" in service
     assert "--postgres-port 5432" in service
     assert "--data-directory /var/lib/postgresql/data" in service
     assert "--manual-endpoint" in service

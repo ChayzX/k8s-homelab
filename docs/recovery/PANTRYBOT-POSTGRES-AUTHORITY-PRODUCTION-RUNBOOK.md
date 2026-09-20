@@ -17,7 +17,7 @@ Secret, fencing epoch, replication direction, and route publication against
 GitHub Issues `ChayzX/pantry-bot#147` and `ChayzX/k8s-homelab#191`.
 
 No Oracle or Canada object is currently an application writer. The
-`postgres-authority-standby-reseed-0` candidate uses a fresh PVC and the
+`postgres-authority-standby-reseed-v2-0` candidate uses a fresh PVC and the
 `pantry_oracle_standby` slot, and its readiness probe requires
 `pg_is_in_recovery() = t`. Do not treat the stopped
 `postgres-authority-standby` object or its retained PVC as a valid standby

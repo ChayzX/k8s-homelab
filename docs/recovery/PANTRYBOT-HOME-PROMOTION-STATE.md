@@ -18,13 +18,13 @@ live changes and remaining gates.
   home-return pod for Oracle reseeding. The original
   postgres-authority-standby StatefulSet remains scaled to zero and its
   retained PVC is deliberately untouched. A fresh, separately named
-  postgres-authority-standby-reseed-0 candidate was created on Oracle with a
-  new PVC during the rehearsal, but that PVC retained promoted-primary state
-  when it was later restarted (`pg_is_in_recovery()=f`). It is currently
-  scaled to zero and is **not** a valid standby; it must be freshly reseeded
-  with `pg_basebackup -R` and a verified `standby.signal` before reuse. Its
-  separate service is not an application writer endpoint and the home service
-  remains authoritative.
+  stale `postgres-authority-standby-reseed-0` candidate retained promoted
+  primary state and remains scaled to zero. A new
+  `postgres-authority-standby-reseed-v2-0` candidate was freshly reseeded with
+  `pg_basebackup -R`, a verified `standby.signal`, and the
+  `pantry_oracle_standby` slot; it reports `pg_is_in_recovery()=t` and is
+  streaming from Home. Neither separate service is an application writer
+  endpoint; the home service remains authoritative.
 - **Active reseed endpoint (live override):** Oracle's reseed candidate reaches
   the current home writer through `100.84.89.87:30432`, the
   `pantry-bot/postgres-authority-replication` NodePort. While home is the
@@ -69,8 +69,9 @@ Ready and external commands/OAuth/mods/overlay checks returned 200/302/200/302.
   GHCR images successfully using the least-privilege `read:packages` secret.
   The worker Deployment remains paused as an intentional rollout-control
   decision; cached workers are healthy.
-- Oracle application roles remain stopped and its promoted PostgreSQL candidate
-  is fenced with no endpoint. The Home failback PVC was created only after a
+- Oracle application roles remain stopped. The stale promoted PostgreSQL
+  candidate is fenced with no endpoint, while the v2 standby is read-only
+  recovery capacity. The Home failback PVC was created only after a
   fresh Oracle dump (`oracle-pre-failback-20260920T132458Z.dump`, SHA-256
   `c94eabb1b95a5d0431d19331efccbdbd24ced52582e52eea83a45415fa4a6f68`) and
   caught up from Oracle over the verified reverse transport.
@@ -83,15 +84,15 @@ Ready and external commands/OAuth/mods/overlay checks returned 200/302/200/302.
   were verified. The canonical standby manifest was reapplied, the replication
   credential was synchronized from the Oracle secret, and the fresh PVC
   streamed from Oracle before home promotion.
-- A later safety probe found the retained Oracle reseed PVC had lost standby
-  state and reported `pg_is_in_recovery()=f` when briefly started. It was
-  immediately scaled back to zero; no dual-writer window remained. Oracle
-  must be freshly reseeded from the current home primary over the verified
-  transport before another promotion or RTO/RPO rehearsal. The home primary
-  still reports the sole replication endpoint.
+- A safety probe found the original retained Oracle reseed PVC had lost standby
+  state and reported `pg_is_in_recovery()=f`; it was immediately scaled to
+  zero and remains fenced. The v2 candidate was then freshly reseeded from the
+  current home primary over the verified transport and now reports
+  `pg_is_in_recovery()=t` with an active `pantry_oracle_standby` slot. The home
+  primary still reports the sole application authority endpoint.
 - The tracked Oracle adapter now accepts separate pod/service namespaces,
   PostgreSQL data directory, and manually managed Endpoints (`--manual-endpoint`)
-  for the live `postgres-authority-standby-reseed` topology. Its focused test suite passes
+  for the live `postgres-authority-standby-reseed-v2` topology. Its focused test suite passes
   (23 tests), and the corrected source plus a topology-pinned disabled systemd
   drop-in are installed on Oracle. A fixed-identity composite old-writer fence
   has verified its transport and dry-run contracts for both home and Canada; a

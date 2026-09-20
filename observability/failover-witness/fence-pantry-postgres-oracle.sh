@@ -6,8 +6,8 @@ set -Eeuo pipefail
 # StatefulSet and never stops k3s, touches PVCs, or accepts an arbitrary command.
 
 NAMESPACE="pantry-bot"
-STATEFULSET="postgres-authority-standby-reseed"
-SERVICE="postgres-authority-standby-reseed"
+STATEFULSET="postgres-authority-standby-reseed-v2"
+SERVICE="postgres-authority-standby-reseed-v2"
 ORACLE_HOST="${PANTRY_ORACLE_FENCE_HOST:-100.78.181.15}"
 ORACLE_USER="${PANTRY_ORACLE_FENCE_USER:-ubuntu}"
 SSH_KEY="${PANTRY_ORACLE_FENCE_KEY:-/home/chase/.ssh/pantry-bot-oracle}"

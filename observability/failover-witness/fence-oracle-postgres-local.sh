@@ -6,7 +6,7 @@ set -Eeuo pipefail
 # or deletes the PVC.
 KUBECTL_BIN="${ORACLE_KUBECTL:-kubectl}"
 NS="${PANTRY_NAMESPACE:-pantry-bot}"
-STS="${PANTRY_STANDBY_STATEFULSET:-postgres-authority-standby-reseed}"
+STS="${PANTRY_STANDBY_STATEFULSET:-postgres-authority-standby-reseed-v2}"
 TIMEOUT_SECONDS="${PANTRY_POSTGRES_FENCE_TIMEOUT_SECONDS:-60}"
 
 [[ "${1:-}" == "--confirm" && "$#" == 1 ]] || {
