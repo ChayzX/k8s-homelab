@@ -5,9 +5,9 @@ set -Eeuo pipefail
 # This is intentionally a narrow SSH transport: it targets one named
 # StatefulSet and never stops k3s, touches PVCs, or accepts an arbitrary command.
 
-NAMESPACE="pantrybot-canada-replica-prep"
-STATEFULSET="canada-standby-prep"
-SERVICE="canada-standby-prep"
+NAMESPACE="pantry-bot"
+STATEFULSET="postgres-authority-standby-reseed"
+SERVICE="postgres-authority-standby-reseed"
 ORACLE_HOST="${PANTRY_ORACLE_FENCE_HOST:-100.78.181.15}"
 ORACLE_USER="${PANTRY_ORACLE_FENCE_USER:-ubuntu}"
 SSH_KEY="${PANTRY_ORACLE_FENCE_KEY:-/home/chase/.ssh/pantry-bot-oracle}"
@@ -38,7 +38,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
 Usage: fence-pantry-postgres-oracle.sh --confirm
        fence-pantry-postgres-oracle.sh --dry-run
 
-Fence only the Oracle PantryBot PostgreSQL StatefulSet used by the standby-prep
+Fence only the Oracle PantryBot PostgreSQL StatefulSet used by the standby-reseed
 transport. The adapter never stops k3s and never deletes PVCs, secrets, routes,
 or arbitrary resources.
 USAGE

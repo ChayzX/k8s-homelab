@@ -292,10 +292,10 @@ def run() -> None:
     parser.add_argument("--namespace", default="pantry-bot")
     parser.add_argument("--pod-namespace", default=None, help="namespace containing the PostgreSQL pod")
     parser.add_argument("--service-namespace", default=None, help="namespace containing the application Service and platform Secret")
-    parser.add_argument("--pod", default="postgres-authority-standby-0")
-    parser.add_argument("--service", default="postgres-authority-standby")
+    parser.add_argument("--pod", default="postgres-authority-standby-reseed-0")
+    parser.add_argument("--service", default="postgres-authority-standby-reseed")
     parser.add_argument("--data-directory", default="/var/lib/postgresql/data")
-    parser.add_argument("--postgres-port", type=int, default=int(os.environ.get("PANTRY_ORACLE_POSTGRES_PORT", "25443")))
+    parser.add_argument("--postgres-port", type=int, default=int(os.environ.get("PANTRY_ORACLE_POSTGRES_PORT", "5432")))
     parser.add_argument("--postgres-user", default=os.environ.get("PANTRY_ORACLE_POSTGRES_USER", "pantry"))
     parser.add_argument("--postgres-database", default=os.environ.get("PANTRY_ORACLE_POSTGRES_DATABASE", "pantry"))
     parser.add_argument("--manual-endpoint", action="store_true", help="retain a manually managed Endpoints object instead of changing Service selectors")
@@ -383,7 +383,7 @@ def run() -> None:
 
     def switch_endpoint() -> None:
         if not args.manual_endpoint:
-            selector = json.dumps({"app.kubernetes.io/name": "pantry-postgres-authority-standby", "pantrybot.postgres/role": "primary"}, separators=(",", ":"))
+            selector = json.dumps({"app.kubernetes.io/name": "pantry-postgres-authority-standby-reseed", "pantrybot.postgres/role": "primary"}, separators=(",", ":"))
             activation_kubectl("-n", service_namespace, "patch", "service", args.service, "--type=merge", "-p", json.dumps({"spec": {"selector": json.loads(selector)}}))
         encoded = _kubectl("-n", service_namespace, "get", "secret", "pantry-bot-platform", "-o", "jsonpath={.data.PANTRY_DATABASE_URL}")
         current = base64.b64decode(encoded).decode()

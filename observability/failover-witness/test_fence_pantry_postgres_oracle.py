@@ -9,8 +9,8 @@ SCRIPT = Path(__file__).with_name("fence-pantry-postgres-oracle.sh")
 
 def test_scope_and_confirmation() -> None:
     text = SCRIPT.read_text()
-    assert 'NAMESPACE="pantrybot-canada-replica-prep"' in text
-    assert 'STATEFULSET="canada-standby-prep"' in text
+    assert 'NAMESPACE="pantry-bot"' in text
+    assert 'STATEFULSET="postgres-authority-standby-reseed"' in text
     assert '[[ "$mode" == "--confirm" || "$mode" == "--dry-run" ]]' in text
     assert "explicit_confirmation_required" in text
 

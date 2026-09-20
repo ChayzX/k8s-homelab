@@ -16,10 +16,11 @@ from oracle_promoter import (
 
 def test_service_example_targets_live_oracle_standby_topology() -> None:
     service = Path(__file__).with_name("pantry-postgres-oracle-promoter.service.example").read_text()
-    assert "--pod-namespace pantrybot-canada-replica-prep" in service
+    assert "--pod-namespace pantry-bot" in service
     assert "--service-namespace pantry-bot" in service
-    assert "--pod canada-standby-prep-0" in service
-    assert "--service postgres-authority-standby" in service
+    assert "--pod postgres-authority-standby-reseed-0" in service
+    assert "--service postgres-authority-standby-reseed" in service
+    assert "--postgres-port 5432" in service
     assert "--data-directory /var/lib/postgresql/data/pgdata" in service
     assert "--manual-endpoint" in service
 
@@ -48,8 +49,8 @@ def test_postgres_promotion_runs_as_postgres_user() -> None:
 
 
 def test_postgres_query_pins_live_oracle_database_topology() -> None:
-    assert _postgres_query_command(25443, "pantry", "pantry", "select pg_is_in_recovery();") == (
-        "sh", "-ec", "psql -h 127.0.0.1 -p 25443 -U pantry -d pantry -Atc 'select pg_is_in_recovery();'"
+    assert _postgres_query_command(5432, "pantry", "pantry", "select pg_is_in_recovery();") == (
+        "sh", "-ec", "psql -h 127.0.0.1 -p 5432 -U pantry -d pantry -Atc 'select pg_is_in_recovery();'"
     )
 
 

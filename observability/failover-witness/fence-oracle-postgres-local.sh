@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Fence only the Oracle-local standby-prep PostgreSQL StatefulSet. This is the
+# Fence only the Oracle-local standby-reseed PostgreSQL StatefulSet. This is the
 # local writer-domain fence used before Oracle promotion; it never stops k3s
 # or deletes the PVC.
 KUBECTL_BIN="${ORACLE_KUBECTL:-kubectl}"
-NS="${PANTRY_NAMESPACE:-pantrybot-canada-replica-prep}"
-STS="${PANTRY_STANDBY_STATEFULSET:-canada-standby-prep}"
+NS="${PANTRY_NAMESPACE:-pantry-bot}"
+STS="${PANTRY_STANDBY_STATEFULSET:-postgres-authority-standby-reseed}"
 TIMEOUT_SECONDS="${PANTRY_POSTGRES_FENCE_TIMEOUT_SECONDS:-60}"
 
 [[ "${1:-}" == "--confirm" && "$#" == 1 ]] || {

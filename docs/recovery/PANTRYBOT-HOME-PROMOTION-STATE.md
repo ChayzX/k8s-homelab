@@ -87,7 +87,7 @@ showed matching receive/replay LSNs and approximately 0.20–0.23s replay lag.
   replay LSNs caught up. The home primary reports the replication endpoint.
 - The tracked Oracle adapter now accepts separate pod/service namespaces,
   PostgreSQL data directory, and manually managed Endpoints (`--manual-endpoint`)
-  for the live `canada-standby-prep` topology. Its focused test suite passes
+  for the live `postgres-authority-standby-reseed` topology. Its focused test suite passes
   (23 tests), and the corrected source plus a topology-pinned disabled systemd
   drop-in are installed on Oracle. A fixed-identity composite old-writer fence
   has verified its transport and dry-run contracts for both home and Canada; a

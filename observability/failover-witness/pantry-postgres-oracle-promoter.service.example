@@ -13,10 +13,11 @@ Type=simple
 # this process only waits. It promotes Oracle after the lease expires, but only
 # after the independent old-writer fence command succeeds.
 ExecStart=/usr/bin/python3 /usr/local/lib/failover-witness/oracle_promoter.py \
-  --pod-namespace pantrybot-canada-replica-prep \
+  --pod-namespace pantry-bot \
   --service-namespace pantry-bot \
-  --pod canada-standby-prep-0 \
-  --service postgres-authority-standby \
+  --pod postgres-authority-standby-reseed-0 \
+  --service postgres-authority-standby-reseed \
+  --postgres-port 5432 \
   --data-directory /var/lib/postgresql/data/pgdata \
   --manual-endpoint
 ExecStartPre=/usr/bin/test -r /usr/local/lib/failover-witness/command_policy.py

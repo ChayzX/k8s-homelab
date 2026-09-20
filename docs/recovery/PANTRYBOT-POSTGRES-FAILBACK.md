@@ -4,7 +4,8 @@ This is the return path after Oracle has been promoted. It is intentionally
 controlled: automatic failover is useful during an outage, but automatic
 failback would create an avoidable second writer during recovery.
 
-The procedure uses a new home PVC (`postgres-authority-home-failback-0`). It
+The procedure uses a new home PVC (`postgres-authority-home-failback-0`) when a
+return-home rehearsal is explicitly staged. It
 never overwrites the old home PVC in place. The stable `postgres-authority`
 Service is not switched until the new home copy is caught up, Oracle is
 fenced, and home has acquired a newer `pantry:postgres` witness epoch.

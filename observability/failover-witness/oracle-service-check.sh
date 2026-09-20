@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Post-activation check for the live Oracle standby-prep topology. This is
+# Post-activation check for the live Oracle standby-reseed topology. This is
 # intentionally fail-closed: it proves the promoted database is writable,
 # the manual authority Endpoints object has an address, and every mutating
 # PantryBot deployment has reached its desired replica count.
-POD_NAMESPACE="${PANTRY_ORACLE_POD_NAMESPACE:-pantrybot-canada-replica-prep}"
-POD="${PANTRY_ORACLE_POD:-canada-standby-prep-0}"
+POD_NAMESPACE="${PANTRY_ORACLE_POD_NAMESPACE:-pantry-bot}"
+POD="${PANTRY_ORACLE_POD:-postgres-authority-standby-reseed-0}"
 SERVICE_NAMESPACE="${PANTRY_ORACLE_SERVICE_NAMESPACE:-pantry-bot}"
-SERVICE="${PANTRY_ORACLE_SERVICE:-postgres-authority-standby}"
-POSTGRES_PORT="${PANTRY_ORACLE_POSTGRES_PORT:-25443}"
+SERVICE="${PANTRY_ORACLE_SERVICE:-postgres-authority-standby-reseed}"
+POSTGRES_PORT="${PANTRY_ORACLE_POSTGRES_PORT:-5432}"
 KUBECTL="${PANTRY_KUBECTL:-kubectl}"
 
 fail() { echo "oracle_service_check=failed reason=$1" >&2; exit 1; }
 
 command -v "$KUBECTL" >/dev/null || fail kubectl_unavailable
-recovery="$($KUBECTL -n "$POD_NAMESPACE" exec "$POD" -- sh -ec 'psql -p "${PANTRY_ORACLE_POSTGRES_PORT:-25443}" -U pantry -d pantry -Atc "select pg_is_in_recovery();"')" || fail database_probe_failed
+recovery="$($KUBECTL -n "$POD_NAMESPACE" exec "$POD" -- sh -ec "psql -p '$POSTGRES_PORT' -U pantry -d pantry -Atc 'select pg_is_in_recovery();'")" || fail database_probe_failed
 [[ "$recovery" == "f" ]] || fail database_not_primary
-readonly="$($KUBECTL -n "$POD_NAMESPACE" exec "$POD" -- sh -ec 'psql -p "${PANTRY_ORACLE_POSTGRES_PORT:-25443}" -U pantry -d pantry -Atc "show transaction_read_only;"')" || fail readonly_probe_failed
+readonly="$($KUBECTL -n "$POD_NAMESPACE" exec "$POD" -- sh -ec "psql -p '$POSTGRES_PORT' -U pantry -d pantry -Atc 'show transaction_read_only;'")" || fail readonly_probe_failed
 [[ "$readonly" == "off" ]] || fail database_read_only
 addresses="$($KUBECTL -n "$SERVICE_NAMESPACE" get endpoints "$SERVICE" -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null || true)"
 [[ -n "$addresses" ]] || fail authority_endpoint_missing

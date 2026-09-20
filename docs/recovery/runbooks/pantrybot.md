@@ -28,10 +28,10 @@ second writer during an incident.
 The live system is in the normal home-primary posture; Oracle is a prepared
 standby/recovery site, not the current writer:
 
-- Home `postgres-authority-home-failback-0` is the writable authority selected
+- Home `postgres-authority-home-return-0` is the writable authority selected
   by the home application endpoint. Do not print the Secret value while
   checking the endpoint.
-- Oracle's `canada-standby-prep-0` reports `pg_is_in_recovery() = true` and is
+- Oracle's `postgres-authority-standby-reseed-0` reports `pg_is_in_recovery() = true` and is
   not a writable application endpoint. Oracle application roles remain
   stopped except for explicitly documented standby/safe-stage capacity.
 - The Oracle promoter unit is disabled and inactive. Its service check must
@@ -162,14 +162,14 @@ live writer.
 | `fence-pantry-postgres.sh` | Home `pantry-bot` namespace PostgreSQL StatefulSets | Installed/enabled |
 | `fence-old-writers-from-oracle.sh` | Composite home and Canada old-writer fence | Installed on Oracle; dry-run and controlled rehearsal evidence recorded; automatic promotion remains disabled |
 
-### Oracle canada-standby-prep fence adapter
+### Oracle standby-reseed fence adapter
 
 | Adapter | Target | Status |
 |---|---|---|
-| `fence-pantry-postgres-oracle.sh` | Oracle `pantrybot-canada-replica-prep` namespace `canada-standby-prep` StatefulSet, via fixed SSH transport | Installed on the home controller; fixed-identity transport and dry-run are verified; a fresh live home-to-Oracle fence rehearsal remains an explicit gate |
+| `fence-pantry-postgres-oracle.sh` | Oracle `pantry-bot` namespace `postgres-authority-standby-reseed` StatefulSet, via fixed SSH transport | Installed on the home controller; fixed-identity transport and dry-run are verified; a fresh live home-to-Oracle fence rehearsal remains an explicit gate |
 
 The Oracle fence adapter runs on the home controller and targets only the
-`canada-standby-prep` StatefulSet in the `pantrybot-canada-replica-prep` namespace
+`postgres-authority-standby-reseed` StatefulSet in the `pantry-bot` namespace
 through a fixed, host-key-verified SSH command. It is designed to be production-safe
 and idempotent but requires explicit `--confirm` argument and a bounded timeout.
 
@@ -187,8 +187,8 @@ observability/failover-witness/fence-pantry-postgres-oracle.sh --confirm
 ```
 
 The adapter will:
-- Scale `canada-standby-prep` replicas to 0
-- Delete `canada-standby-prep-0` if present
+- Scale `postgres-authority-standby-reseed` replicas to 0
+- Delete `postgres-authority-standby-reseed-0` if present
 - Wait for pod absence (default timeout: 45s)
 - Verify the service has no endpoints
 - Exit 0 on success, non-zero on any failure
