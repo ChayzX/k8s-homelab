@@ -15,9 +15,10 @@ KUBECTL="${PANTRY_KUBECTL:-kubectl}"
 fail() { echo "oracle_service_check=failed reason=$1" >&2; exit 1; }
 
 command -v "$KUBECTL" >/dev/null || fail kubectl_unavailable
-recovery="$($KUBECTL -n "$POD_NAMESPACE" exec "$POD" -- sh -ec "psql -p '$POSTGRES_PORT' -U pantry -d pantry -Atc 'select pg_is_in_recovery();'")" || fail database_probe_failed
+[[ "$POSTGRES_PORT" =~ ^[0-9]+$ ]] || fail invalid_postgres_port
+recovery="$($KUBECTL -n "$POD_NAMESPACE" exec "$POD" -c postgres -- sh -ec "pg_isready -p '$POSTGRES_PORT' -U pantry -d pantry >/dev/null; psql -p '$POSTGRES_PORT' -U pantry -d pantry -Atc 'select pg_is_in_recovery();'")" || fail database_probe_failed
 [[ "$recovery" == "f" ]] || fail database_not_primary
-readonly="$($KUBECTL -n "$POD_NAMESPACE" exec "$POD" -- sh -ec "psql -p '$POSTGRES_PORT' -U pantry -d pantry -Atc 'show transaction_read_only;'")" || fail readonly_probe_failed
+readonly="$($KUBECTL -n "$POD_NAMESPACE" exec "$POD" -c postgres -- sh -ec "psql -p '$POSTGRES_PORT' -U pantry -d pantry -Atc 'show transaction_read_only;'")" || fail readonly_probe_failed
 [[ "$readonly" == "off" ]] || fail database_read_only
 addresses="$($KUBECTL -n "$SERVICE_NAMESPACE" get endpoints "$SERVICE" -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null || true)"
 [[ -n "$addresses" ]] || fail authority_endpoint_missing

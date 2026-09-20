@@ -92,7 +92,7 @@ spec:
               command:
                 - sh
                 - -ec
-                - test "$(psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "select pg_is_in_recovery()")" = t
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null && test "$(psql -w -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "select pg_is_in_recovery()")" = t
             periodSeconds: 5
           volumeMounts:
             - name: data
