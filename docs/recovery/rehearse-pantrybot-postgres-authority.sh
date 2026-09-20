@@ -119,7 +119,15 @@ evidence = {
     "primary_lsn_at_boundary": primary_lsn,
     "standby_replay_lsn_at_boundary": replay_lsn,
     "wal_lag_bytes_at_boundary": float(wal_lag_bytes),
-    "rto_seconds": int(finished) - int(started),
+    # This script provisions disposable databases and pauses for an operator
+    # fence proof; its wall-clock duration is setup time, not a production RTO.
+    # A measured RTO requires synchronized failure-injection and route-
+    # convergence markers from the live controller, which this disposable
+    # rehearsal does not produce.
+    "setup_seconds": int(finished) - int(started),
+    "rto_seconds": None,
+    "rpo_seconds": None,
+    "measurement_status": "not_measured",
     "fence_seconds": int(fence_finished) - int(fence_started),
     "status": "passed only if the proof file demonstrates old-writer rejection",
 }
