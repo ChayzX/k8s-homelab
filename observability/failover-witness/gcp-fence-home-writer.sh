@@ -10,4 +10,4 @@ exec /usr/bin/ssh \
   -o StrictHostKeyChecking=yes \
   -p 2223 \
   root@127.0.0.1 \
-  fence-pantry-postgres
+  fence-pantry-postgres --confirm
