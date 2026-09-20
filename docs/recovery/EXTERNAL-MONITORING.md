@@ -39,21 +39,22 @@ part of the monitor's health decision and is reached by the home site through
 an outbound SSH tunnel, keeping coordination private without opening another
 public application port.
 
-The monitor's Discord webhook is not configured because no current
-`grafana-discord-webhooks` Kubernetes secret exists. The retired Healthchecks.io
-heartbeat is not configured; UptimeRobot is the intended external public
-monitoring service. Direct receipt by a human notification channel remains an
-open gate. The monitor persists an `active_alerts` map with stable
-`external-monitor:<check>` identities, so a repeated failure or process restart
-does not create a second notification for the same check; a newly failed check
-or a recovered check gets its own transition.
+The monitor is configured for Discord bot-DM delivery through
+`MONITOR_DISCORD_BOT_TOKEN` and `MONITOR_DISCORD_USER_ID`. The webhook delivery
+through `MONITOR_DISCORD_WEBHOOK` remains an optional fallback. The retired
+Healthchecks.io heartbeat is not configured; UptimeRobot is the intended
+external public monitoring service. The monitor persists an `active_alerts` map
+with stable `external-monitor:<check>` identities, so a repeated failure or
+process restart does not create a second notification for the same check; a
+newly failed check or a recovered check gets its own transition.
 
 On 2026-09-20, the repository's dependency-free
 `probe-notification-receipt.py` was installed on GCP with SHA-256
 `3382cceabcf6c630ccb0d4efdaabd4a26dc14e016954ca6c6dab2df9a6cca59`. The probe
-currently reports no accepted receipt because the webhook is intentionally
-unconfigured. This removes deployment drift but does not close the provider or
-human receipt gate.
+records only non-sensitive delivery metadata. A controlled firing and recovery
+rehearsal through the configured bot-DM transport returned `accepted=true` for
+both transitions. This closes the direct provider-receipt gate; independent
+human acknowledgement remains a separate operational check.
 
 On 2026-09-10, the monitor independently observed a short public-edge
 degradation: Grafana failed on three consecutive 60-second checks, with the
@@ -89,8 +90,9 @@ ALERT Alert `external-monitor:status` firing; failed checks: authentik,grafana,o
 Both connector Deployments were restored to PantryBot=2 and CI=1, rollout
 status passed, and Grafana returned HTTP 302. This proves external failure
 detection and the monitor's degraded transition. It does **not** prove receipt
-by a human notification channel: the Discord webhook is still absent, and an
-UptimeRobot notification was not directly observed.
+by a human notification channel: bot-DM delivery was configured and receipt was
+tested later, on 2026-09-20. That later rehearsal does not retroactively prove
+that the 2026-09-10 outage reached a human.
 
 The monitor now contains an optional dependency-free R2 ListObjectsV2
 freshness check. Its AWS Signature V4 implementation was verified read-only
