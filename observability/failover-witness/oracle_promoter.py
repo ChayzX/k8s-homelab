@@ -269,8 +269,14 @@ def _kubectl(*args: str, input_text: str | None = None) -> str:
 
 
 def _postgres_promote_command(data_directory: str) -> tuple[str, ...]:
-    """Return a pg_ctl command that is valid in the official Postgres image."""
-    return ("su-exec", "postgres", "pg_ctl", "-D", data_directory, "promote")
+    """Return the in-container promotion command for the official Postgres image.
+
+    The official ``postgres:*-bookworm`` image runs its main process as the
+    ``postgres`` user and does not ship ``su-exec``.  Calling ``pg_ctl``
+    directly therefore avoids a missing helper while retaining the image's
+    normal least-privilege user.
+    """
+    return ("pg_ctl", "-D", data_directory, "promote")
 
 
 def _postgres_query_command(port: int, user: str, database: str, query: str) -> tuple[str, ...]:

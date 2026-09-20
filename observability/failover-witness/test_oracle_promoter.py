@@ -38,8 +38,6 @@ def test_promotion_endpoint_restart_covers_every_database_consumer() -> None:
 
 def test_postgres_promotion_runs_as_postgres_user() -> None:
     assert _postgres_promote_command("/var/lib/postgresql/data") == (
-        "su-exec",
-        "postgres",
         "pg_ctl",
         "-D",
         "/var/lib/postgresql/data",
