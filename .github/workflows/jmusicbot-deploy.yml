@@ -117,9 +117,50 @@ jobs:
             echo '### Apply/restart/verify: ▶ continuing (merge to main approved deployment)'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  owner-preflight:
+    name: 2 - Check Home ownership
+    needs: publish-image
+    runs-on: ubuntu-latest
+    outputs:
+      owned: ${{ steps.owner.outputs.owned }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v5
+      - name: Check ownership without mutation
+        id: owner
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_JMUSICBOT }}
+        run: |
+          set -euo pipefail
+          test -n "$TUNNEL_SERVICE_TOKEN_ID"; test -n "$TUNNEL_SERVICE_TOKEN_SECRET"; test -n "$KUBE_CONFIG_B64"
+          curl -fsSL -o cloudflared https://github.com/cloudflare/cloudflared/releases/download/2026.7.3/cloudflared-linux-amd64
+          echo '9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared' | sha256sum -c -
+          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
+          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
+          printf '%s' "$KUBE_CONFIG_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/jmusicbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/jmusicbot.kubeconfig"
+          KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" scripts/assert-kube-target.sh home
+          KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl get deployment/jmusicbot -n jmusicbot
+          set +e
+          KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" scripts/assert-jmusicbot-home-owner.sh
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo 'owned=true' >> "$GITHUB_OUTPUT"
+            echo '### Home ownership: ✅ deployment may proceed' >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$rc" -eq 3 ]; then
+            echo 'owned=false' >> "$GITHUB_OUTPUT"
+            echo '### Home ownership: ⏭️ deployment skipped (another site owns the lease)' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ownership preflight failed with unexpected exit code $rc" >&2
+            exit "$rc"
+          fi
+
   apply-release:
     name: 2 - Apply image release (merge deploy)
-    needs: publish-image
+    needs: [publish-image, owner-preflight]
+    if: ${{ needs.owner-preflight.outputs.owned == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source

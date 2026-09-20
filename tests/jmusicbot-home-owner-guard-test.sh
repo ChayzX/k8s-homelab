@@ -23,5 +23,9 @@ EOF
 chmod +x "$tmp/kubectl"
 KUBECTL_BIN="$tmp/kubectl" "$guard" >/dev/null
 sed -i 's/"readyReplicas":1/"readyReplicas":0/' "$tmp/kubectl"
-if KUBECTL_BIN="$tmp/kubectl" "$guard" >/dev/null 2>&1; then exit 1; fi
+set +e
+KUBECTL_BIN="$tmp/kubectl" "$guard" >/dev/null 2>&1
+rc=$?
+set -e
+test "$rc" -eq 3
 echo 'jmusicbot-home-owner-guard-test=passed'

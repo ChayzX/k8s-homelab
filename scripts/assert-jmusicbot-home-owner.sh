@@ -20,4 +20,4 @@ if [[ "$replicas" =~ ^[0-9]+$ && "$ready" == "$replicas" && "$available" == "$re
 fi
 
 echo "refusing mutation: home JMusicBot is not Ready/ownership-gated (replicas=$replicas ready=$ready available=$available)" >&2
-exit 1
+exit 3
