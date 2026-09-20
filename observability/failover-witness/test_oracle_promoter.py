@@ -25,6 +25,12 @@ def test_service_example_targets_live_oracle_standby_topology() -> None:
     assert "--manual-endpoint" in service
 
 
+def test_topology_drop_in_uses_container_pgdata_root() -> None:
+    topology = Path(__file__).with_name("pantry-postgres-oracle-promoter.topology.conf.example").read_text()
+    assert "--data-directory /var/lib/postgresql/data --manual-endpoint" in topology
+    assert "/var/lib/postgresql/data/pgdata" not in topology
+
+
 def test_promotion_endpoint_restart_covers_every_database_consumer() -> None:
     assert ORACLE_PROMOTION_DEPLOYMENTS == (
         "pantry-commands-site",
