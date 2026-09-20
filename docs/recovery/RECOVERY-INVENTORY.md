@@ -139,7 +139,9 @@ The 2026-09-19 reboot test initially exposed the interactive-session
 dependency. A second controlled reboot after installing the reversible
 `PantryBot Docker Desktop` Task Scheduler task (BotAdmin, `AtStartup`, S4U)
 proved unattended Docker startup: Docker 29.8.0 became available and both
-safe-stage containers recovered without an interactive login. Production
+safe-stage containers recovered without an interactive login. On 2026-09-20,
+the Docker Desktop service was additionally set to automatic startup and
+verified running; both containers remain `restart=unless-stopped`. Production
 database promotion, Twitch ownership, and external route publication remain
 separately gated by the witness/fencing protocol.
 
@@ -158,6 +160,9 @@ The first independent-environment migration procedure is
 JMusicBot before Opsbot or stateful services and requires writer fencing,
 retained R2 state, independent Oracle k3s, and a tested rollback. On
 2026-09-10 Oracle was converted from a home-cluster agent into an independent
-single-server k3s standby. Its JMusicBot Deployment is installed with zero
-replicas, so the home cluster remains the sole Discord writer; an isolated R2
-restore Job recovered the two retained state files without starting the bot.
+single-server k3s site. The current controlled posture has Oracle's JMusicBot
+Deployment at 1/1 as the witness lease holder and Home's Deployment at 0/0;
+the Home release notifier remains separate. An isolated R2 restore Job
+recovered the two retained state files without starting a second writer.
+Ownership handoff, duplicate-session protection, egress/audio behavior, and
+return-home evidence remain open in homelab Issue #262.
