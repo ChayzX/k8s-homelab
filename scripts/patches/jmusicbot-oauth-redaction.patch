@@ -2,14 +2,15 @@ diff --git a/src/main/java/com/jagrosh/jmusicbot/utils/YoutubeOauth2TokenHandler
 index 3e10717..f3d36a3 100644
 --- a/src/main/java/com/jagrosh/jmusicbot/utils/YoutubeOauth2TokenHandler.java
 +++ b/src/main/java/com/jagrosh/jmusicbot/utils/YoutubeOauth2TokenHandler.java
-@@ -37,4 +37,10 @@ public class YoutubeOauth2TokenHandler extends TurboFilter {
+@@ -37,4 +37,11 @@ public class YoutubeOauth2TokenHandler extends TurboFilter {
          if (!logger.getName().equals("dev.lavalink.youtube.http.YoutubeOauth2Handler"))
              return FilterReply.NEUTRAL;
 
 +        // Never emit OAuth access-token material into application logs.
 +        // The upstream youtube-source DEBUG message includes the token as
 +        // its first parameter; suppress it before any appender sees it.
-+        if (format.equals("OAuth access token is {}"))
++        if (format.equals("OAuth access token is {}")
++                || format.equals("YouTube access token is {}"))
 +            return FilterReply.DENY;
 +
          if (format.equals("OAUTH INTEGRATION: To give youtube-source access to your account, go to {} and enter code {}"))
