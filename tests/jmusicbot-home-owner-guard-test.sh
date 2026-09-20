@@ -7,10 +7,10 @@ guard="$root/scripts/assert-jmusicbot-home-owner.sh"
 test -x "$guard"
 grep -Fq 'scripts/assert-jmusicbot-home-owner.sh' "$workflow"
 set_image=$(grep -n 'kubectl set image deployment/jmusicbot' "$workflow" | cut -d: -f1)
-restart=$(grep -n 'kubectl rollout restart deployment/jmusicbot' "$workflow" | cut -d: -f1)
+restart=$(grep -n 'kubectl rollout restart deployment/jmusicbot' "$workflow" | cut -d: -f1 || true)
 guard_lines=$(grep -n 'scripts/assert-jmusicbot-home-owner.sh' "$workflow" | cut -d: -f1)
 test "$(awk -v n="$set_image" '$1<n {c++} END{print c+0}' <<<"$guard_lines")" -ge 1
-test "$(awk -v n="$restart" '$1<n {c++} END{print c+0}' <<<"$guard_lines")" -ge 2
+test -z "$restart"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT

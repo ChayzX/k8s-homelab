@@ -208,9 +208,12 @@ jobs:
           cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
           printf '%s' "$KUBE_CONFIG_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/jmusicbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/jmusicbot.kubeconfig"
           KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" scripts/assert-kube-target.sh home
-          KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" scripts/assert-jmusicbot-home-owner.sh
-          KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl rollout restart deployment/jmusicbot -n jmusicbot
-          echo '### Pod restart requested: ✅' >> "$GITHUB_STEP_SUMMARY"
+          # set image in the preceding job already triggers the Recreate
+          # rollout. Do not issue a second restart or re-run the Ready-owner
+          # guard after that mutation: the new pod is expected to be NotReady
+          # while it reconnects to Discord, which would falsely fail closed.
+          KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl get deployment/jmusicbot -n jmusicbot
+          echo '### Image-triggered rollout observed: ✅' >> "$GITHUB_STEP_SUMMARY"
 
   verify:
     name: 4 - Verify JMusicBot rollout and health (merge deploy)
