@@ -54,6 +54,11 @@ data:
     }
     loki.process "pods" {
       forward_to = [loki.write.local.receiver]
+      // Drop credential-bearing lines before they reach Loki. This is
+      // defense in depth for upstream applications that log at DEBUG.
+      stage.drop {
+        expression = "(?i)(access token|refresh token|authorization: bearer)"
+      }
       stage.regex {
         expression = "(?i)(?P<level>debug|info|warn(?:ing)?|error|fatal)"
       }

@@ -10,3 +10,7 @@ clusters. Alloy is the active collector and currently writes only to self-hosted
 log and metrics forwarding remains disabled. The Windows Alloy Cloudflare
 metrics tunnel is scaled to zero until a self-hosted metrics endpoint is
 selected.
+
+Both site pipelines drop lines containing access/refresh tokens or bearer
+authorization material before forwarding. This is defense in depth; application
+code must still avoid logging credentials.
