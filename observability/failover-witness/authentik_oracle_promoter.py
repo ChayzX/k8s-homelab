@@ -219,7 +219,7 @@ def build_adapters(args: argparse.Namespace) -> PromotionAdapters:
     def fence() -> None:
         # oculum-ignore-next-line [dangerous_function]: operator-supplied fence executable is argv-only and timeout-bounded
         subprocess.run(
-            [*local_fence_command, "k3s.service"],
+            local_fence_command,
             check=True,
             timeout=30,
         )
