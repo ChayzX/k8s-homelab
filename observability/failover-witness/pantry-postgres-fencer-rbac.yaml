@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pantry-postgres-fencer
+  namespace: pantry-bot
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pantry-postgres-fencer-token
+  namespace: pantry-bot
+  annotations:
+    kubernetes.io/service-account.name: pantry-postgres-fencer
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pantry-postgres-fencer
+  namespace: pantry-bot
+rules:
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    resourceNames:
+      - postgres-authority
+      - postgres-authority-home-failback
+      - postgres-authority-home-return
+    verbs: ["get", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    resourceNames:
+      - postgres-authority-0
+      - postgres-authority-home-failback-0
+      - postgres-authority-home-return-0
+    verbs: ["get", "delete"]
+  - apiGroups: [""]
+    resources: ["services", "endpoints"]
+    resourceNames:
+      - postgres-authority
+      - postgres-authority-home-failback
+      - postgres-authority-home-return
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pantry-postgres-fencer
+  namespace: pantry-bot
+subjects:
+  - kind: ServiceAccount
+    name: pantry-postgres-fencer
+    namespace: pantry-bot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pantry-postgres-fencer
