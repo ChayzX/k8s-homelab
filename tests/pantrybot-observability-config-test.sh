@@ -36,6 +36,21 @@ for config in "${configs[@]}"; do
     }
   done
 
+  witness_job="pantry-postgres-witness${suffix}"
+  witness_block=$(sed -n "/^      - job_name: ${witness_job}$/,/^      - job_name:/p" "$config")
+  grep -q 'metrics_path: /metrics' <<<"$witness_block" || {
+    echo "Missing /metrics path for ${witness_job} in $config" >&2
+    exit 1
+  }
+  grep -q 'failover-witness-relay.observability.svc.cluster.local:18765' <<<"$witness_block" || {
+    echo "Missing failover witness relay target for ${witness_job} in $config" >&2
+    exit 1
+  }
+  grep -q "site: ${site}" <<<"$witness_block" || {
+    echo "Missing site: ${site} label for ${witness_job} in $config" >&2
+    exit 1
+  }
+
   ! grep -q 'site: canada' "$config" || {
     echo "Stale Canada target found in $config" >&2
     exit 1
