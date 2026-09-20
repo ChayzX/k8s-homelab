@@ -48,6 +48,13 @@ open gate. The monitor persists an `active_alerts` map with stable
 does not create a second notification for the same check; a newly failed check
 or a recovered check gets its own transition.
 
+On 2026-09-20, the repository's dependency-free
+`probe-notification-receipt.py` was installed on GCP with SHA-256
+`3382cceabcf6c630ccb0d4efdaabd4a26dc14e016954ca6c6dab2df9a6cca59`. The probe
+currently reports no accepted receipt because the webhook is intentionally
+unconfigured. This removes deployment drift but does not close the provider or
+human receipt gate.
+
 On 2026-09-10, the monitor independently observed a short public-edge
 degradation: Grafana failed on three consecutive 60-second checks, with the
 other public checks failing on the first two cycles. The monitor transitioned
