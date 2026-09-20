@@ -17,8 +17,19 @@ def test_composite_requires_explicit_mode_and_calls_both_fences() -> None:
 
 def test_home_transport_is_identity_pinned_and_no_arbitrary_command() -> None:
     text = (ROOT / "fence-home-from-oracle.sh").read_text()
-    assert 'HOME_HOST="${PANTRY_HOME_FENCE_HOST:-100.84.89.87}"' in text
-    assert 'HOME_USER="${PANTRY_HOME_FENCE_USER:-chase}"' in text
+    assert 'GCP_HOST="136.113.178.106"' in text
+    assert 'GCP_USER="sa_105559435168833655240"' in text
     assert 'StrictHostKeyChecking=yes' in text
-    assert 'sudo -n /usr/local/lib/failover-witness/fence-pantry-postgres.sh' in text
-    assert 'invalid_home_identity' in text
+    assert 'REMOTE_FENCE="/usr/local/lib/failover-witness/gcp-fence-home-writer.sh"' in text
+    assert 'sudo -n "$REMOTE_FENCE"' in text
+
+
+def test_home_transport_uses_independent_gcp_forced_fence() -> None:
+    """Catch a transport that bypasses the ChaseBot lease-renewer fence."""
+    text = (ROOT / "fence-home-from-oracle.sh").read_text()
+
+    assert "136.113.178.106" in text
+    assert "gcp-witness-oracle" in text
+    assert "gcp-fence-home-writer.sh" in text
+    assert "100.84.89.87" not in text
+    assert "fence-pantry-postgres.sh" not in text
