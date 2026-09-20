@@ -102,6 +102,35 @@ class WitnessState:
     def authorized(self, supplied: str | None) -> bool:
         return bool(supplied) and hmac.compare_digest(supplied.encode(), self.secret)
 
+    def prometheus_metrics(self, now: float | None = None) -> str:
+        """Return token-free health and authority metrics for PostgreSQL."""
+        resource = "pantry:postgres"
+        with self.lock:
+            observed_at = time.time() if now is None else now
+            healthy = 0 if self.persistence_failed else 1
+            lease = self.data.get("leases", {}).get(resource, {})
+            epoch = int(lease.get("epoch", 0))
+            holder = lease.get("holder") or "none"
+            expires_at = float(lease.get("expires_at", 0))
+            active = int(holder != "none" and expires_at > observed_at)
+        return "\n".join(
+            (
+                "# HELP failover_witness_healthy Whether the witness can safely grant or renew authority.",
+                "# TYPE failover_witness_healthy gauge",
+                f"failover_witness_healthy {healthy}",
+                "# HELP failover_witness_lease_epoch Latest durable fencing epoch for the resource.",
+                "# TYPE failover_witness_lease_epoch gauge",
+                f'failover_witness_lease_epoch{{resource="{resource}"}} {epoch}',
+                "# HELP failover_witness_lease_expires_at_seconds Lease expiry as a Unix timestamp.",
+                "# TYPE failover_witness_lease_expires_at_seconds gauge",
+                f'failover_witness_lease_expires_at_seconds{{resource="{resource}"}} {expires_at}',
+                "# HELP failover_witness_lease_active Whether the recorded holder has an unexpired lease.",
+                "# TYPE failover_witness_lease_active gauge",
+                f'failover_witness_lease_active{{resource="{resource}",holder="{holder}"}} {active}',
+                "",
+            )
+        )
+
     def acquire(self, site: str, resource: str = "default") -> dict[str, Any] | None:
         now = time.time()
         with self.lock:
@@ -158,10 +187,20 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         return json.loads(self.rfile.read(length) or b"{}")
 
+    def _text(self, status: int, body: str) -> None:
+        encoded = body.encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/healthz":
             ok = not self.state.persistence_failed
             self._json(HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, {"ok": ok})
+        elif self.path == "/metrics":
+            self._text(HTTPStatus.OK, self.state.prometheus_metrics())
         else:
             self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
