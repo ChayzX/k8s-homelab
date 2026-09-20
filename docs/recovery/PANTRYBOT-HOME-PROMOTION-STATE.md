@@ -49,17 +49,16 @@ The controlled promotion sequence is:
 5. Start only the home runtime components whose immutable images are available.
 
 The isolated/application-level ownership rehearsal exercised both directions
-and proved the application lease/fencing sequence. A live production
-PostgreSQL promotion, stale-writer rejection, endpoint cutover, and return-home
-failback have **not** been proven; the current live snapshot (2026-09-19) is
-home postgres-authority-home-return-0 as the writable primary;
-the canonical Oracle postgres-authority-standby StatefulSet is still 0/0,
-while the separately named reseed candidate is 1/1, reports
-pg_is_in_recovery()=t, and reports pg_stat_wal_receiver.status=streaming.
-Home PostgreSQL reports pg_is_in_recovery()=f and
-transaction_read_only=off; home runtime deployments and both commands-site
-replicas are Ready. Three samples at 20:33:35Z, 20:33:48Z, and 20:34:00Z
-showed matching receive/replay LSNs and approximately 0.20–0.23s replay lag.
+and proved the application lease/fencing sequence. A controlled live Oracle
+promotion and return-home failback were exercised on 2026-09-20: the composite
+old-writer fence stopped Home and Canada, Oracle promoted the streaming
+candidate, application roles and routes were brought up, Oracle was then
+fenced, and a fresh Home failback PVC was seeded from Oracle and promoted.
+The current live snapshot is `postgres-authority-home-failback-0` as the
+writable primary; the Oracle reseed StatefulSet is scaled to zero with no
+endpoint. Home PostgreSQL reports `pg_is_in_recovery()=f` and
+`transaction_read_only=off`; all nine Home runtime/tunnel deployments are
+Ready and external commands/OAuth/mods/overlay checks returned 200/302/200/302.
 
 ## Remaining gates
 
@@ -67,16 +66,15 @@ showed matching receive/replay LSNs and approximately 0.20–0.23s replay lag.
   GHCR images successfully using the least-privilege `read:packages` secret.
   The worker Deployment remains paused as an intentional rollout-control
   decision; cached workers are healthy.
-- Oracle application roles remain stopped in standby posture. The canonical
-  Pantry PostgreSQL standby remains scaled to zero with its old PVC retained;
-  the fresh reseed candidate is continuously streaming from home. Before
-  replacing the canonical StatefulSet, capture repeated receive/replay LSN
-  freshness, verify service/secret wiring, and perform the documented
-  old-writer fencing checks.
+- Oracle application roles remain stopped and its promoted PostgreSQL candidate
+  is fenced with no endpoint. The Home failback PVC was created only after a
+  fresh Oracle dump (`oracle-pre-failback-20260920T132458Z.dump`, SHA-256
+  `c94eabb1b95a5d0431d19331efccbdbd24ced52582e52eea83a45415fa4a6f68`) and
+  caught up from Oracle over the verified reverse transport.
 - The corrected promoter and composite home+Canada fence have passed source-level
   contract tests, dry-run checks, and isolated/controller rehearsal coverage.
-  A live production Oracle promotion, service cutover, route publication, and
-  return-home failback are not yet proven. The promoter remains disabled and
+  Live Oracle promotion, service cutover, route publication, and return-home
+  failback are now proven for this rehearsal. The promoter remains disabled and
   automatic failover is not enabled.
 - The stale home-return PVC was deleted only after backup and replacement state
   were verified. The canonical standby manifest was reapplied, the replication
@@ -91,11 +89,13 @@ showed matching receive/replay LSNs and approximately 0.20–0.23s replay lag.
   (23 tests), and the corrected source plus a topology-pinned disabled systemd
   drop-in are installed on Oracle. A fixed-identity composite old-writer fence
   has verified its transport and dry-run contracts for both home and Canada; a
-  live Home-only fence rehearsal was completed on 2026-09-20: the adapter
+  live Home-only fence rehearsal was completed on 2026-09-20, followed by a
+  live cross-site promotion/failback rehearsal: the adapter
   removed all named home PostgreSQL endpoints in 1.972s, and the writable
   home-return StatefulSet was restored in 16.853s with runtime readiness
-  recovered. A cross-site promotion-window rehearsal, stale physical-writer
-  rejection, and route/RTO/RPO evidence remain explicit gates.
+  recovered. Explicit stale-write transaction rejection and source-marked
+  RTO/RPO measurements remain open gates; endpoint removal and old-writer
+  fencing were verified.
   Automatic service enablement remains disabled pending repeated
   failure-domain testing and external-side-effect/RTO-RPO evidence.
 - Live candidate inspection on 2026-09-20 confirmed `PGDATA=/var/lib/postgresql/data`;

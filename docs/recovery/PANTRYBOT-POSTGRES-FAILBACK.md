@@ -27,7 +27,10 @@ All of these must be true before starting:
 
 The current home root filesystem is tight. Check it before applying the
 manifest; do not delete container images or production data as an ad-hoc
-space fix.
+space fix. During the 2026-09-20 rehearsal, the existing failback PVC was
+discarded only after the fresh Home pre-promotion dump and Oracle pre-failback
+dump were verified; the replacement PVC completed `pg_basebackup` over
+`192.168.40.200:25433`.
 
 ## Ordered transition
 
@@ -77,14 +80,14 @@ closed:
 ## Current evidence and remaining gate
 
 The reverse encrypted transport, disposable `pg_basebackup -R` path, and
-isolated PVC cutover have been exercised in the maintenance window. A live
-Oracle-to-home promotion/failback, endpoint cutover, stale-writer rejection,
-and return-direction reseed have **not** been proven end-to-end. The current
-normal writer is home; Oracle remains a read-only reseed candidate. Keep
-PantryBot's gateway/worker/dispatcher at zero on Oracle while standby posture
-is active. The remaining gates are controlled promotion/fencing/failback,
-broader failure testing, and external-side-effect semantics; evidence is
-recorded in Issues #147 and #191.
+isolated PVC cutover were exercised in the maintenance window. A live
+Oracle-to-home promotion/failback, endpoint cutover, and final replication
+direction were proven on 2026-09-20: Oracle was fenced with no endpoint, Home
+`postgres-authority-home-failback-0` was promoted writable, the stable service
+and database URL were cut over, all Home runtime roles recovered, and public
+routes returned 200/302/200/302. Explicit stale-write transaction rejection
+and source-marked RTO/RPO remain open; evidence is recorded in Issues #147 and
+#191.
 
 On 2026-09-20, a Home-side postgres probe confirmed both the Oracle reverse
 failback endpoint (`192.168.40.200:25433`) and the home replication NodePort
