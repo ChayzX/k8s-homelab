@@ -12,6 +12,7 @@ ExecStart=/usr/bin/python3 /usr/local/lib/failover-witness/authentik_oracle_prom
   --fence-command "/usr/local/lib/failover-witness/fence-authentik-postgres-oracle.sh --confirm" \
   --old-writer-fence-command "/usr/local/lib/failover-witness/fence-authentik-home-from-oracle.sh --confirm"
 EnvironmentFile=/etc/failover-witness/authentik-postgres-fence.env
+Environment=AUTHENTIK_HOME_FENCE_KEY=/root/.ssh/pantry-home-fence
 Restart=always
 RestartSec=5
 User=root
