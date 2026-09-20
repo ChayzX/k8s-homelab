@@ -15,10 +15,12 @@ gate has passed.
   both home and Oracle. Home is the normal interactive site; Oracle capacity
   is not an equal public origin while its local PostgreSQL is a standby. This
   is active-active application capacity, not multi-primary database operation.
-- Authentik PostgreSQL has one writer per fencing epoch. The current live
-  authority snapshot is home (`pg_is_in_recovery() = false`); Oracle is the
-  streaming standby (`pg_is_in_recovery() = true`). Promotion and old-writer
-  fencing are not yet proven end-to-end.
+- Authentik PostgreSQL has one writer per fencing epoch. After the controlled
+  Oracle promotion and return-home rehearsal on 2026-09-20, the current live
+  authority is the fresh-PVC Home return target
+  (`auth-postgresql-home-return-0`, `pg_is_in_recovery() = false`); Oracle is
+  again a fresh physical streaming standby (`pg_is_in_recovery() = true`).
+  The original fenced Home primary PVC remains out of service.
 - Oracle and ChaseBot use SSSD over LDAPS and resolve `chase` and
   `posix-admins` (UID/GID 2018/27557).
 - Local SSH/key recovery remains independent of Authentik.
@@ -48,20 +50,45 @@ The sudo rules are root-owned `/etc/sudoers.d/90-authentik-posix-admins` files;
 `visudo -cf` passed on both hosts and effective policy was checked for `chase`.
 No password or token values were recorded.
 
-### Live PostgreSQL authority snapshot — 2026-09-19
+### Live PostgreSQL authority snapshot — 2026-09-20
 
 Read-only queries against the live clusters reported:
 
-- home `auth-postgresql-home-primary-0`: PostgreSQL 17.10,
-  `pg_is_in_recovery() = false`;
+- Home `auth-postgresql-home-return-0`: PostgreSQL 17.10,
+  `pg_is_in_recovery() = false`; a temporary write/rollback probe succeeded.
 - Oracle `auth-postgresql-standby-0`: PostgreSQL 17.10,
-  `pg_is_in_recovery() = true`;
-- home `pg_stat_replication`: application `auth-oracle-standby`, state
-  `streaming`, asynchronous; write/flush/replay lag was approximately 0.13s at
-  capture.
+  `pg_is_in_recovery() = true`; `pg_stat_wal_receiver.status=streaming`.
+- Home replication slot `auth_oracle_standby` is active. Oracle was reseeded
+  from Home onto a new PVC after the promotion rehearsal; the prior Oracle
+  PVC was deleted only after a fresh logical backup was captured.
+- The Oracle database Service has no endpoints and its NodePort is closed;
+  the Home transport NodePort has the sole database endpoint.
 
-This is replication/freshness evidence only. It does not prove promotion,
-fencing, session reconstruction, routing convergence, or failback.
+This proves the controlled promotion, old-writer fence, return-home promotion,
+and final replication direction for this rehearsal. It does not by itself
+prove interactive web login/callback, pre-existing session behavior, public
+Cloudflare route convergence, or a target-specific RPO/RTO against declared
+objectives.
+
+### Controlled promotion and failback evidence — 2026-09-20
+
+- Fresh R2 backup and local pre-change snapshots were verified before the
+  rehearsal.
+- Oracle acquired a newer witness epoch; the Oracle-side controller fenced the
+  Home writer, and Home's old database Service/transport had no endpoints.
+- Oracle promotion initially exposed a missing `su-exec` assumption. Live pod
+  inspection showed UID 0 plus installed `gosu`; the reviewed controller fix
+  now invokes `gosu postgres pg_ctl`. Focused promoter/fence tests passed and
+  the corrected controller was installed on Oracle.
+- The corrected rehearsal promoted Oracle, switched its Service/Secret, and
+  restarted Authentik server/worker/LDAP successfully. Readiness was HTTP 200,
+  LDAP and LDAPS TCP checks passed, and no Home database endpoint existed.
+- Return-home used `auth-postgresql-home-return-0` on a fresh PVC. Oracle
+  application roles were stopped, Oracle was fenced, Home return was promoted,
+  Home Authentik server/worker/LDAP became Ready, and a temporary transaction
+  probe succeeded.
+- Oracle was reseeded from Home after a fresh logical backup and now reports
+  streaming recovery. Automatic promotion remains disabled.
 
 An Authentik/PostgreSQL dump restore into an isolated PostgreSQL target reached
 the Authentik readiness endpoint with HTTP 200. The isolated target used no
@@ -115,8 +142,11 @@ requires the external fencing, promotion, readiness, and rollback gates below.
    healthy after restoration.
 4. Document and rehearse password rotation, account disablement, cache expiry,
    and rollback to local emergency accounts.
-5. For issue #202, prove PostgreSQL promotion, measured RPO/RTO, old-writer
-   fencing, session behavior, routing, and rollback without split-brain.
+5. For issue #202, ~~prove PostgreSQL promotion, old-writer fencing, and
+   rollback without split-brain~~ **database promotion, old-writer fencing,
+   return-home failback, and final replication direction passed 2026-09-20**;
+   measured target RPO/RTO, interactive login/callback, pre-existing session
+   behavior, and public route convergence remain open.
 
 Until these gates have issue evidence, Authentik remains home-primary for
 database authority while both sites may serve application capacity. Oracle is

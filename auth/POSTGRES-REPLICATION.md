@@ -7,24 +7,26 @@ multi-primary writes are not provided by the free homelab design.
 
 ## Current topology
 
-- Current live authority: Home `auth-postgresql-home-primary-0` is the sole
-  writable primary for the current fencing epoch. This is the normal home
-  authority; it is not evidence that automatic promotion is safe.
+- Current live authority: Home `auth-postgresql-home-return-0` is the sole
+  writable primary for the current fencing epoch after the 2026-09-20
+  controlled promotion/failback rehearsal. The original
+  `auth-postgresql-home-primary-0` PVC remains fenced and out of service.
 - Oracle target: `auth-postgresql-standby-0` is the streaming physical standby
   for a controlled Oracle promotion. It must remain read-only and must not be
   started as a writer alongside the home authority.
 - Normal home restore target: `auth-postgresql-home-primary` is a separately
   named, one-replica PostgreSQL target for a controlled logical restore. It uses
   a new PVC and must not be started alongside the current authority.
-- Home return standby: `auth-postgresql-home-return-0` is a fresh-PVC physical
-  standby target for a controlled return-home rehearsal. It remains scaled to
-  zero until a maintenance window and must not reuse the fenced primary PVC.
+- Home return target: `auth-postgresql-home-return-0` is the current writable
+  primary on its fresh PVC. It must not be confused with the fenced original
+  primary PVC.
 - Historical migration target: the ChaseBot-pinned
   `auth-postgresql-chasebot-standby-0` StatefulSet retains its old `standby`
   name and `primary` role label for migration compatibility, but it is not the
   current production authority and must not be treated as independently fenced.
 - Home transport: the private `auth-postgresql-transport` NodePort on `30433`.
-- Oracle standby: `auth-postgresql-standby-0`, backed by a local-path 10Gi PVC.
+- Oracle standby: `auth-postgresql-standby-0`, backed by a newly provisioned
+  local-path 10Gi PVC after the return-home reseed.
 - Replication slot: `auth_oracle_standby`.
 - Replication mode: physical streaming replication, asynchronous.
 - Oracle standby accepts read-only connections and must not receive Authentik
@@ -73,10 +75,10 @@ The guarded Authentik controller in
 [`../observability/failover-witness/authentik_oracle_promoter.py`](../observability/failover-witness/authentik_oracle_promoter.py)
 now packages the Oracle-side promotion sequence, including witness resource
 `auth:postgres`, standby promotion, service selector switch, Authentik secret
-endpoint update, and application restart. It is not enabled as a production
-systemd unit: the remaining gate is a proven old-writer fencing mechanism plus
-a non-production promotion rehearsal. Do not run it against production until
-the fencing checklist below has been completed and independently observed.
+endpoint update, and application restart. The controlled rehearsal and
+return-home failback passed the database/fence/readiness gates, but the unit
+remains disabled; automatic promotion still requires explicit review of
+interactive login/session, public-route, and measured RPO/RTO evidence.
 The command requires `--old-writer-fence-command`; it executes that
 out-of-band command after acquiring the new witness epoch and before promoting
 Oracle, and aborts if the command fails. The command must fence the home
