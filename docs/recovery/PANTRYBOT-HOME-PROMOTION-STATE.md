@@ -63,6 +63,15 @@ endpoint. Home PostgreSQL reports `pg_is_in_recovery()=f` and
 `transaction_read_only=off`; all nine Home runtime/tunnel deployments are
 Ready and external commands/OAuth/mods/overlay checks returned 200/302/200/302.
 
+## Recovery validation — live application-fence probe (2026-09-20T15:01 UTC)
+
+- **Home token acceptance:** Epoch 95 token is accepted by the live runtime.
+- **Stale token rejection:** Epoch 94 token is rejected; no write query executed.
+- The application-fence probe confirms the runtime correctly enforces the fencing epoch
+  and prevents stale epoch writes at the application boundary.
+- Cross-site post-promotion stale-runtime rejection and measured failover RTO/RPO
+  remain open (not tested in this probe).
+
 ## Remaining gates
 
 - The worker-only component rollout and public-site rollout now pull immutable
