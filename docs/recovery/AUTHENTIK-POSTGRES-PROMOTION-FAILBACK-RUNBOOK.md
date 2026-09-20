@@ -101,6 +101,35 @@ operator=<GitHub identity>
 Attach only sanitized output and links to the issue. Keep raw logs and secret
 material in the approved restricted evidence store.
 
+For credentialed application checks, the evidence record must also include:
+
+```text
+credential_source=operator-supplied disposable only
+credential_values_not_recorded=true
+credential_scope=<disposable identity/provider or isolated restore>
+```
+
+Do not use a retained production password, API token, recovery code, or
+session cookie as a test credential. If an operator cannot supply a disposable
+identity through the approved restricted channel, set `session_validation=not
+measured` and keep the issue open.
+
+Timing fields are valid only when their source markers were captured during the
+same rehearsal. At minimum, retain sanitized values for:
+
+```text
+failure_injection_utc=<timestamp>
+source_commit_or_flush_lsn_utc=<timestamp and LSN, or not measured>
+fence_confirmed_utc=<timestamp>
+target_replay_or_visible_commit_utc=<timestamp and LSN, or not measured>
+route_converged_utc=<timestamp>
+```
+
+If `failure_injection_utc` or either source/target commit marker is missing,
+set `measured_rto_seconds=not measured` and/or
+`measured_rpo_seconds=not measured`; do not infer a formal RTO/RPO from pod
+readiness, route health, or broad timestamp bounds.
+
 ## Phase 0 — stop conditions and preflight
 
 Stop immediately, leave home as the sole writer, and comment the reason on
