@@ -28,6 +28,8 @@ TIMEOUT = int(os.environ.get("MONITOR_TIMEOUT_SECONDS", "12"))
 FAILURE_THRESHOLD = int(os.environ.get("MONITOR_FAILURE_THRESHOLD", "3"))
 STATE_FILE = Path(os.environ.get("MONITOR_STATE_FILE", "/var/lib/homelab-monitor/state.json"))
 WEBHOOK = os.environ.get("MONITOR_DISCORD_WEBHOOK", "")
+DISCORD_BOT_TOKEN = os.environ.get("MONITOR_DISCORD_BOT_TOKEN", "")
+DISCORD_USER_ID = os.environ.get("MONITOR_DISCORD_USER_ID", "")
 API_URL = os.environ.get("MONITOR_API_URL", "")
 API_EXPECTED_STATUS = os.environ.get("MONITOR_API_EXPECTED_STATUS", "200")
 R2_BUCKET = os.environ.get("MONITOR_R2_BUCKET", "")
@@ -253,6 +255,8 @@ def write_state(state: dict[str, object]) -> None:
 
 def notify(message: str) -> dict[str, object]:
     """Send an alert and return provider-acceptance metadata, never its body."""
+    if DISCORD_BOT_TOKEN or DISCORD_USER_ID:
+        return _notify_discord_bot(message)
     if not WEBHOOK:
         print(f"ALERT {message}", flush=True)
         return {
@@ -286,11 +290,82 @@ def notify(message: str) -> dict[str, object]:
             "reason": "http_error",
         }
     except Exception as exc:  # noqa: BLE001 - report notification failure locally
-        print(f"NOTIFICATION_FAILURE {type(exc).__name__}: {exc}", flush=True)
+        print(f"NOTIFICATION_FAILURE {type(exc).__name__}", flush=True)
         return {
             "accepted": False,
             "transport": "webhook",
             "observed_at": int(time.time()),
+            "reason": type(exc).__name__,
+        }
+
+
+def _notify_discord_bot(message: str) -> dict[str, object]:
+    """Deliver an alert to the configured user's Discord DM channel.
+
+    Discord's bot API requires opening (or retrieving) a DM channel before
+    posting a message.  Only provider status metadata is returned; neither the
+    bot token nor response bodies are logged or persisted.
+    """
+    observed_at = int(time.time())
+    if not DISCORD_BOT_TOKEN or not DISCORD_USER_ID:
+        return {
+            "accepted": False,
+            "transport": "discord_bot",
+            "observed_at": observed_at,
+            "reason": "incomplete_bot_configuration",
+        }
+    headers = {
+        "Authorization": f"Bot {DISCORD_BOT_TOKEN}",
+        "Content-Type": "application/json",
+        "User-Agent": "homelab-external-monitor/1",
+    }
+    try:
+        channel_request = urllib.request.Request(
+            "https://discord.com/api/v10/users/@me/channels",
+            data=json.dumps({"recipient_id": DISCORD_USER_ID}).encode(),
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(channel_request, timeout=TIMEOUT) as response:
+            channel_status = int(getattr(response, "status", 200))
+            channel = json.loads(response.read() or b"{}")
+        channel_id = channel.get("id") if isinstance(channel, dict) else None
+        if not (200 <= channel_status < 300) or not isinstance(channel_id, str) or not channel_id:
+            return {
+                "accepted": False,
+                "transport": "discord_bot",
+                "status": channel_status,
+                "observed_at": observed_at,
+                "reason": "dm_channel_rejected",
+            }
+        message_request = urllib.request.Request(
+            f"https://discord.com/api/v10/channels/{urllib.parse.quote(channel_id, safe='')}/messages",
+            data=json.dumps({"content": f"**Homelab external monitor**\n{message}"}).encode(),
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(message_request, timeout=TIMEOUT) as response:
+            status = int(getattr(response, "status", 200))
+        return {
+            "accepted": 200 <= status < 300,
+            "transport": "discord_bot",
+            "status": status,
+            "observed_at": observed_at,
+        }
+    except urllib.error.HTTPError as exc:
+        return {
+            "accepted": False,
+            "transport": "discord_bot",
+            "status": exc.code,
+            "observed_at": observed_at,
+            "reason": "http_error",
+        }
+    except Exception as exc:  # noqa: BLE001 - report notification failure locally
+        print(f"NOTIFICATION_FAILURE {type(exc).__name__}", flush=True)
+        return {
+            "accepted": False,
+            "transport": "discord_bot",
+            "observed_at": observed_at,
             "reason": type(exc).__name__,
         }
 

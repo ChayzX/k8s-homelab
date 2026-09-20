@@ -173,6 +173,64 @@ finally:
     monitor.urllib.request.urlopen = original_urlopen
 
 
+# Discord bot DM delivery opens a channel and then posts the alert.  Both
+# calls are mocked so this contract test never contacts Discord or records a
+# real credential.
+original_webhook = monitor.WEBHOOK
+original_bot_token = monitor.DISCORD_BOT_TOKEN
+original_user_id = monitor.DISCORD_USER_ID
+original_urlopen = monitor.urllib.request.urlopen
+try:
+    monitor.WEBHOOK = "https://notify.example.test/fallback"
+    monitor.DISCORD_BOT_TOKEN = "test-bot-token"
+    monitor.DISCORD_USER_ID = "123456789"
+    requests = []
+
+    class JsonResponse:
+        def __init__(self, status, body=b"{}"):
+            self.status = status
+            self.body = body
+
+        def read(self):
+            return self.body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def discord_urlopen(request, timeout):
+        requests.append(request)
+        if request.full_url.endswith("/users/@me/channels"):
+            return JsonResponse(200, b'{"id":"987654321"}')
+        return JsonResponse(204)
+
+    monitor.urllib.request.urlopen = discord_urlopen
+    bot_receipt = monitor.notify("private alert text")
+    assert bot_receipt["accepted"] is True
+    assert bot_receipt["transport"] == "discord_bot"
+    assert bot_receipt["status"] == 204
+    assert len(requests) == 2
+    assert requests[0].full_url.endswith("/users/@me/channels")
+    assert requests[1].full_url.endswith("/channels/987654321/messages")
+    assert requests[0].headers["Authorization"] == "Bot test-bot-token"
+    assert json.loads(requests[0].data) == {"recipient_id": "123456789"}
+    assert "private alert text" in json.loads(requests[1].data)["content"]
+    assert "test-bot-token" not in json.dumps(bot_receipt)
+
+    # A partial configuration fails closed and does not use the webhook.
+    monitor.DISCORD_USER_ID = ""
+    incomplete = monitor.notify("private alert text")
+    assert incomplete["accepted"] is False
+    assert incomplete["reason"] == "incomplete_bot_configuration"
+finally:
+    monitor.WEBHOOK = original_webhook
+    monitor.DISCORD_BOT_TOKEN = original_bot_token
+    monitor.DISCORD_USER_ID = original_user_id
+    monitor.urllib.request.urlopen = original_urlopen
+
+
 original_checks = monitor.CHECKS
 original_check = monitor.check
 original_state_file = monitor.STATE_FILE

@@ -9,6 +9,10 @@ Optional `/etc/homelab-monitor/monitor.env` values:
 
 ```text
 MONITOR_DISCORD_WEBHOOK=https://discord.com/api/webhooks/...
+# Optional bot-DM delivery. When both bot variables are present they take
+# precedence over MONITOR_DISCORD_WEBHOOK; the webhook remains the fallback.
+MONITOR_DISCORD_BOT_TOKEN=...
+MONITOR_DISCORD_USER_ID=...
 MONITOR_INTERVAL_SECONDS=60
 MONITOR_TIMEOUT_SECONDS=12
 # Optional protected Kubernetes API route check. A 403 means Cloudflare Access
@@ -31,6 +35,15 @@ fails the monitor; when it is unset, R2 checks are explicitly skipped.
 The monitor code is deployed on GCP, but R2 checks remain disabled until a
 read-only monitoring credential is provisioned. Do not reuse a workload
 credential with write/delete access for this purpose.
+
+For bot-DM delivery, `MONITOR_DISCORD_BOT_TOKEN` is the bot credential and
+`MONITOR_DISCORD_USER_ID` is the recipient's Discord user ID. The monitor opens
+the recipient DM channel through Discord's API and posts the alert there. It
+stores only provider acceptance metadata; tokens, message bodies, and API
+responses are never persisted. If either bot variable is missing, bot delivery
+fails closed rather than silently using a partially configured credential. If
+both bot variables are unset, `MONITOR_DISCORD_WEBHOOK` is used as the
+backward-compatible delivery path.
 
 The default public checks include the split PantryBot surfaces:
 `commands.greeniespantry.uk/` and `mods.greeniespantry.uk/mod/`. These validate
