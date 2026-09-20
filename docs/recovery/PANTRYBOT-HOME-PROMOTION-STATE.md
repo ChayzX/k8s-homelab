@@ -19,8 +19,10 @@ live changes and remaining gates.
   postgres-authority-standby StatefulSet remains scaled to zero and its
   retained PVC is deliberately untouched. A fresh, separately named
   postgres-authority-standby-reseed-0 candidate was created on Oracle with a
-  new PVC, standby.signal, the unique pantry_oracle_standby slot, and a
-  streaming WAL receiver. It is currently scaled to zero after failback; its
+  new PVC during the rehearsal, but that PVC retained promoted-primary state
+  when it was later restarted (`pg_is_in_recovery()=f`). It is currently
+  scaled to zero and is **not** a valid standby; it must be freshly reseeded
+  with `pg_basebackup -R` and a verified `standby.signal` before reuse. Its
   separate service is not an application writer endpoint and the home service
   remains authoritative.
 - **Active reseed endpoint (live override):** Oracle's reseed candidate reaches
@@ -81,9 +83,12 @@ Ready and external commands/OAuth/mods/overlay checks returned 200/302/200/302.
   were verified. The canonical standby manifest was reapplied, the replication
   credential was synchronized from the Oracle secret, and the fresh PVC
   streamed from Oracle before home promotion.
-- Oracle was then reseeded from the current home primary over Tailscale
-  `100.84.89.87:30432`; it now reports `pg_is_in_recovery()=t` with receive and
-  replay LSNs caught up. The home primary reports the replication endpoint.
+- A later safety probe found the retained Oracle reseed PVC had lost standby
+  state and reported `pg_is_in_recovery()=f` when briefly started. It was
+  immediately scaled back to zero; no dual-writer window remained. Oracle
+  must be freshly reseeded from the current home primary over the verified
+  transport before another promotion or RTO/RPO rehearsal. The home primary
+  still reports the sole replication endpoint.
 - The tracked Oracle adapter now accepts separate pod/service namespaces,
   PostgreSQL data directory, and manually managed Endpoints (`--manual-endpoint`)
   for the live `postgres-authority-standby-reseed` topology. Its focused test suite passes
