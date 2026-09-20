@@ -122,6 +122,8 @@ jobs:
     needs: publish-image
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout source
+        uses: actions/checkout@v5
       - name: Connect to cluster and set image
         env:
           TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
@@ -146,6 +148,8 @@ jobs:
     needs: apply-release
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout source
+        uses: actions/checkout@v5
       - name: Restart deployment
         env:
           TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
@@ -168,6 +172,8 @@ jobs:
     needs: [publish-image, restart]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout source
+        uses: actions/checkout@v5
       - name: Verify rollout and readiness
         env:
           TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
@@ -198,6 +204,8 @@ jobs:
     if: ${{ always() && needs.verify.result == 'failure' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout source
+        uses: actions/checkout@v5
       - name: Roll back to previous ReplicaSet
         env:
           TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
