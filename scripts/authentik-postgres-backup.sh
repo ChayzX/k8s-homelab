@@ -19,9 +19,18 @@ UPLOAD_TIMEOUT=300s
 
 mkdir -p "$BACKUP_ROOT"
 chmod 700 "$BACKUP_ROOT"
-# The backup is invoked with sudo from cron.  /tmp is sticky, so a lock file
-# left there by the unprivileged scheduler cannot be reopened by root.
-exec 9>"/run/lock/homelab-authentik-backup.lock"
+# The backup is invoked with sudo from cron. If an earlier unprivileged run
+# left the lock behind, protected_regular can prevent root from reopening it;
+# only remove that stale file when no process currently holds it.
+lock_path=/run/lock/homelab-authentik-backup.lock
+if [[ -e "$lock_path" && ! -w "$lock_path" ]]; then
+  if fuser "$lock_path" >/dev/null 2>&1; then
+    echo 'backup already running'
+    exit 0
+  fi
+  rm -f "$lock_path"
+fi
+exec 9>"$lock_path"
 flock -n 9 || { echo 'backup already running'; exit 0; }
 
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
