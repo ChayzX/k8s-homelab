@@ -22,7 +22,7 @@ grep -Fq 'Do **not** apply that manifest over the live Service' "$STATE"
 # Keep the two selector contracts explicit so a later manifest edit cannot
 # erase the distinction without updating the state record and this test.
 grep -A4 '^  selector:$' "$RETURN_MANIFEST" | grep -Fq 'pantrybot.postgres/role: standby'
-grep -A4 '^  selector:$' "$RESEED_MANIFEST" | grep -Fq 'app.kubernetes.io/name: pantry-postgres-authority-standby-reseed'
+grep -A4 '^  selector:$' "$RESEED_MANIFEST" | grep -Fq 'app.kubernetes.io/name: pantry-postgres-authority-standby-reseed-v2'
 grep -Fq 'name: postgres-authority-standby-reseed-v2' "$RESEED_MANIFEST"
 
 echo 'pantrybot-reseed-endpoint-contract-test=passed'

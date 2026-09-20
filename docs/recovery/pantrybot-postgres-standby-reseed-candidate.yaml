@@ -16,7 +16,7 @@ metadata:
     pantrybot.postgres/role: standby
 spec:
   selector:
-    app.kubernetes.io/name: pantry-postgres-authority-standby-reseed
+    app.kubernetes.io/name: pantry-postgres-authority-standby-reseed-v2
   ports:
     - name: postgres
       port: 5432
@@ -39,7 +39,7 @@ spec:
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: pantry-postgres-authority-standby-reseed
+        app.kubernetes.io/name: pantry-postgres-authority-standby-reseed-v2
         pantrybot.postgres/role: standby
     spec:
       hostNetwork: true

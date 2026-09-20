@@ -421,7 +421,7 @@ def run() -> None:
 
     def switch_endpoint() -> None:
         if not args.manual_endpoint:
-            selector = json.dumps({"app.kubernetes.io/name": "pantry-postgres-authority-standby-reseed", "pantrybot.postgres/role": "primary"}, separators=(",", ":"))
+            selector = json.dumps({"app.kubernetes.io/name": "pantry-postgres-authority-standby-reseed-v2", "pantrybot.postgres/role": "primary"}, separators=(",", ":"))
             activation_kubectl("-n", service_namespace, "patch", "service", args.service, "--type=merge", "-p", json.dumps({"spec": {"selector": json.loads(selector)}}))
         encoded = _kubectl("-n", service_namespace, "get", "secret", "pantry-bot-platform", "-o", "jsonpath={.data.PANTRY_DATABASE_URL}")
         current = base64.b64decode(encoded).decode()
