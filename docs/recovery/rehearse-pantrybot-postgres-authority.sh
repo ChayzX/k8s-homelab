@@ -18,7 +18,7 @@ START_NS="$(date -u +%Y%m%dT%H%M%SZ)"
 EVIDENCE_FILE="${EVIDENCE_FILE:-pantrybot-postgres-authority-${START_NS}.json}"
 
 case "$HOME_CONTEXT:$ORACLE_CONTEXT" in
-  *prod*|*production*)
+  *prod*)
     echo "refusing production-looking kubeconfig context" >&2
     exit 2
     ;;
