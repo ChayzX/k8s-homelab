@@ -104,7 +104,7 @@ jobs:
           OUTPUT="$(docker buildx imagetools inspect ${{ env.IMAGE }}:${{ steps.meta.outputs.tag }})"
           echo "$OUTPUT"
           for plat in linux/amd64 linux/arm64; do
-            if ! echo "$OUTPUT" | grep -qE "Platform:\s*$plat"; then
+            if ! echo "$OUTPUT" | grep -qE "Platform:[[:space:]]+$plat"; then
               echo "::error::Published image is missing platform $plat -- any pod scheduled onto a $plat node would hit ImagePullBackOff." >&2
               exit 1
             fi
