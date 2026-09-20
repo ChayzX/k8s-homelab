@@ -64,6 +64,8 @@ jobs:
           git -C "$RUNNER_TEMP/musicbot" apply "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-active-active-test.patch"
           git -C "$RUNNER_TEMP/musicbot" apply --check "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-potoken.patch"
           git -C "$RUNNER_TEMP/musicbot" apply "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-potoken.patch"
+          git -C "$RUNNER_TEMP/musicbot" apply --check "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-oauth-redaction.patch"
+          git -C "$RUNNER_TEMP/musicbot" apply "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-oauth-redaction.patch"
           yts="$(curl -fsSL https://api.github.com/repos/lavalink-devs/youtube-source/releases/latest | jq -r .tag_name | sed 's/^v//')"
           sed -i "s|<youtube-source.version>[^<]*</youtube-source.version>|<youtube-source.version>${yts}</youtube-source.version>|" "$RUNNER_TEMP/musicbot/pom.xml"
           mvn -q -f "$RUNNER_TEMP/musicbot/pom.xml" -DskipTests=false test
