@@ -18,10 +18,11 @@ live changes and remaining gates.
   home-return pod for Oracle reseeding. The original
   postgres-authority-standby StatefulSet remains scaled to zero and its
   retained PVC is deliberately untouched. A fresh, separately named
-  postgres-authority-standby-reseed-0 candidate now runs on Oracle with a
+  postgres-authority-standby-reseed-0 candidate was created on Oracle with a
   new PVC, standby.signal, the unique pantry_oracle_standby slot, and a
-  streaming WAL receiver. Its separate service is not an application writer
-  endpoint; the home service remains authoritative.
+  streaming WAL receiver. It is currently scaled to zero after failback; its
+  separate service is not an application writer endpoint and the home service
+  remains authoritative.
 - **Active reseed endpoint (live override):** Oracle's reseed candidate reaches
   the current home writer through `100.84.89.87:30432`, the
   `pantry-bot/postgres-authority-replication` NodePort. While home is the
