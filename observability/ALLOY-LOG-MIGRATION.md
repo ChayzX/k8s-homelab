@@ -11,9 +11,9 @@ log and metrics forwarding remains disabled. The Windows Alloy Cloudflare
 metrics tunnel is scaled to zero until a self-hosted metrics endpoint is
 selected.
 
-Production recheck on 2026-09-20 found zero Promtail systemd units and zero
-Promtail pods on Home and Oracle; Alloy was Ready 2/2 on Home and 1/1 on
-Oracle, and Loki returned `/ready` successfully.
+Production recheck on 2026-09-20 found no legacy collector units or pods on
+Home and Oracle; Alloy was Ready 2/2 on Home and 1/1 on Oracle, and Loki
+returned `/ready` successfully.
 
 Both site pipelines drop lines containing access/refresh tokens or bearer
 authorization material before forwarding. This is defense in depth; application
