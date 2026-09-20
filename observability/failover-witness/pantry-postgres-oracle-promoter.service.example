@@ -18,7 +18,7 @@ ExecStart=/usr/bin/python3 /usr/local/lib/failover-witness/oracle_promoter.py \
   --pod postgres-authority-standby-reseed-0 \
   --service postgres-authority-standby-reseed \
   --postgres-port 5432 \
-  --data-directory /var/lib/postgresql/data/pgdata \
+  --data-directory /var/lib/postgresql/data \
   --manual-endpoint
 ExecStartPre=/usr/bin/test -r /usr/local/lib/failover-witness/command_policy.py
 EnvironmentFile=/etc/failover-witness/postgres-fence.env

@@ -21,7 +21,7 @@ def test_service_example_targets_live_oracle_standby_topology() -> None:
     assert "--pod postgres-authority-standby-reseed-0" in service
     assert "--service postgres-authority-standby-reseed" in service
     assert "--postgres-port 5432" in service
-    assert "--data-directory /var/lib/postgresql/data/pgdata" in service
+    assert "--data-directory /var/lib/postgresql/data" in service
     assert "--manual-endpoint" in service
 
 

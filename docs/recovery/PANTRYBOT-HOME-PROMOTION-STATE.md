@@ -98,6 +98,10 @@ showed matching receive/replay LSNs and approximately 0.20–0.23s replay lag.
   rejection, and route/RTO/RPO evidence remain explicit gates.
   Automatic service enablement remains disabled pending repeated
   failure-domain testing and external-side-effect/RTO-RPO evidence.
+- Live candidate inspection on 2026-09-20 confirmed `PGDATA=/var/lib/postgresql/data`;
+  the disabled promoter example, regression test, and installed drop-in were
+  corrected from the obsolete `/var/lib/postgresql/data/pgdata` path. The
+  service was daemon-reloaded and remains inactive.
 - The deployed site-neutral promoter had a readiness bug in an earlier copy
   (`_kubectl` was referenced instead of its configured closure); the live copy
   was backed up, corrected, and py_compile-validated. The tracked source and
