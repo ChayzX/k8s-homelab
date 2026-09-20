@@ -48,10 +48,12 @@ jobs:
           java-version: '25'
       - name: Resolve upstream and apply required patches
         id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           ref='${{ inputs.upstream_ref }}'
-          if [ -z "$ref" ]; then ref="$(curl -fsSL https://api.github.com/repos/arif-banai/MusicBot/releases/latest | jq -r .tag_name)"; fi
+          if [ -z "$ref" ]; then ref="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/arif-banai/MusicBot/releases/latest | jq -r .tag_name)"; fi
           test -n "$ref"; test "$ref" != null
           git clone --depth 1 --branch "$ref" https://github.com/arif-banai/MusicBot.git "$RUNNER_TEMP/musicbot"
           git -C "$RUNNER_TEMP/musicbot" apply --check "$GITHUB_WORKSPACE/scripts/patches/voice-channel-text-chat.patch"
@@ -66,7 +68,7 @@ jobs:
           git -C "$RUNNER_TEMP/musicbot" apply "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-potoken.patch"
           git -C "$RUNNER_TEMP/musicbot" apply --check "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-oauth-redaction.patch"
           git -C "$RUNNER_TEMP/musicbot" apply "$GITHUB_WORKSPACE/scripts/patches/jmusicbot-oauth-redaction.patch"
-          yts="$(curl -fsSL https://api.github.com/repos/lavalink-devs/youtube-source/releases/latest | jq -r .tag_name | sed 's/^v//')"
+          yts="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/lavalink-devs/youtube-source/releases/latest | jq -r .tag_name | sed 's/^v//')"
           sed -i "s|<youtube-source.version>[^<]*</youtube-source.version>|<youtube-source.version>${yts}</youtube-source.version>|" "$RUNNER_TEMP/musicbot/pom.xml"
           mvn -q -f "$RUNNER_TEMP/musicbot/pom.xml" -DskipTests=false test
           echo "tag=upstream-${ref#v}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
