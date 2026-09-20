@@ -35,7 +35,7 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: pantry-postgres-authority-standby-reseed
+        app.kubernetes.io/name: pantry-postgres-authority-standby-reseed-v2
   template:
     metadata:
       labels:
