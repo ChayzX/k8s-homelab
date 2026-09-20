@@ -286,6 +286,25 @@ def _postgres_query_command(port: int, user: str, database: str, query: str) -> 
     return ("sh", "-ec", f"psql -h 127.0.0.1 -p {port} -U {shlex.quote(user)} -d {shlex.quote(database)} -Atc {shlex.quote(query)}")
 
 
+def _primary_statefulset_patch() -> str:
+    """Switch the promoted candidate from standby bootstrap to primary readiness.
+
+    The reseed StatefulSet uses an init container and standby-only readiness
+    while it is a replica. Once PostgreSQL is promoted, retaining either would
+    make the pod fail readiness (or re-run basebackup on a restart), leaving the
+    controller with a writable database but no endpoint. The patch is applied
+    only after pg_is_in_recovery() becomes false and is idempotent at the caller.
+    """
+    return json.dumps([
+        {"op": "remove", "path": "/spec/template/spec/initContainers"},
+        {
+            "op": "replace",
+            "path": "/spec/template/spec/containers/0/readinessProbe/exec/command/2",
+            "value": 'test "$(psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "select pg_is_in_recovery()")" = f',
+        },
+    ], separators=(",", ":"))
+
+
 def run() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--witness-url", default=os.environ.get("WITNESS_URL"))
@@ -296,6 +315,7 @@ def run() -> None:
     parser.add_argument("--service-namespace", default=None, help="namespace containing the application Service and platform Secret")
     parser.add_argument("--pod", default="postgres-authority-standby-reseed-0")
     parser.add_argument("--service", default="postgres-authority-standby-reseed")
+    parser.add_argument("--statefulset", default="postgres-authority-standby-reseed")
     parser.add_argument("--data-directory", default="/var/lib/postgresql/data")
     parser.add_argument("--postgres-port", type=int, default=int(os.environ.get("PANTRY_ORACLE_POSTGRES_PORT", "5432")))
     parser.add_argument("--postgres-user", default=os.environ.get("PANTRY_ORACLE_POSTGRES_USER", "pantry"))
@@ -368,6 +388,22 @@ def run() -> None:
                 raise RuntimeError("Oracle PostgreSQL did not leave recovery mode")
         elif recovery != "f":
             raise RuntimeError(f"unexpected Oracle recovery state: {recovery!r}")
+        # The candidate manifest is intentionally standby-shaped. Once the
+        # database is writable, remove the basebackup init and switch readiness
+        # to primary mode before routing or enabling application roles.
+        init_containers = _kubectl(
+            "-n", pod_namespace, "get", "statefulset", args.statefulset,
+            "-o", "jsonpath={.spec.template.spec.initContainers}",
+        )
+        if init_containers:
+            activation_kubectl(
+                "-n", pod_namespace, "patch", "statefulset", args.statefulset,
+                "--type=json", "-p", _primary_statefulset_patch(),
+            )
+            activation_kubectl(
+                "-n", pod_namespace, "rollout", "status",
+                f"statefulset/{args.statefulset}", "--timeout=180s",
+            )
         activation_kubectl("-n", pod_namespace, "label", "pod", args.pod, "pantrybot.postgres/role=primary", "--overwrite")
 
     def is_primary() -> bool:

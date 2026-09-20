@@ -11,6 +11,7 @@ from oracle_promoter import (
     PromotionAdapters,
     _postgres_promote_command,
     _postgres_query_command,
+    _primary_statefulset_patch,
 )
 
 
@@ -58,6 +59,15 @@ def test_postgres_query_pins_live_oracle_database_topology() -> None:
     assert _postgres_query_command(5432, "pantry", "pantry", "select pg_is_in_recovery();") == (
         "sh", "-ec", "psql -h 127.0.0.1 -p 5432 -U pantry -d pantry -Atc 'select pg_is_in_recovery();'"
     )
+
+
+def test_primary_statefulset_patch_removes_bootstrap_and_requires_writable_probe() -> None:
+    import json
+
+    operations = json.loads(_primary_statefulset_patch())
+    assert operations[0] == {"op": "remove", "path": "/spec/template/spec/initContainers"}
+    assert operations[1]["path"] == "/spec/template/spec/containers/0/readinessProbe/exec/command/2"
+    assert "= f" in operations[1]["value"]
 
 
 def test_held_authority_does_not_promote_or_enable_roles() -> None:
