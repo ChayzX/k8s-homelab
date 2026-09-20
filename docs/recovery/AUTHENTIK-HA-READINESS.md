@@ -4,6 +4,11 @@ This bounded record covers homelab issues #198 and #202. It records sanitized
 evidence only and does not authorize a second Authentik/PostgreSQL writer or
 make Authentik a prerequisite for recovery.
 
+The ordered, operator-facing promotion and return-home procedure is
+[`AUTHENTIK-POSTGRES-PROMOTION-FAILBACK-RUNBOOK.md`](AUTHENTIK-POSTGRES-PROMOTION-FAILBACK-RUNBOOK.md).
+That runbook is a controlled procedure, not evidence that the live promotion
+gate has passed.
+
 ## Current boundary
 
 - Authentik server, worker, and LDAP outpost run with application capacity on
