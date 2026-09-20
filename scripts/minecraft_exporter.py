@@ -219,6 +219,8 @@ def cooldown_ok(key):
 
 
 def kubectl(*args, timeout=15):
+    # oculum-ignore-next-line [dangerous_function]: fixed kubectl executable with
+    # validated argv and bounded timeout; shell execution is disabled.
     proc = subprocess.run([KUBECTL, *args], capture_output=True, text=True, timeout=timeout)
     if proc.returncode != 0:
         raise RuntimeError(f"kubectl {' '.join(args)}: {proc.stderr.strip()}")

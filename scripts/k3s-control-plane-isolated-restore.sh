@@ -146,5 +146,7 @@ grep -q '^namespace/observability$' <<<"$kubectl_output" || {
   exit 1
 }
 
+# oculum-ignore-next-line [localhost_reference]: the printed endpoint is the
+# deliberately loopback-bound API used only inside the isolated restore host.
 printf 'isolated_restore=passed\nartifact=%s\nimage=%s\napi=https://127.0.0.1:%s\n' \
   "$artifact" "$image" "$port"

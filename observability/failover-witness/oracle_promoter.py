@@ -264,6 +264,8 @@ def _post(base_url: str, secret: str, path: str, body: dict[str, Any]) -> dict[s
 
 
 def _kubectl(*args: str, input_text: str | None = None) -> str:
+    # oculum-ignore-next-line [dangerous_function]: fixed kubectl executable with
+    # caller-supplied argv only; no shell interpolation and a hard timeout.
     result = subprocess.run(["kubectl", "--request-timeout=15s", *args], check=True, capture_output=True, text=True, input=input_text, timeout=195)
     return result.stdout.strip()
 

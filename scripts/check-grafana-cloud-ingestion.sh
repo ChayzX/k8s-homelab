@@ -22,7 +22,9 @@ query() {
   local expression=$1
   local encoded
   encoded=$(jq -rn --arg value "$expression" '$value|@uri')
-  "$kubectl_bin" -n "$namespace" exec "$pod" -- \
+    # oculum-ignore-next-line [localhost_reference]: query is intentionally
+    # in-pod against the local Prometheus HTTP endpoint.
+    "$kubectl_bin" -n "$namespace" exec "$pod" -- \
     wget -qO- "http://127.0.0.1:9090/api/v1/query?query=$encoded"
 }
 
