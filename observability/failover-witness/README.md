@@ -17,8 +17,18 @@ until that proof exists.
 Before any controlled Oracle promotion, run the read-only guard on Oracle:
 
 ```sh
-sudo /usr/local/lib/failover-witness/oracle-promotion-preflight.sh
+sudo sh -c '
+  set -a
+  . /etc/failover-witness/postgres-fence.env
+  set +a
+  /usr/local/lib/failover-witness/oracle-promotion-preflight.sh
+'
 ```
+
+Source the root-owned environment file on the Oracle host: the live standby
+uses the `pantry` database role and pod-specific values, while the script's
+defaults are intended only for isolated test fixtures. Do not print or commit
+the environment file; it may contain fencing credentials.
 
 It must report the candidate as a read-only standby with non-empty receive and
 replay LSNs, the live PostgreSQL data directory, and an inactive promoter. It
