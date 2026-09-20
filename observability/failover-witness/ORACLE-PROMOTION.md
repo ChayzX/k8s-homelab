@@ -48,6 +48,11 @@ namespace.
 Verification:
 
 ```sh
+sudo /usr/local/lib/failover-witness/oracle-promotion-preflight.sh
 python3 observability/failover-witness/test_oracle_promoter.py
 python3 -m py_compile observability/failover-witness/oracle_promoter.py
 ```
+
+The preflight is read-only and must report `recovery=true`, `read_only=on`,
+non-empty receive/replay LSNs, the live container data directory, and an
+inactive promoter before an operator begins a controlled promotion.
