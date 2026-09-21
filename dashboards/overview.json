@@ -6,12 +6,13 @@
   "timezone": "browser",
   "editable": true,
   "schemaVersion": 39,
-  "version": 1,
+  "version": 3,
   "refresh": "15s",
   "graphTooltip": 1,
   "time": { "from": "now-6h", "to": "now" },
   "links": [
     { "type": "link", "title": "Main PC — Bare-Metal Health", "dashboard": "homelab-host-pc", "targetBlank": true },
+    { "type": "link", "title": "Greenie's Main PC — Health", "dashboard": "greenies-main-pc-health", "targetBlank": true },
     { "type": "link", "title": "Host Health / k3s Control Plane", "dashboard": "homelab-cluster-overview", "targetBlank": true },
     { "type": "link", "title": "Pods & Workloads", "dashboard": "homelab-pods-workloads", "targetBlank": true },
     { "type": "link", "title": "Logs", "dashboard": "homelab-logs", "targetBlank": true },
@@ -19,7 +20,8 @@
     { "type": "link", "title": "jmusicbot", "dashboard": "homelab-jmusicbot", "targetBlank": true },
     { "type": "link", "title": "Pantry Bot", "dashboard": "homelab-pantry-bot", "targetBlank": true },
     { "type": "link", "title": "Pantry Bot Usage", "dashboard": "homelab-pantry-bot-usage", "targetBlank": true },
-    { "type": "link", "title": "Cloudflare Tunnel", "dashboard": "homelab-cloudflared", "targetBlank": true }
+    { "type": "link", "title": "Cloudflare Tunnel", "dashboard": "homelab-cloudflared", "targetBlank": true },
+    { "type": "link", "title": "Site & Service Health", "dashboard": "homelab-site-service-health", "targetBlank": true }
   ],
   "templating": {
     "list": [
@@ -690,17 +692,17 @@
     {
       "id": 12,
       "type": "timeseries",
-      "title": "Error Rate by Namespace",
-      "description": "Error-line volume per namespace (Alloy extracts the level label). A red block here that lines up with a crash-loop bar above is the 'what actually broke' pairing for that outage.",
+      "title": "Error Rate by Pod",
+      "description": "Error-line volume per pod (Alloy extracts the level label). A red block here that lines up with a crash-loop bar above is the 'what actually broke' pairing for that outage. FIXED 2026-09-21: there is no `namespace` Loki label any more -- Alloy's current pipeline only produces __stream_shard__/instance/job/level/service_name (verified live). Grouping by (namespace) silently collapsed every namespace into one bucket instead of erroring, which made this look fine at a glance while quietly not doing its job. Now grouped by `instance` (namespace/pod:container).",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 43 },
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum by (namespace) (count_over_time({level=\"error\"} [$__auto]))",
+          "expr": "sum by (instance) (count_over_time({level=\"error\"} [$__auto]))",
           "queryType": "range",
-          "legendFormat": "{{namespace}}"
+          "legendFormat": "{{instance}}"
         }
       ],
       "options": {
@@ -730,17 +732,17 @@
       "id": 13,
       "type": "bargauge",
       "title": "Top Error Sources (this range)",
-      "description": "topk(10) by error-line count in the selected time range. Same query shape as Logs → Top Error Producers.",
+      "description": "topk(10) by error-line count in the selected time range. Same query shape as Logs → Top Error Producers. FIXED 2026-09-21: grouped by `instance` (namespace/pod:container) instead of (namespace, app_kubernetes_io_name) -- neither is a current Loki label, see the Error Rate by Pod panel note.",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 43 },
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "topk(10, sum by (namespace, app_kubernetes_io_name) (count_over_time({level=\"error\"} [$__range])))",
+          "expr": "topk(10, sum by (instance) (count_over_time({level=\"error\"} [$__range])))",
           "queryType": "instant",
           "instant": true,
-          "legendFormat": "{{namespace}}/{{app_kubernetes_io_name}}"
+          "legendFormat": "{{instance}}"
         }
       ],
       "options": {
