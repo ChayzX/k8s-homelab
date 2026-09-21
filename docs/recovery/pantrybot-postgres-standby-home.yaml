@@ -1,0 +1,112 @@
+# Fresh Oracle standby of the new Home primary (minecraftmachine).
+# Reuses the existing pantry-bot-postgres-standby Secret unchanged for
+# credentials; overrides only the non-sensitive primary address/port/slot
+# via explicit env (which takes precedence over envFrom for the same key).
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-authority-standby-home
+  namespace: pantry-bot
+  labels:
+    homelab/production: "true"
+    pantrybot.postgres/role: standby
+spec:
+  selector:
+    app.kubernetes.io/name: pantry-postgres-authority-standby-home
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-authority-standby-home
+  namespace: pantry-bot
+  labels:
+    homelab/production: "true"
+    pantrybot.postgres/role: standby
+spec:
+  serviceName: postgres-authority-standby-home
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pantry-postgres-authority-standby-home
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pantry-postgres-authority-standby-home
+        pantrybot.postgres/role: standby
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: basebackup
+          image: postgres:16-alpine
+          envFrom:
+            - secretRef:
+                name: pantry-bot-postgres-standby
+          env:
+            - name: PRIMARY_HOST
+              value: "100.84.89.87"
+            - name: PRIMARY_PORT
+              value: "30432"
+            - name: PRIMARY_SLOT_NAME
+              value: pantry_oracle_standby_home_v3
+          command: ["sh", "-ec"]
+          args:
+            - |
+              if test -z "$(find /var/lib/postgresql/data -mindepth 1 -maxdepth 1 -print -quit)"; then
+                until pg_isready -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER"; do sleep 3; done
+                printf '%s:*:*:%s:%s\n' "$PRIMARY_HOST" "$REPLICATION_USER" "$REPLICATION_PASSWORD" > /tmp/pgpass
+                chmod 600 /tmp/pgpass
+                PGPASSFILE=/tmp/pgpass pg_basebackup \
+                  -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER" \
+                  -D /var/lib/postgresql/data -Fp -Xs -P -R -C -S "$PRIMARY_SLOT_NAME"
+                printf '%s:*:*:%s:%s\n' "$PRIMARY_HOST" "$REPLICATION_USER" "$REPLICATION_PASSWORD" > /var/lib/postgresql/data/.pgpass
+                chmod 600 /var/lib/postgresql/data/.pgpass
+                sed -i '/^primary_conninfo[[:space:]]*=/d; /^primary_slot_name[[:space:]]*=/d' /var/lib/postgresql/data/postgresql.auto.conf
+                sed -i 's#/tmp/pgpass#/var/lib/postgresql/data/.pgpass#g' /var/lib/postgresql/data/postgresql.auto.conf
+                printf "%s\n" "primary_conninfo = 'user=$REPLICATION_USER passfile=/var/lib/postgresql/data/.pgpass host=$PRIMARY_HOST port=$PRIMARY_PORT application_name=pantry-oracle-standby-home'" >> /var/lib/postgresql/data/postgresql.auto.conf
+                printf "%s\n" "primary_slot_name = '$PRIMARY_SLOT_NAME'" >> /var/lib/postgresql/data/postgresql.auto.conf
+              fi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          args:
+            - -c
+            - hot_standby=on
+            - -c
+            - wal_receiver_timeout=10s
+          envFrom:
+            - secretRef:
+                name: pantry-bot-postgres-standby
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -ec
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 8Gi
