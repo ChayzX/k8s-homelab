@@ -6,9 +6,9 @@ set -Eeuo pipefail
 # the manual authority Endpoints object has an address, and every mutating
 # PantryBot deployment has reached its desired replica count.
 POD_NAMESPACE="${PANTRY_ORACLE_POD_NAMESPACE:-pantry-bot}"
-POD="${PANTRY_ORACLE_POD:-postgres-authority-standby-reseed-v2-0}"
+POD="${PANTRY_ORACLE_POD:-postgres-authority-standby-home-0}"
 SERVICE_NAMESPACE="${PANTRY_ORACLE_SERVICE_NAMESPACE:-pantry-bot}"
-SERVICE="${PANTRY_ORACLE_SERVICE:-postgres-authority-standby-reseed-v2}"
+SERVICE="${PANTRY_ORACLE_SERVICE:-postgres-authority-standby-home}"
 POSTGRES_PORT="${PANTRY_ORACLE_POSTGRES_PORT:-5432}"
 KUBECTL="${PANTRY_KUBECTL:-kubectl}"
 

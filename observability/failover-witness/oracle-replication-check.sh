@@ -5,7 +5,7 @@ set -Eeuo pipefail
 # Override names only in the root-owned environment file; never infer a
 # primary from a recent replay timestamp.
 NAMESPACE="${PANTRY_NAMESPACE:-pantry-bot}"
-POD="${PANTRY_STANDBY_POD:-postgres-authority-standby-reseed-v2-0}"
+POD="${PANTRY_STANDBY_POD:-postgres-authority-standby-home-0}"
 CONTAINER="${PANTRY_POSTGRES_CONTAINER:-postgres}"
 DB="${PANTRY_POSTGRES_DB:-pantry}"
 USER_NAME="${PANTRY_POSTGRES_USER:-pantry}"
