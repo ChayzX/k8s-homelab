@@ -64,8 +64,16 @@ jobs:
         run: |
           set -euo pipefail
           scripts/assert-kube-target.sh home
-          kubectl apply -f dashboards/dashboards-configmap.yaml -n observability
-          kubectl apply -f dashboards/services-configmap.yaml -n observability
+          # Server-side apply is REQUIRED, not a preference. Client-side
+          # apply stores the whole manifest in the
+          # kubectl.kubernetes.io/last-applied-configuration annotation,
+          # and annotations are capped at 262144 bytes -- both dashboard
+          # ConfigMaps are larger than that, so a plain `kubectl apply`
+          # fails with "metadata.annotations: Too long".
+          kubectl apply --server-side --force-conflicts \
+            -f dashboards/dashboards-configmap.yaml -n observability
+          kubectl apply --server-side --force-conflicts \
+            -f dashboards/services-configmap.yaml -n observability
           echo '### Dashboard ConfigMaps: ✅ applied' >> "$GITHUB_STEP_SUMMARY"
           echo '- Source: `dashboards/dashboards-configmap.yaml`' >> "$GITHUB_STEP_SUMMARY"
           echo '- Source: `dashboards/services-configmap.yaml`' >> "$GITHUB_STEP_SUMMARY"

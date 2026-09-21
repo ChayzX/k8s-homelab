@@ -3,7 +3,7 @@
 # ============================================================
 # MANUAL STEP REQUIRED AFTER COPYING DATA INTO THE PVC
 # ============================================================
-# grafana/grafana:11.4.0 runs as UID/GID 472:472. The existing data
+# grafana/grafana runs as UID/GID 472:472. The existing data
 # directory (/home/chase/docker/observability/grafana-data, which holds
 # grafana.db plus the installed plugins) is owned 1000:1000.
 #
@@ -90,7 +90,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: grafana
-          image: grafana/grafana:11.4.0
+          image: grafana/grafana:13.2.2
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -127,6 +127,24 @@ spec:
                 secretKeyRef:
                   name: grafana-discord-webhooks
                   key: pantry-twitch-webhook-url
+            # Password for the PantryPostgres datasource
+            # (grafana-provisioning.yaml interpolates
+            # $PANTRY_GRAFANA_DB_PASSWORD into its secureJsonData). The
+            # Secret is created imperatively from the existing
+            # pantry-bot-postgres-home-return Secret; no value in this repo.
+            - name: PANTRY_GRAFANA_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-postgres-pantry
+                  key: password
+            # Session cookie names. Bumping the suffix is how a session
+            # reset is forced; these were bumped live and this file had
+            # drifted behind, so re-applying it would have silently logged
+            # everyone out.
+            - name: GF_SECURITY_COOKIE_NAME
+              value: grafana_session_v3
+            - name: GF_AUTH_LOGIN_COOKIE_NAME
+              value: grafana_session_v4
             - name: GF_PATHS_PROVISIONING
               value: /etc/grafana/provisioning
             - name: GF_ANALYTICS_REPORTING_ENABLED

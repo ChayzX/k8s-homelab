@@ -55,6 +55,30 @@ data:
         url: http://loki:3100
         jsonData:
           maxLines: 5000
+
+      # Pantry Bot usage tables, read from the home standby replica
+      # (postgres-authority-home-return streams from the Oracle writer).
+      # Read-only dashboard queries; standby lag is seconds. The password
+      # is NOT in this repo -- it is injected from the
+      # PANTRY_GRAFANA_DB_PASSWORD env var, which grafana.yaml sources from
+      # the grafana-postgres-pantry Secret. Never commit it.
+      #
+      # This datasource existed only in the live cluster until 2026-09-21;
+      # applying this file before then would have DELETED it and taken the
+      # Pantry Bot -- Usage (Postgres) dashboard dark.
+      - name: PantryPostgres
+        uid: PantryPostgres
+        type: postgres
+        access: proxy
+        url: postgres-authority-home-return.pantry-bot.svc.cluster.local:5432
+        database: pantry
+        user: pantry
+        jsonData:
+          sslmode: disable
+          postgresVersion: 1600
+          timescaledb: false
+        secureJsonData:
+          password: $PANTRY_GRAFANA_DB_PASSWORD
 ---
 apiVersion: v1
 kind: ConfigMap
