@@ -12,6 +12,19 @@ caller must still prove that the old PostgreSQL writer is stopped or rejects
 writes before promoting a new writer. Automatic failover remains disabled
 until that proof exists.
 
+## Canada last-resort promotion
+
+Canada is a manually-driven, single-shot last-resort recovery path — never
+automated, never preferred over Home or Oracle. See
+`docs/recovery/runbooks/pantrybot-canada-last-resort.md` for the full
+procedure. Summary: `canada-last-resort-home-gate.sh` and
+`canada-last-resort-oracle-gate.sh` independently prove both preferred sites
+are dark before `canada-last-resort-promote.sh` will touch anything, and a
+`CANADA_LAST_RESORT_CONFIRM` token gates both the promotion and the route
+publish. The `canada/` subdirectory holds the live Canada production
+scripts (`authority-gate.ps1` and friends), captured from the host because
+they were running in production without ever being committed anywhere.
+
 ## Oracle promotion preflight
 
 Before any controlled Oracle promotion, run the read-only guard on Oracle:
