@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the guarded Oracle PostgreSQL promotion sequence."""
 
+import tempfile
 from pathlib import Path
 
 from oracle_promoter import (
@@ -450,6 +451,30 @@ def test_resuming_a_validated_promotion_skips_redundant_fence_and_replication_st
     assert "replication-check" not in calls
     assert "promote" not in calls
     assert "local-fence" not in calls
+
+
+def test_journal_defaults_to_oracle_site() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "activation.json"
+        journal = ActivationJournal(path)
+        journal.record(7, "123", "active")
+        loaded = journal.load()
+        assert loaded is not None
+        assert loaded["site"] == "oracle"
+        assert journal.may_resume(7, "123") is True
+
+
+def test_journal_for_canada_rejects_an_oracle_receipt() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "activation.json"
+        oracle_journal = ActivationJournal(path, site="oracle")
+        oracle_journal.record(7, "123", "active")
+        
+        canada_journal = ActivationJournal(path, site="canada")
+        assert canada_journal.may_resume(7, "123") is False
+        
+        canada_journal.record(7, "123", "active")
+        assert canada_journal.may_resume(7, "123") is True
 
 
 def test_journal_failure_prevents_promotion() -> None:

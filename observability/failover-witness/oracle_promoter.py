@@ -60,8 +60,9 @@ class PromotionAdapters:
 class ActivationJournal:
     """A primary may resume only the same durable activation and DB identity."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, site: str = 'oracle') -> None:
         self.path = path
+        self.site = site
 
     def load(self) -> dict[str, Any] | None:
         try:
@@ -74,24 +75,24 @@ class ActivationJournal:
 
     def may_resume(self, epoch: int, system_identifier: str) -> bool:
         prior = self.load()
-        return bool(prior and prior.get("site") == "oracle"
-                    and prior.get("resource") == "pantry:postgres"
-                    and prior.get("epoch") == epoch
-                    and prior.get("system_identifier") == system_identifier
-                    and prior.get("phase") in {"promoting", "promoted", "active"})
+        return bool(prior and prior.get('site') == self.site
+                    and prior.get('resource') == 'pantry:postgres'
+                    and prior.get('epoch') == epoch
+                    and prior.get('system_identifier') == system_identifier
+                    and prior.get('phase') in {'promoting', 'promoted', 'active'})
 
     def record(self, epoch: int, system_identifier: str, phase: str) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        fd, temporary = tempfile.mkstemp(prefix=".activation.", dir=self.path.parent)
+        fd, temporary = tempfile.mkstemp(prefix='.activation.', dir=self.path.parent)
         try:
-            with os.fdopen(fd, "w") as stream:
-                json.dump({"site": "oracle", "resource": "pantry:postgres", "epoch": epoch,
-                           "system_identifier": system_identifier, "phase": phase}, stream)
+            with os.fdopen(fd, 'w') as stream:
+                json.dump({'site': self.site, 'resource': 'pantry:postgres', 'epoch': epoch,
+                           'system_identifier': system_identifier, 'phase': phase}, stream)
                 stream.flush()
                 os.fsync(stream.fileno())
             os.chmod(temporary, 0o600)
             os.replace(temporary, self.path)
-            if os.name == "posix":
+            if os.name == 'posix':
                 directory_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
                 try:
                     os.fsync(directory_fd)
@@ -357,6 +358,7 @@ def run() -> None:
     parser.add_argument("--publish-routes-command", default=os.environ.get("PUBLISH_ROUTES_COMMAND"))
     parser.add_argument("--service-check-command", default=os.environ.get("SERVICE_CHECK_COMMAND"))
     parser.add_argument("--state-path", type=Path, default=Path("/var/lib/pantry-postgres-promoter/activation.json"))
+    parser.add_argument("--site", choices=['home', 'oracle', 'canada'], default=os.environ.get('PANTRY_PROMOTION_SITE_NAME', 'oracle'))
     args = parser.parse_args()
     if not args.witness_url or not args.secret:
         raise SystemExit("WITNESS_URL and WITNESS_SHARED_SECRET are required")
@@ -370,12 +372,12 @@ def run() -> None:
     pod_namespace = args.pod_namespace or args.namespace
     service_namespace = args.service_namespace or args.namespace
 
-    journal = ActivationJournal(args.state_path)
+    journal = ActivationJournal(args.state_path, site=args.site)
     generation: dict[str, Any] = {}
 
     def run_hook(command: str, timeout: int = 30) -> None:
         hook_env = os.environ.copy()
-        hook_env.update(PANTRY_PROMOTION_SITE="oracle", PANTRY_PROMOTION_RESOURCE="pantry:postgres",
+        hook_env.update(PANTRY_PROMOTION_SITE=args.site, PANTRY_PROMOTION_RESOURCE="pantry:postgres",
                         PANTRY_PROMOTION_EPOCH=str(generation.get("epoch", "")),
                         PANTRY_DATABASE_SYSTEM_IDENTIFIER=str(generation.get("system_identifier", "")),
                         PANTRY_RESUME_PRIMARY="true" if generation.get("resume") else "false")
@@ -389,7 +391,7 @@ def run() -> None:
 
     def acquire() -> dict[str, Any] | None:
         try:
-            result = _post(args.witness_url, args.secret, "/v1/authority/acquire", {"site": "oracle", "resource": "pantry:postgres"})
+            result = _post(args.witness_url, args.secret, "/v1/authority/acquire", {"site": args.site, "resource": "pantry:postgres"})
         except HTTPError as error:
             if error.code == 409:
                 return None
@@ -401,7 +403,7 @@ def run() -> None:
             args.witness_url,
             args.secret,
             "/v1/authority/renew",
-            {"site": "oracle", "resource": "pantry:postgres", "epoch": token["epoch"], "token": token["token"]},
+            {"site": args.site, "resource": "pantry:postgres", "epoch": token["epoch"], "token": token["token"]},
         )
         return result.get("ok") is True
 
@@ -528,7 +530,7 @@ def run() -> None:
         time.sleep(max(1, args.lease_seconds // 3))
     while promoter.renew_or_fence():
         time.sleep(max(1, args.lease_seconds // 3))
-    raise SystemExit("Oracle authority lost; local writer domain fenced")
+    raise SystemExit(f"{args.site} authority lost; local writer domain fenced")
 
 
 if __name__ == "__main__":
