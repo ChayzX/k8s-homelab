@@ -23,7 +23,7 @@ fail() {
 "$KUBECTL_BIN" --kubeconfig="$KUBECONFIG_PATH" version --request-timeout=5s >/dev/null 2>&1 || fail "kubernetes_api_unavailable"
 "$KUBECTL_BIN" --kubeconfig="$KUBECONFIG_PATH" -n "$NS" get statefulset "$STS" >/dev/null 2>&1 || fail "no_home_postgres_statefulset"
 
-"$KUBECTL_BIN" --kubeconfig="$KUBECONFIG_PATH" -n "$NS" scale statefulset "$STS" --replicas=0 >/dev/null
+"$KUBECTL_BIN" --kubeconfig="$KUBECONFIG_PATH" -n "$NS" patch statefulset "$STS" --type=merge -p '{"spec":{"replicas":0}}' >/dev/null
 pod="${STS}-0"
 if "$KUBECTL_BIN" --kubeconfig="$KUBECONFIG_PATH" -n "$NS" get pod "$pod" >/dev/null 2>&1; then
   "$KUBECTL_BIN" --kubeconfig="$KUBECONFIG_PATH" -n "$NS" delete pod "$pod" --grace-period=0 --force --wait=false >/dev/null || true
