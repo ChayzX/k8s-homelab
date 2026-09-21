@@ -29,6 +29,12 @@ ORACLE_PROMOTION_DEPLOYMENTS = (
     "pantry-twitch-gateway",
     "pantry-chat-worker",
     "pantry-twitch-dispatcher",
+    # Without this, the overlay public route stays broken after an otherwise
+    # complete automatic promotion: the new site's overlay backend comes up
+    # but nothing serves its public tunnel. Caught live 2026-09-21 — the old
+    # site's now-backend-less app-cloudflared kept round-robin-competing with
+    # (nonexistent) traffic to the new site, producing intermittent/total 502s.
+    "app-cloudflared",
 )
 
 

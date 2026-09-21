@@ -55,6 +55,7 @@ def test_promotion_endpoint_restart_covers_every_database_consumer() -> None:
         "pantry-twitch-gateway",
         "pantry-chat-worker",
         "pantry-twitch-dispatcher",
+        "app-cloudflared",
     )
 
 
