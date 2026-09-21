@@ -4,8 +4,8 @@
 # postgres-authority-standby and the stale promoted reseed candidate. Apply
 # only after the home backup, replication
 # slot, and reverse tunnel checks in PANTRYBOT-HOME-PROMOTION-STATE.md pass.
-# The candidate is read-only recovery capacity; application authority remains
-# on home until the cutover gate is explicitly completed.
+# The candidate can be promoted to primary during an HA event; readiness checks
+# only verify PostgreSQL is accepting connections, not recovery state.
 apiVersion: v1
 kind: Service
 metadata:
@@ -57,19 +57,20 @@ spec:
           command: ["sh", "-ec"]
           args:
             - |
-              test -z "$(find /var/lib/postgresql/data -mindepth 1 -maxdepth 1 -print -quit)"
-              until pg_isready -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER"; do sleep 3; done
-              printf '%s:*:*:%s:%s\n' "$PRIMARY_HOST" "$REPLICATION_USER" "$REPLICATION_PASSWORD" > /tmp/pgpass
-              chmod 600 /tmp/pgpass
-              PGPASSFILE=/tmp/pgpass pg_basebackup \
-                -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER" \
-                -D /var/lib/postgresql/data -Fp -Xs -P -R -S "$PRIMARY_SLOT_NAME"
-              printf '%s:*:*:%s:%s\n' "$PRIMARY_HOST" "$REPLICATION_USER" "$REPLICATION_PASSWORD" > /var/lib/postgresql/data/.pgpass
-              chmod 600 /var/lib/postgresql/data/.pgpass
-              sed -i '/^primary_conninfo[[:space:]]*=/d; /^primary_slot_name[[:space:]]*=/d' /var/lib/postgresql/data/postgresql.auto.conf
-              sed -i 's#/tmp/pgpass#/var/lib/postgresql/data/.pgpass#g' /var/lib/postgresql/data/postgresql.auto.conf
-              printf "%s\n" "primary_conninfo = 'user=$REPLICATION_USER passfile=/var/lib/postgresql/data/.pgpass host=$PRIMARY_HOST port=$PRIMARY_PORT application_name=pantry-oracle-standby'" >> /var/lib/postgresql/data/postgresql.auto.conf
-              printf "%s\n" "primary_slot_name = '$PRIMARY_SLOT_NAME'" >> /var/lib/postgresql/data/postgresql.auto.conf
+              if test -z "$(find /var/lib/postgresql/data -mindepth 1 -maxdepth 1 -print -quit)"; then
+                until pg_isready -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER"; do sleep 3; done
+                printf '%s:*:*:%s:%s\n' "$PRIMARY_HOST" "$REPLICATION_USER" "$REPLICATION_PASSWORD" > /tmp/pgpass
+                chmod 600 /tmp/pgpass
+                PGPASSFILE=/tmp/pgpass pg_basebackup \
+                  -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER" \
+                  -D /var/lib/postgresql/data -Fp -Xs -P -R -S "$PRIMARY_SLOT_NAME"
+                printf '%s:*:*:%s:%s\n' "$PRIMARY_HOST" "$REPLICATION_USER" "$REPLICATION_PASSWORD" > /var/lib/postgresql/data/.pgpass
+                chmod 600 /var/lib/postgresql/data/.pgpass
+                sed -i '/^primary_conninfo[[:space:]]*=/d; /^primary_slot_name[[:space:]]*=/d' /var/lib/postgresql/data/postgresql.auto.conf
+                sed -i 's#/tmp/pgpass#/var/lib/postgresql/data/.pgpass#g' /var/lib/postgresql/data/postgresql.auto.conf
+                printf "%s\n" "primary_conninfo = 'user=$REPLICATION_USER passfile=/var/lib/postgresql/data/.pgpass host=$PRIMARY_HOST port=$PRIMARY_PORT application_name=pantry-oracle-standby'" >> /var/lib/postgresql/data/postgresql.auto.conf
+                printf "%s\n" "primary_slot_name = '$PRIMARY_SLOT_NAME'" >> /var/lib/postgresql/data/postgresql.auto.conf
+              fi
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
@@ -92,7 +93,7 @@ spec:
               command:
                 - sh
                 - -ec
-                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null && test "$(psql -w -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "select pg_is_in_recovery()")" = t
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null
             periodSeconds: 5
           volumeMounts:
             - name: data

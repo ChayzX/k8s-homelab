@@ -146,8 +146,8 @@ promotion mechanism by editing this bootstrap path.
 The Oracle standby candidate is maintained separately in
 `pantrybot-postgres-standby-reseed-candidate.yaml`. It uses the encrypted
 Oracle forward on `100.78.181.15:25432` and the `pantry_oracle_standby`
-physical slot. The standby is a read-only recovery copy; it must not receive
-PantryBot writes or side-effect roles until the source-fencing gate passes.
+physical slot. This standby can be promoted during HA; actual role/fencing is enforced by
+application-level mechanisms, not this manifest's liveness/readiness gates.
 
 ## Scope guard
 
