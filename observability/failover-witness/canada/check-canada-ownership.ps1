@@ -1,0 +1,1 @@
+foreach($u in @('http://127.0.0.1:13100/ownership','http://127.0.0.1:13101/ownership','http://127.0.0.1:13102/ownership')) { try { $r=Invoke-WebRequest -UseBasicParsing -Uri $u -TimeoutSec 8; Write-Output "$u=$($r.StatusCode)"; Write-Output $r.Content } catch { Write-Output "$u=ERROR" } }

@@ -35,12 +35,24 @@ docker ps
 ```
 
 Expected steady state: `START_TYPE : 2 AUTO_START`, `docker-desktop` WSL
-distro `Running`, and the two safe-stage containers (`public-site`,
-`private-site`) running — **not** all eight; the other six are gated behind
-the `production` Compose profile and only run during an actual controlled
-cutover, per `docker-compose.canada.yml`. This doc previously claimed "all
-eight containers running" as the expected steady state, which described a
-live cutover, not normal safe-stage operation.
+distro `Running`, and the two safe-stage containers
+(`pantrybot-canada-public-site`, `pantrybot-canada-private-site`) running —
+**not** all eight. The other seven (`pantrybot-canada-prod-api`, `-gateway`,
+`-worker`, `-dispatcher`, `-overlay`, `-private`, `-public`, plus the
+`pantrybot-canada-postgres` database) are production-authority containers
+started only by `start-canada-production.ps1` during an actual controlled
+cutover.
+
+**Correction (2026-09-21, found live):** there is no `docker-compose.canada.yml`
+governing these containers — a prior version of this doc invented that
+filename. `docker ps -a` confirms none of the Canada containers carry any
+`com.docker.compose.*` label; production containers are started with plain
+`docker run --name pantrybot-canada-prod-<role> ...` from
+`start-canada-production.ps1`, and `fence-canada-writer.ps1` must reference
+those exact literal names (matching `authority-gate.ps1`'s `$appContainers`),
+not a compose-project/service label filter. An earlier same-day rewrite of
+`fence-canada-writer.ps1` switched to compose-label derivation on this false
+premise; it was caught and reverted before any real fence used it.
 
 **Known remaining gap, not fixed here:** whether the `PantryBot Docker
 Desktop` scheduled task actually fires successfully on a *cold boot* with no

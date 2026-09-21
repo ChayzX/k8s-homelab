@@ -1,0 +1,4 @@
+$checks=@{
+ api='http://127.0.0.1:13100/readyz'; gateway='http://127.0.0.1:13101/readyz'; dispatcher='http://127.0.0.1:13102/readyz'; overlay='http://127.0.0.1:18082/ready'; private='http://127.0.0.1:18181/ready'; public='http://127.0.0.1:18180/ready'
+}
+foreach($n in $checks.Keys){ try { $r=Invoke-WebRequest -UseBasicParsing -Uri $checks[$n] -TimeoutSec 8; Write-Output "$n=$($r.StatusCode)" } catch { Write-Output "$n=ERROR" } }

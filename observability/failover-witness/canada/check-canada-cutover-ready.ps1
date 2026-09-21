@@ -1,0 +1,1 @@
+foreach($u in @('http://127.0.0.1:18080/ready','http://127.0.0.1:18081/ready','http://127.0.0.1:18082/readyz')) { try { $r=Invoke-WebRequest -UseBasicParsing -Uri $u -TimeoutSec 8; Write-Output "$u=$($r.StatusCode)" } catch { Write-Output "$u=ERROR" } }
