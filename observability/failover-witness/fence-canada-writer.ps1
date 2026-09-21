@@ -24,7 +24,7 @@ function Invoke-Docker {
 # <project>-<service>-<index> naming, since the production-profile services
 # have no explicit container_name). That drift meant the fence would report
 # "fence_status=passed applications=stopped" while every real production
-# container kept running under a different name — a silent false-positive
+# container kept running under a different name - a silent false-positive
 # fence, the same class of bug found and fixed in the Home/Oracle fencing
 # path tonight. Deriving names from labels means a compose file change can
 # never silently desync the fence target list again.
@@ -37,7 +37,7 @@ function Get-ProjectContainerNames {
 }
 
 $allContainers = @(& docker ps -a --filter "label=com.docker.compose.project=$ComposeProject" --format '{{.Names}}')
-if ($allContainers.Count -eq 0) { throw "No containers found for compose project '$ComposeProject' — refusing to report a fence of nothing as success." }
+if ($allContainers.Count -eq 0) { throw "No containers found for compose project '$ComposeProject' - refusing to report a fence of nothing as success." }
 
 $postgresContainers = Get-ProjectContainerNames -ServiceLabel $PostgresService
 if ($postgresContainers.Count -ne 1) {
@@ -70,7 +70,7 @@ if ($mutating.Count -gt 0) {
 }
 
 # Revoke new writes and terminate existing client sessions before stopping
-# the container — a SQL-level fence that takes effect even if the container
+# the container - a SQL-level fence that takes effect even if the container
 # stop is briefly delayed, scoped to this database only (never touches
 # Docker or Windows itself).
 $sql = @"
