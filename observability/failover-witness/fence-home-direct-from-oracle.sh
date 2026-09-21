@@ -21,7 +21,12 @@ fail() {
 [[ -r "$KUBECONFIG_PATH" ]] || fail "kubeconfig_unreadable"
 [[ "$TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] || fail "invalid_timeout"
 "$KUBECTL_BIN" --kubeconfig="$KUBECONFIG_PATH" version --request-timeout=5s >/dev/null 2>&1 || fail "kubernetes_api_unavailable"
-"$KUBECTL_BIN" --kubeconfig="$KUBECONFIG_PATH" -n "$NS" get statefulset "$STS" >/dev/null 2>&1 || fail "no_home_postgres_statefulset"
+if ! probe="$("$KUBECTL_BIN" --kubeconfig="$KUBECONFIG_PATH" -n "$NS" get statefulset "$STS" 2>&1 >/dev/null)"; then
+  # Report the real reason (e.g. Forbidden from a stale RBAC grant) instead
+  # of a generic "not found" that hides an authorization problem behind what
+  # looks like a topology/naming issue.
+  fail "home_statefulset_unavailable:${probe//$'\n'/ }"
+fi
 
 "$KUBECTL_BIN" --kubeconfig="$KUBECONFIG_PATH" -n "$NS" patch statefulset "$STS" --type=merge -p '{"spec":{"replicas":0}}' >/dev/null
 pod="${STS}-0"

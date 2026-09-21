@@ -24,6 +24,7 @@ rules:
     resourceNames:
       - postgres-authority
       - postgres-authority-home
+      - postgres-authority-home-v2
       - postgres-authority-home-failback
       - postgres-authority-home-return
     verbs: ["get", "patch", "update"]
@@ -32,6 +33,7 @@ rules:
     resourceNames:
       - postgres-authority-0
       - postgres-authority-home-0
+      - postgres-authority-home-v2-0
       - postgres-authority-home-failback-0
       - postgres-authority-home-return-0
     verbs: ["get", "delete"]
@@ -40,6 +42,7 @@ rules:
     resourceNames:
       - postgres-authority
       - postgres-authority-home
+      - postgres-authority-home-v2
       - postgres-authority-home-failback
       - postgres-authority-home-return
     verbs: ["get"]
