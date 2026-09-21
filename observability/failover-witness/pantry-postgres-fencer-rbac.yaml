@@ -23,6 +23,7 @@ rules:
     resources: ["statefulsets"]
     resourceNames:
       - postgres-authority
+      - postgres-authority-home
       - postgres-authority-home-failback
       - postgres-authority-home-return
     verbs: ["get", "patch", "update"]
@@ -30,6 +31,7 @@ rules:
     resources: ["pods"]
     resourceNames:
       - postgres-authority-0
+      - postgres-authority-home-0
       - postgres-authority-home-failback-0
       - postgres-authority-home-return-0
     verbs: ["get", "delete"]
@@ -37,6 +39,7 @@ rules:
     resources: ["services", "endpoints"]
     resourceNames:
       - postgres-authority
+      - postgres-authority-home
       - postgres-authority-home-failback
       - postgres-authority-home-return
     verbs: ["get"]

@@ -34,6 +34,8 @@ def test_fencer_role_is_limited_to_named_pantry_postgres_objects() -> None:
     assert names == {
         "postgres-authority",
         "postgres-authority-0",
+        "postgres-authority-home",
+        "postgres-authority-home-0",
         "postgres-authority-home-failback",
         "postgres-authority-home-failback-0",
         "postgres-authority-home-return",
