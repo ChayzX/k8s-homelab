@@ -19,16 +19,21 @@ def test_service_example_targets_live_oracle_standby_topology() -> None:
     service = Path(__file__).with_name("pantry-postgres-oracle-promoter.service.example").read_text()
     assert "--pod-namespace pantry-bot" in service
     assert "--service-namespace pantry-bot" in service
-    assert "--pod postgres-authority-standby-reseed-v2-0" in service
-    assert "--service postgres-authority-standby-reseed-v2" in service
+    assert "--pod postgres-authority-standby-home-v2-0" in service
+    assert "--service postgres-authority-standby-home-v2" in service
     assert "--postgres-port 5432" in service
     assert "--data-directory /var/lib/postgresql/data" in service
-    assert "--manual-endpoint" in service
+    # Endpoint switching (repointing the stable Service selector and the
+    # application's PANTRY_DATABASE_URL host) now runs automatically as part
+    # of a real promotion; --manual-endpoint was a transitional flag used
+    # while that path was still being hardened. See switch_endpoint().
+    assert "--manual-endpoint" not in service
 
 
 def test_topology_drop_in_uses_container_pgdata_root() -> None:
     topology = Path(__file__).with_name("pantry-postgres-oracle-promoter.topology.conf.example").read_text()
-    assert "--data-directory /var/lib/postgresql/data --manual-endpoint" in topology
+    assert "--data-directory /var/lib/postgresql/data" in topology
+    assert "--manual-endpoint" not in topology
     assert "/var/lib/postgresql/data/pgdata" not in topology
 
 

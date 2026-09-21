@@ -266,7 +266,15 @@ def _post(base_url: str, secret: str, path: str, body: dict[str, Any]) -> dict[s
 def _kubectl(*args: str, input_text: str | None = None) -> str:
     # oculum-ignore-next-line [dangerous_function]: fixed kubectl executable with
     # caller-supplied argv only; no shell interpolation and a hard timeout.
-    result = subprocess.run(["kubectl", "--request-timeout=15s", *args], check=True, capture_output=True, text=True, input=input_text, timeout=195)
+    try:
+        result = subprocess.run(["kubectl", "--request-timeout=15s", *args], check=True, capture_output=True, text=True, input=input_text, timeout=195)
+    except subprocess.CalledProcessError as error:
+        # Without this, the real failure reason (a missing kubeconfig, RBAC
+        # denial, etc.) is invisible in journalctl — only "returned non-zero
+        # exit status 1" ever surfaces, which cost a long live debugging
+        # session to work around by reproducing the exact command by hand.
+        stderr = (error.stderr or "").strip()
+        raise RuntimeError(f"kubectl {' '.join(args)} failed rc={error.returncode}: {stderr}") from error
     return result.stdout.strip()
 
 

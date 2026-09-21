@@ -10,7 +10,13 @@ ROOT = Path(__file__).parent
 def test_composite_requires_explicit_mode_and_calls_both_fences() -> None:
     text = (ROOT / "fence-old-writers-from-oracle.sh").read_text()
     assert 'explicit_confirmation_required' in text
-    assert 'fence-home-from-oracle.sh' in text
+    # Home's PostgreSQL now runs on minecraftmachine, the k3s control-plane
+    # node itself, which Oracle can reach directly — no more ChaseBot forced-
+    # command/GCP relay needed for this direction. The legacy transport
+    # (fence-home-from-oracle.sh, tested separately below) remains for
+    # documentation/history but is no longer wired into the live promotion
+    # path.
+    assert 'fence-home-direct-from-oracle.sh' in text
     assert 'fence-canada-from-oracle.sh' in text
     assert 'old_writer_fence=verified home=verified canada=verified' in text
 

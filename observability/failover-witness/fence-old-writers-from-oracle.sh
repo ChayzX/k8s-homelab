@@ -10,6 +10,6 @@ mode="${1:-}"
   exit 2
 }
 
-"$SCRIPT_DIR/fence-home-from-oracle.sh" "$mode"
+"$SCRIPT_DIR/fence-home-direct-from-oracle.sh" "$mode"
 "$SCRIPT_DIR/fence-canada-from-oracle.sh" "$mode"
 echo "old_writer_fence=verified home=verified canada=verified"

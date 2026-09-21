@@ -15,11 +15,10 @@ Type=simple
 ExecStart=/usr/bin/python3 /usr/local/lib/failover-witness/oracle_promoter.py \
   --pod-namespace pantry-bot \
   --service-namespace pantry-bot \
-  --pod postgres-authority-standby-reseed-v2-0 \
-  --service postgres-authority-standby-reseed-v2 \
+  --pod postgres-authority-standby-home-v2-0 \
+  --service postgres-authority-standby-home-v2 \
   --postgres-port 5432 \
-  --data-directory /var/lib/postgresql/data \
-  --manual-endpoint
+  --data-directory /var/lib/postgresql/data
 ExecStartPre=/usr/bin/test -r /usr/local/lib/failover-witness/command_policy.py
 EnvironmentFile=/etc/failover-witness/postgres-fence.env
 # The environment file must define these non-empty, executable commands:
