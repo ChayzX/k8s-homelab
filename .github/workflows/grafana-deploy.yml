@@ -1,8 +1,16 @@
-# Rollback-only workflow for the retained self-hosted Grafana instance.
+# Deploy workflow for the retained self-hosted Grafana instance.
 #
 # Grafana Cloud is the production observability UI and dashboard destination.
-# The local Grafana deployment is retained only as a temporary comparison or
-# rollback buffer, so dashboard commits must never mutate it automatically.
+# The local Grafana deployment is retained as a comparison/rollback buffer,
+# so this stays MANUAL (workflow_dispatch only) -- a dashboard commit must
+# never mutate it automatically.
+#
+# It applies the dashboard ConfigMaps, the provisioning ConfigMaps and the
+# Grafana Deployment. It deliberately applies the Deployment too: on
+# 2026-09-21 this file had drifted so far behind the live object that
+# applying it would have downgraded Grafana 12.4.2 -> 11.4.0, dropped the
+# PantryPostgres datasource password and invalidated every session. Drift
+# that large is only possible when nothing ever applies the manifest.
 
 name: Deploy Grafana
 
@@ -74,9 +82,16 @@ jobs:
             -f dashboards/dashboards-configmap.yaml -n observability
           kubectl apply --server-side --force-conflicts \
             -f dashboards/services-configmap.yaml -n observability
-          echo '### Dashboard ConfigMaps: ✅ applied' >> "$GITHUB_STEP_SUMMARY"
-          echo '- Source: `dashboards/dashboards-configmap.yaml`' >> "$GITHUB_STEP_SUMMARY"
-          echo '- Source: `dashboards/services-configmap.yaml`' >> "$GITHUB_STEP_SUMMARY"
+          # Provisioning (datasources + dashboard providers) and the
+          # Deployment itself, so this repo is the source of truth for the
+          # retained Grafana rather than drifting behind it.
+          kubectl apply -f observability/grafana-provisioning.yaml -n observability
+          kubectl apply -f observability/grafana.yaml -n observability
+          echo '### Grafana manifests: ✅ applied' >> "$GITHUB_STEP_SUMMARY"
+          echo '- `dashboards/dashboards-configmap.yaml`' >> "$GITHUB_STEP_SUMMARY"
+          echo '- `dashboards/services-configmap.yaml`' >> "$GITHUB_STEP_SUMMARY"
+          echo '- `observability/grafana-provisioning.yaml`' >> "$GITHUB_STEP_SUMMARY"
+          echo '- `observability/grafana.yaml`' >> "$GITHUB_STEP_SUMMARY"
 
   restart-grafana:
     name: 2 - Restart Grafana pod
