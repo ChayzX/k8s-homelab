@@ -39,16 +39,32 @@ Expect `1/1 Running`. If it crash-loops on a permission error, see the
 `securityContext` comment in `mcp-grafana.yaml` about the `runAsUser: 65532`
 assumption.
 
+If instead the pod stays `Running` but never goes `1/1` Ready, with readiness
+probe failures body `forbidden: host not allowed`: `--allowed-hosts`
+defaults to loopback variants of `--address`, which rejects the Host header
+on every non-loopback request — not just the kubelet probe (pod IP), but
+real MCP traffic arriving via the Cloudflare tunnel too (`Host:
+mcp-grafana.greeniespantry.uk`). The manifest sets `--allowed-hosts`
+explicitly to the hostnames this server actually sees, and moves `/healthz`
+to its own unauthenticated `--healthz-address :8080` listener (not wrapped
+by Host/Origin validation, same pattern as `--metrics-address`) so kubelet
+probes work regardless of the allowlist. If you ever regenerate this
+manifest from an older template, check both flags are still present.
+
 ## 4. Verify Grafana auth works, in-cluster, before wiring up the tunnel
 
+`/healthz` lives on its own listener (`:8080`, see the note in step 3), not on
+the Service's port 8000, so check it against the pod directly:
+
 ```bash
-kubectl -n observability port-forward svc/mcp-grafana 8000:8000
+POD=$(kubectl -n observability get pod -l app.kubernetes.io/name=mcp-grafana -o jsonpath='{.items[0].metadata.name}')
+kubectl -n observability port-forward pod/$POD 8000:8000 8080:8080
 ```
 
 In another terminal:
 
 ```bash
-curl -sS http://localhost:8000/healthz
+curl -sS http://localhost:8080/healthz
 # expect: ok
 
 curl -sS -X POST http://localhost:8000/mcp \
@@ -110,21 +126,19 @@ kubectl -n observability logs deploy/mcp-grafana-cloudflared | grep -i "register
 
 ## 8. Verify from outside the cluster
 
-```bash
-# Without credentials -- expect Cloudflare Access to block this (302 to an
-# Access login/verification page, or 403), NOT a 200.
-curl -sS -o /dev/null -w '%{http_code}\n' https://mcp-grafana.greeniespantry.uk/healthz
+`/healthz` only exists on the internal `:8080` listener (step 3), so it isn't
+reachable through the tunnel at all -- verify against `/mcp` instead:
 
-# With the Access service token headers -- expect 200 / "ok".
-curl -sS \
-  -H "CF-Access-Client-Id: <client id from step 6>" \
-  -H "CF-Access-Client-Secret: <client secret from step 6>" \
-  https://mcp-grafana.greeniespantry.uk/healthz
+```bash
+# Without credentials -- expect Cloudflare Access to block this, NOT a 200.
+curl -sS -o /dev/null -w '%{http_code}\n' https://mcp-grafana.greeniespantry.uk/mcp
+# expect: 403
 ```
 
 Then repeat the `initialize` POST from step 4 against
-`https://mcp-grafana.greeniespantry.uk/mcp`, with both the Access headers and
-the `Authorization: Bearer <mcp-grafana-server-token>` header. That's the
+`https://mcp-grafana.greeniespantry.uk/mcp`, with both the Access headers
+(`CF-Access-Client-Id` / `CF-Access-Client-Secret` from step 6) and the
+`Authorization: Bearer <mcp-grafana-server-token>` header. That's the
 full path (Cloudflare Access -> mcp-grafana's own token check -> Grafana
 service account auth) exercised end to end.
 

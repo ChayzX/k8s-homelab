@@ -102,6 +102,18 @@ spec:
             # below.
             - "--address"
             - ":8000"
+            # --allowed-hosts defaults to loopback variants of --address,
+            # which rejects the Host header on every real request -- both
+            # the kubelet probe (pod IP) and actual MCP traffic arriving via
+            # the Cloudflare tunnel (Host: mcp-grafana.greeniespantry.uk).
+            # List every Host header this server should actually see.
+            - "--allowed-hosts"
+            - "mcp-grafana.greeniespantry.uk,mcp-grafana.observability.svc.cluster.local:8000,localhost:8000,127.0.0.1:8000"
+            # Separate, unauthenticated listener for /healthz -- not wrapped
+            # by Host/Origin validation (same pattern as --metrics-address),
+            # so kubelet probes work regardless of --allowed-hosts above.
+            - "--healthz-address"
+            - ":8080"
           env:
             - name: GRAFANA_URL
               value: http://grafana.observability.svc.cluster.local:3002
@@ -119,10 +131,13 @@ spec:
             - name: http
               containerPort: 8000
               protocol: TCP
+            - name: healthz
+              containerPort: 8080
+              protocol: TCP
           readinessProbe:
             httpGet:
               path: /healthz
-              port: http
+              port: healthz
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
@@ -130,7 +145,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /healthz
-              port: http
+              port: healthz
             initialDelaySeconds: 15
             periodSeconds: 30
             timeoutSeconds: 5
