@@ -9,7 +9,7 @@ set -Eeuo pipefail
 KUBECTL_BIN="${HOME_KUBECTL:-kubectl}"
 KUBECONFIG_PATH="${HOME_FENCER_KUBECONFIG:-/etc/failover-witness/pantry-postgres-fencer-home.kubeconfig}"
 NS="${PANTRY_NAMESPACE:-pantry-bot}"
-STS="${PANTRY_HOME_STATEFULSET:-postgres-authority-home}"
+STS="${PANTRY_HOME_STATEFULSET:-postgres-authority-home-v2}"
 TIMEOUT_SECONDS="${PANTRY_POSTGRES_FENCE_TIMEOUT_SECONDS:-60}"
 
 fail() {
