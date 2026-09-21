@@ -6,7 +6,7 @@
   "timezone": "browser",
   "editable": true,
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "15s",
   "graphTooltip": 1,
   "time": { "from": "now-6h", "to": "now" },
@@ -36,15 +36,15 @@
       },
       {
         "name": "pod",
-        "label": "Pod",
-        "description": "Drills into one pod when a Deployment briefly has two during a Recreate rollout. Both containers (bot, cloudflared) share the pod's namespace label.",
+        "label": "Pod (instance = namespace/pod:container)",
+        "description": "Drills into one pod when a Deployment briefly has two during a Recreate rollout. FIXED 2026-09-21: there is no `namespace` or `pod` Loki label any more -- Alloy's current pipeline (observability/alloy-logs-home.yaml) only produces __stream_shard__/instance/job/level/service_name, verified live. Every pod's identity now lives in one composite label, `instance` = \"namespace/podname:container\" -- e.g. pantry-bot/pantry-chat-worker-xxxx:worker. This variable lists the full instance values under the pantry-bot namespace, and the LogQL below matches instance=~\"$pod\" directly.",
         "type": "query",
         "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-        "definition": "label_values({namespace=\"pantry-bot\"}, pod)",
+        "definition": "label_values({instance=~\"pantry-bot/.*\"}, instance)",
         "query": {
-          "label": "pod",
+          "label": "instance",
           "refId": "LokiVariableQueryEditor-VariableQuery",
-          "stream": "{namespace=\"pantry-bot\"}",
+          "stream": "{instance=~\"pantry-bot/.*\"}",
           "type": 1
         },
         "refresh": 2,
@@ -197,7 +197,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum(count_over_time({namespace=\"pantry-bot\", pod=~\"$pod\", level=\"error\"} [$__range]))",
+          "expr": "sum(count_over_time({instance=~\"$pod\", level=\"error\"} [$__range]))",
           "queryType": "instant",
           "instant": true,
           "legendFormat": "errors"
@@ -355,7 +355,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum by (level) (count_over_time({namespace=\"pantry-bot\", pod=~\"$pod\", level=~\"$level\"} [$__auto]))",
+          "expr": "sum by (level) (count_over_time({instance=~\"$pod\", level=~\"$level\"} [$__auto]))",
           "queryType": "range",
           "legendFormat": "{{level}}"
         }
@@ -411,17 +411,17 @@
       "id": 8,
       "type": "bargauge",
       "title": "Top Error Sources (this range)",
-      "description": "Always error-scoped (ignores the Severity variable, honors the Pod variable). topk(5) by pod/container of count_over_time(level=\"error\") — with only bot + cloudflared in the namespace, a bar here means a specific container is erroring. See the ERROR stat at the top for the total.",
+      "description": "Always error-scoped (ignores the Severity variable, honors the Pod variable). topk(5) by instance (namespace/pod:container) of count_over_time(level=\"error\") — pantry-bot has split into multiple microservices (worker, dispatcher, gateway, api, sites, postgres, cloudflared), so a bar here means a specific service/container is erroring. See the ERROR stat at the top for the total. FIXED 2026-09-21: was grouped by (pod, container), neither of which is a Loki label any more -- see the Pod variable's description.",
       "gridPos": { "h": 9, "w": 12, "x": 12, "y": 16 },
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "topk(5, sum by (pod, container) (count_over_time({namespace=\"pantry-bot\", pod=~\"$pod\", level=\"error\"} [$__range])))",
+          "expr": "topk(5, sum by (instance) (count_over_time({instance=~\"$pod\", level=\"error\"} [$__range])))",
           "queryType": "instant",
           "instant": true,
-          "legendFormat": "{{pod}}/{{container}}"
+          "legendFormat": "{{instance}}"
         }
       ],
       "options": {
@@ -450,14 +450,14 @@
       "id": 9,
       "type": "logs",
       "title": "PantryBot HA Logs",
-      "description": "All pantry-bot logs, filtered by the Pod and Severity variables: {namespace=\"pantry-bot\", pod=~\"$pod\", level=~\"$level\"}. Node.js console format for the bot container; cloudflared has its own plain-text format. Click a line to expand its labels.",
+      "description": "All pantry-bot logs, filtered by the Pod and Severity variables: {instance=~\"$pod\", level=~\"$level\"}. Node.js console format for the bot container; cloudflared has its own plain-text format. Click a line to expand its labels.",
       "gridPos": { "h": 13, "w": 24, "x": 0, "y": 25 },
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "{namespace=\"pantry-bot\", pod=~\"$pod\", level=~\"$level\"}",
+          "expr": "{instance=~\"$pod\", level=~\"$level\"}",
           "queryType": "range",
           "maxLines": 2000
         }
