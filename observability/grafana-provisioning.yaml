@@ -231,23 +231,15 @@ data:
             object_matchers:
               - [app, =~, "pantry-bot|pantry|twitch"]
             continue: true
----
-# Placeholder so `kubectl apply -k`/`kubectl apply -f .` of this
-# directory produces a working Grafana even before the dashboards agent
-# lands its JSON. The real ConfigMap is generated from
-# /home/chase/k8s-homelab/dashboards/ -- see README.md. Regenerating it
-# with `kubectl create configmap ... --dry-run=client -o yaml | kubectl
-# apply -f -` replaces this content wholesale.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-dashboards
-  namespace: observability
-  labels:
-    app: grafana
-    app.kubernetes.io/name: grafana
-    app.kubernetes.io/part-of: observability
-    homelab.local/generated-from: k8s-homelab/dashboards
-data:
-  .placeholder: |
-    Replaced by the generated dashboard ConfigMap. See README.md.
+# NOTE: there is deliberately NO `grafana-dashboards` ConfigMap in this
+# file. There used to be a `.placeholder`-only stub here, meant to let
+# `kubectl apply -f .` produce a working Grafana before any dashboard JSON
+# existed. It became a loaded gun: the real grafana-dashboards ConfigMap is
+# generated into dashboards/dashboards-configmap.yaml, so applying this
+# file would have REPLACED all 13 dashboards with an empty placeholder and
+# emptied the Grafana dashboard list. It never fired only because the stub
+# also carried an invalid label value ("homelab.local/generated-from:
+# k8s-homelab/dashboards" -- label values cannot contain "/"), so the apply
+# was rejected outright. Removed 2026-09-21. Dashboard CONTENT comes from
+# dashboards/*.json via scripts/gen-dashboards-configmap.py; this file owns
+# only the provisioning providers and datasources.
