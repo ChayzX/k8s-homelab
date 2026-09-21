@@ -1,0 +1,128 @@
+# Deploys the mcp-grafana MCP server and its dedicated tunnel connector.
+#
+# Unlike opsbot/pantry-bot/jmusicbot, this workload's image (grafana/mcp-grafana)
+# is third-party -- there is no "build and publish" stage here, only
+# apply-manifest + restart + verify, reusing the observability namespace's
+# existing ci-deploy identity (KUBE_CONFIG_GRAFANA, already scoped to this
+# namespace by grafana-deploy.yml). Same private-API access path as every
+# other deploy workflow in this repo: a dedicated Cloudflare Tunnel
+# (ci-tunnel/) gated by Cloudflare Access (service token). See
+# ci-tunnel/MANUAL-SETUP.md for the full path.
+
+name: Deploy mcp-grafana
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - observability/mcp-grafana.yaml
+      - observability/mcp-grafana-cloudflared.yaml
+      - .github/workflows/mcp-grafana-deploy.yml
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-grafana-production
+  cancel-in-progress: false
+
+jobs:
+  apply-manifests:
+    name: 1 - Apply MCP server and tunnel connector manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Connect to cluster
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_GRAFANA }}
+        run: |
+          set -euo pipefail
+          test -n "$TUNNEL_SERVICE_TOKEN_ID"
+          test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
+          test -n "$KUBE_CONFIG_B64"
+          curl -sSL -o cloudflared "https://github.com/cloudflare/cloudflared/releases/download/2026.7.3/cloudflared-linux-amd64"
+          echo "9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared" | sha256sum -c -
+          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
+          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
+          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/mcp-grafana.kubeconfig"
+          chmod 600 "$RUNNER_TEMP/mcp-grafana.kubeconfig"
+          KUBECONFIG="$RUNNER_TEMP/mcp-grafana.kubeconfig" scripts/assert-kube-target.sh home
+          KUBECONFIG="$RUNNER_TEMP/mcp-grafana.kubeconfig" kubectl apply -f observability/mcp-grafana.yaml -n observability
+          KUBECONFIG="$RUNNER_TEMP/mcp-grafana.kubeconfig" kubectl apply -f observability/mcp-grafana-cloudflared.yaml -n observability
+          echo '### Manifest apply: ✅ applied' >> "$GITHUB_STEP_SUMMARY"
+
+  restart:
+    name: 2 - Roll both Deployments
+    needs: apply-manifests
+    runs-on: ubuntu-latest
+    outputs:
+      previous_pod_server: ${{ steps.restart.outputs.previous_pod_server }}
+      previous_pod_tunnel: ${{ steps.restart.outputs.previous_pod_tunnel }}
+    steps:
+      - name: Connect and restart pods
+        id: restart
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_GRAFANA }}
+        run: |
+          set -euo pipefail
+          test -n "$TUNNEL_SERVICE_TOKEN_ID"
+          test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
+          test -n "$KUBE_CONFIG_B64"
+          curl -sSL -o cloudflared "https://github.com/cloudflare/cloudflared/releases/download/2026.7.3/cloudflared-linux-amd64"
+          echo "9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared" | sha256sum -c -
+          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
+          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
+          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/mcp-grafana.kubeconfig"
+          chmod 600 "$RUNNER_TEMP/mcp-grafana.kubeconfig"
+          KUBECONFIG="$RUNNER_TEMP/mcp-grafana.kubeconfig" scripts/assert-kube-target.sh home
+          PREV_SERVER="$(KUBECONFIG="$RUNNER_TEMP/mcp-grafana.kubeconfig" kubectl get pods -n observability -l app.kubernetes.io/name=mcp-grafana -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+          PREV_TUNNEL="$(KUBECONFIG="$RUNNER_TEMP/mcp-grafana.kubeconfig" kubectl get pods -n observability -l app.kubernetes.io/name=mcp-grafana-cloudflared -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+          echo "previous_pod_server=$PREV_SERVER" >> "$GITHUB_OUTPUT"
+          echo "previous_pod_tunnel=$PREV_TUNNEL" >> "$GITHUB_OUTPUT"
+          KUBECONFIG="$RUNNER_TEMP/mcp-grafana.kubeconfig" kubectl rollout restart deployment/mcp-grafana -n observability
+          KUBECONFIG="$RUNNER_TEMP/mcp-grafana.kubeconfig" kubectl rollout restart deployment/mcp-grafana-cloudflared -n observability
+          echo "Previous server pod: ${PREV_SERVER:-none}; previous tunnel pod: ${PREV_TUNNEL:-none}"
+
+  verify:
+    name: 3 - Verify rollout and pod health
+    needs: restart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Connect and verify
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_GRAFANA }}
+        run: |
+          set -euo pipefail
+          test -n "$TUNNEL_SERVICE_TOKEN_ID"
+          test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
+          test -n "$KUBE_CONFIG_B64"
+          curl -sSL -o cloudflared "https://github.com/cloudflare/cloudflared/releases/download/2026.7.3/cloudflared-linux-amd64"
+          echo "9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17  cloudflared" | sha256sum -c -
+          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
+          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
+          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/mcp-grafana.kubeconfig"
+          chmod 600 "$RUNNER_TEMP/mcp-grafana.kubeconfig"
+          KUBECONFIG="$RUNNER_TEMP/mcp-grafana.kubeconfig" scripts/assert-kube-target.sh home
+          KUBECONFIG="$RUNNER_TEMP/mcp-grafana.kubeconfig" kubectl rollout status deployment/mcp-grafana -n observability --timeout=180s
+          KUBECONFIG="$RUNNER_TEMP/mcp-grafana.kubeconfig" kubectl rollout status deployment/mcp-grafana-cloudflared -n observability --timeout=180s
+          READY_SERVER="$(KUBECONFIG="$RUNNER_TEMP/mcp-grafana.kubeconfig" kubectl get pods -n observability -l app.kubernetes.io/name=mcp-grafana -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}')"
+          READY_TUNNEL="$(KUBECONFIG="$RUNNER_TEMP/mcp-grafana.kubeconfig" kubectl get pods -n observability -l app.kubernetes.io/name=mcp-grafana-cloudflared -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}')"
+          test "$READY_SERVER" = "True"
+          test "$READY_TUNNEL" = "True"
+          {
+            echo '## mcp-grafana deployment pipeline'
+            echo ''
+            echo '### Manifest apply: ✅ passed'
+            echo '### Pod restart: ✅ passed'
+            echo '### Pod health: ✅ passed'
+            echo "- mcp-grafana Ready: \`$READY_SERVER\`"
+            echo "- mcp-grafana-cloudflared Ready: \`$READY_TUNNEL\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          KUBECONFIG="$RUNNER_TEMP/mcp-grafana.kubeconfig" kubectl get deployment/mcp-grafana deployment/mcp-grafana-cloudflared -n observability -o wide

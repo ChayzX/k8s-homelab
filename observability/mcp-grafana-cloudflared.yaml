@@ -1,0 +1,124 @@
+# Dedicated connector for mcp-grafana.greeniespantry.uk only -- same isolation
+# pattern as ../pantry-bot/62-deployment-commands-cloudflared.yaml (its own
+# tunnel, its own token Secret, so this route can be revoked or reconfigured
+# without touching the tunnel that serves grafana.greeniespantry.uk or any
+# other hostname).
+#
+# The tunnel's control-plane ingress must contain only:
+#
+#   mcp-grafana.greeniespantry.uk ->
+#     http://mcp-grafana.observability.svc.cluster.local:8000
+#   catch-all -> http_status:404
+#
+# IMPORTANT -- this hostname must NOT get an Authentik-backed Access policy
+# like grafana.greeniespantry.uk's. Authentik's proxy outpost redirects
+# unauthenticated requests to an interactive login page; an MCP client
+# presenting only a Bearer token would hit that redirect and fail exactly the
+# way the Grafana Cloud OAuth-based MCP connector just did. Instead, gate this
+# hostname's Cloudflare Access application with a **Service Token** policy
+# (Zero Trust -> Access -> Service Auth) -- the same mechanism already used
+# for k8s-api.greeniespantry.uk (see ../ci-tunnel/MANUAL-SETUP.md step 3).
+# That's a header-based machine credential, not a redirect-to-login flow, so
+# it composes cleanly with mcp-grafana's own MCP_GRAFANA_SERVER_TOKEN check
+# instead of breaking it. Full walkthrough: ../observability/MCP-GRAFANA-SETUP.md.
+#
+# The tunnel token is provisioned out of band as the Kubernetes Secret named
+# below. This file must never contain a token value.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mcp-grafana-cloudflared-sa
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: mcp-grafana-cloudflared
+    app.kubernetes.io/part-of: observability
+    app.kubernetes.io/component: public-tunnel
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-grafana-cloudflared
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: mcp-grafana-cloudflared
+    app.kubernetes.io/part-of: observability
+    app.kubernetes.io/component: public-tunnel
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mcp-grafana-cloudflared
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mcp-grafana-cloudflared
+        app.kubernetes.io/part-of: observability
+        app.kubernetes.io/component: public-tunnel
+    spec:
+      serviceAccountName: mcp-grafana-cloudflared-sa
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsUser: 65532
+        runAsGroup: 65532
+        runAsNonRoot: true
+      containers:
+        - name: cloudflared
+          # Same pinned digest already verified and in use elsewhere in this
+          # repo (see ci-tunnel/20-deployment.yaml's header) -- not a new pin.
+          image: cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf
+          imagePullPolicy: IfNotPresent
+          args:
+            - tunnel
+            - --no-autoupdate
+            - --metrics
+            - 0.0.0.0:2000
+            - run
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: mcp-grafana-cloudflared-tunnel-token
+                  key: TUNNEL_TOKEN
+            # Same rationale as every other connector in this repo (see
+            # ci-tunnel/20-deployment.yaml's header): avoids the QUIC
+            # idle-timeout disconnect pattern on this home network.
+            - name: TUNNEL_TRANSPORT_PROTOCOL
+              value: http2
+          ports:
+            - name: metrics
+              containerPort: 2000
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
