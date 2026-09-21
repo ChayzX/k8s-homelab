@@ -21,6 +21,12 @@ def test_service_example_targets_live_oracle_standby_topology() -> None:
     assert "--service-namespace pantry-bot" in service
     assert "--pod postgres-authority-standby-home-v2-0" in service
     assert "--service postgres-authority-standby-home-v2" in service
+    # --statefulset defaults to a retired resource name (see its
+    # argparse default) and is used both by promote()'s statefulset patch
+    # and by switch_endpoint()'s selector — a deployment that only updates
+    # --pod/--service and forgets this flag silently mislabels the primary
+    # Service's selector during a real promotion. Caught live 2026-09-21.
+    assert "--statefulset postgres-authority-standby-home-v2" in service
     assert "--postgres-port 5432" in service
     assert "--data-directory /var/lib/postgresql/data" in service
     # Endpoint switching (repointing the stable Service selector and the
@@ -32,6 +38,9 @@ def test_service_example_targets_live_oracle_standby_topology() -> None:
 
 def test_topology_drop_in_uses_container_pgdata_root() -> None:
     topology = Path(__file__).with_name("pantry-postgres-oracle-promoter.topology.conf.example").read_text()
+    assert "--pod postgres-authority-standby-home-v2-0" in topology
+    assert "--service postgres-authority-standby-home-v2" in topology
+    assert "--statefulset postgres-authority-standby-home-v2" in topology
     assert "--data-directory /var/lib/postgresql/data" in topology
     assert "--manual-endpoint" not in topology
     assert "/var/lib/postgresql/data/pgdata" not in topology
@@ -319,6 +328,10 @@ def test_routes_publish_only_after_all_service_health_checks() -> None:
 
 
 def test_unhealthy_service_never_publishes_routes() -> None:
+    """A post-promotion operational failure blocks routing but must not
+    self-fence: the database is already verifiably promoted at this point,
+    and destroying it over an app-tier health check would turn a recoverable
+    problem into a second outage."""
     calls: list[str] = []
 
     def health() -> None:
@@ -341,7 +354,8 @@ def test_unhealthy_service_never_publishes_routes() -> None:
         pass
     else:
         raise AssertionError("unhealthy dispatcher must block public routing")
-    assert calls == ["promote", "database-endpoint", "roles", "local-fence"]
+    assert calls == ["promote", "database-endpoint", "roles"]
+    assert "local-fence" not in calls
 
 
 def test_missing_production_hooks_fail_before_requesting_authority() -> None:

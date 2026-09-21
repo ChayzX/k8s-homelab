@@ -213,6 +213,13 @@ class OraclePromoter:
                 raise RuntimeError("target PostgreSQL promotion could not be verified")
             if self.adapters.record_progress:
                 step(lambda: self.adapters.record_progress(token, "promoted"))
+        except Exception:
+            # Everything up to and including a verified promotion is a
+            # genuine authority/safety concern: fence, because the target
+            # may be in an ambiguous or split-brain-risking state.
+            self._fence()
+            raise
+        try:
             step(self.adapters.switch_endpoint)
             step(self.adapters.enable_roles)
             if self.adapters.verify_service:
@@ -222,7 +229,14 @@ class OraclePromoter:
             if self.adapters.record_progress:
                 step(lambda: self.adapters.record_progress(token, "active"))
         except Exception:
-            self._fence()
+            # The database is already correctly and verifiably promoted at
+            # this point (verify_promoted passed, "promoted" was recorded).
+            # A failure here is an operational/app-tier problem — self-fencing
+            # would destroy a good primary over something like one slow or
+            # crash-looping deployment rollout. Let it propagate so the
+            # caller retries the remaining steps (the durable activation
+            # journal lets the next attempt resume past validate_generation
+            # instead of re-fencing anything) without touching the database.
             raise
         finally:
             if guard:

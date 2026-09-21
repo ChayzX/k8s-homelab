@@ -17,6 +17,7 @@ ExecStart=/usr/bin/python3 /usr/local/lib/failover-witness/oracle_promoter.py \
   --service-namespace pantry-bot \
   --pod postgres-authority-standby-home-v2-0 \
   --service postgres-authority-standby-home-v2 \
+  --statefulset postgres-authority-standby-home-v2 \
   --postgres-port 5432 \
   --data-directory /var/lib/postgresql/data
 ExecStartPre=/usr/bin/test -r /usr/local/lib/failover-witness/command_policy.py
