@@ -1,7 +1,7 @@
 {
   "uid": "homelab-pantry-bot-usage",
   "title": "Pantry Bot — Usage",
-  "description": "Live HA health and usage. Application counters are scraped from the HA API Service at /metrics; operational panels use kube-state-metrics and cAdvisor.",
+  "description": "Live HA health and usage. Application counters are scraped from the HA API Service at /metrics; operational panels use kube-state-metrics and cAdvisor. REBUILT 2026-09-21: the previous version of this dashboard queried pantry_bot_engagement_actions_total, pantry_bot_engagement_failures_total, pantry_bot_boss_damage_total, pantry_bot_boss_outcomes_total, pantry_bot_messages_total, and pantry_bot_extension_requests_total. A full enumeration of every metric name currently in this Prometheus (/api/v1/label/__name__/values), cross-checked against a 7-day count_over_time() for each of those six names, found zero samples for any of them anywhere in the retention window -- not 'currently down', genuinely absent. This lines up with the pantry-bot monolith having been split into dedicated microservices (worker/dispatcher/gateway/api/site, all ~10 days old) around the same time; the old engagement/boss-battle counters were not carried forward under those names. The three custom counters that do exist today -- pantry_bot_commands_total, pantry_bot_runtime_claims_total, pantry_bot_runtime_completions_total -- are what this dashboard now uses. If a future PantryBot release restores richer engagement/boss-battle metrics under new names, extend this dashboard rather than re-adding the old expressions.",
   "tags": [
     "homelab",
     "twitch",
@@ -11,7 +11,7 @@
   "timezone": "browser",
   "editable": true,
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "15s",
   "graphTooltip": 1,
   "time": {
@@ -36,672 +36,160 @@
   "panels": [
     {
       "type": "row",
-      "title": "At a glance — what the community is doing",
+      "title": "Current runtime activity",
       "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
       "panels": []
     },
     {
       "id": 1,
       "type": "stat",
-      "title": "Successful actions (1h)",
-      "description": "Committed engagement actions across chat, the Twitch Extension, and system events in the last hour. This is action volume, not a distinct participant count.",
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 0,
-        "y": 1
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "title": "Runtime claims (1h)",
+      "description": "pantry_bot_runtime_claims_total: work items (kind=event/outbox) claimed off a lane for processing in the last hour, summed across every lane (worker, twitch.chat, twitch.channel_points, twitch.moderation).",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(increase(pantry_bot_engagement_actions_total[1h])) or vector(0)",
-          "legendFormat": "actions"
-        }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(pantry_bot_runtime_claims_total[1h])) or vector(0)", "legendFormat": "claims" }
       ],
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "auto",
-        "textMode": "value_and_name",
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      }
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "value_and_name", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] }
     },
     {
       "id": 2,
       "type": "stat",
-      "title": "Rejected actions (1h)",
-      "description": "Cooldown, expired, muted, or otherwise rejected engagement actions in the last hour.",
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 6,
-        "y": 1
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "title": "Runtime completions (1h)",
+      "description": "pantry_bot_runtime_completions_total for the same lanes. Persistently trailing claims by a wide margin across a range longer than the lane's expected processing time is the honest signal of a stuck queue.",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(increase(pantry_bot_engagement_failures_total[1h])) or vector(0)",
-          "legendFormat": "rejected"
-        }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(pantry_bot_runtime_completions_total[1h])) or vector(0)", "legendFormat": "completions" }
       ],
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "auto",
-        "textMode": "value_and_name",
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 5
-              },
-              {
-                "color": "red",
-                "value": 20
-              }
-            ]
-          }
-        },
-        "overrides": []
-      }
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "value_and_name", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] }
     },
     {
       "id": 3,
       "type": "stat",
-      "title": "Boss damage (24h)",
-      "description": "Boss damage recorded by the legacy donation paths in the last 24 hours; community attack activity is shown in the engagement action chart.",
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 12,
-        "y": 1
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "title": "Chat commands (1h)",
+      "description": "pantry_bot_commands_total: successfully handled chat commands (gift, grab, pantry, pantrycommands, snack, steal, ...) in the last hour, from the chat-worker service.",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(increase(pantry_bot_boss_damage_total[24h])) or vector(0)",
-          "legendFormat": "damage"
-        }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(pantry_bot_commands_total[1h])) or vector(0)", "legendFormat": "commands" }
       ],
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "auto",
-        "textMode": "value_and_name",
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0
-        },
-        "overrides": []
-      }
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "value_and_name", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] }
     },
     {
       "id": 4,
-      "type": "stat",
-      "title": "Boss outcomes (7d)",
-      "description": "Resolved legacy boss outcomes in the last seven days. Community outcomes are persisted in SQLite; this counter currently reports the legacy defeated/expired paths.",
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 1
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "type": "bargauge",
+      "title": "Outstanding claims by lane (all-time claims minus completions)",
+      "description": "Both are monotonic counters, so claims-total minus completions-total approximates the current backlog per lane assuming each claim eventually completes exactly once. A counter reset (pod restart) briefly understates this; treat a single dip as noise and a sustained climb as a real backlog.",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(increase(pantry_bot_boss_outcomes_total{outcome=\"defeated\"}[7d]))",
-          "legendFormat": "defeated"
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(increase(pantry_bot_boss_outcomes_total{outcome=\"expired\"}[7d]))",
-          "legendFormat": "expired"
-        }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (lane) (pantry_bot_runtime_claims_total) - on (lane) sum by (lane) (pantry_bot_runtime_completions_total)", "legendFormat": "{{lane}}" }
       ],
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "horizontal",
-        "textMode": "value_and_name",
-        "colorMode": "none",
-        "graphMode": "none",
-        "justifyMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0
-        },
-        "overrides": []
-      }
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 5 }, { "color": "red", "value": 25 }] } }, "overrides": [] }
     },
     {
       "type": "row",
-      "title": "Participation flow",
+      "title": "Runtime event flow (claims vs. completions, by lane)",
       "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 5
-      },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
       "panels": []
     },
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Engagement actions by source (15m rate)",
-      "description": "Successful actions per second split between chat, the Twitch Extension, and system events. Query SQLite for distinct participants and first-time participation.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 6
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "title": "Runtime claims by lane (15m rate)",
+      "description": "kind=event is the chat-worker's internal event queue; kind=outbox with a twitch.* lane is the dispatcher's outbound-message outbox per Twitch API surface.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum by (source) (rate(pantry_bot_engagement_actions_total[15m]))",
-          "legendFormat": "{{source}}"
-        }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (kind, lane) (rate(pantry_bot_runtime_claims_total[15m]))", "legendFormat": "{{kind}}/{{lane}}" }
       ],
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "decimals": 3,
-          "min": 0,
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "showPoints": "never",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      }
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "fieldConfig": { "defaults": { "unit": "ops", "decimals": 3, "min": 0, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 12, "showPoints": "never", "spanNulls": false } }, "overrides": [] }
     },
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Actions by type (15m rate)",
-      "description": "Successful action mix: attacks, braces, rally support, duel actions, and other registered engagement events.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 6
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "title": "Runtime completions by lane (15m rate)",
+      "description": "Same lanes as the claims panel. A lane whose completion rate falls well below its claim rate for a sustained period is backing up.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum by (action) (rate(pantry_bot_engagement_actions_total[15m]))",
-          "legendFormat": "{{action}}"
-        }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (kind, lane) (rate(pantry_bot_runtime_completions_total[15m]))", "legendFormat": "{{kind}}/{{lane}}" }
       ],
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "decimals": 3,
-          "min": 0,
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "showPoints": "never",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      }
-    },
-    {
-      "id": 7,
-      "type": "timeseries",
-      "title": "Bot messages by status (15m rate)",
-      "description": "Outbound bot messages per second split into sent and failed. Daily totals are also persisted in SQLite.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 15
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum by (status) (rate(pantry_bot_messages_total[15m]))",
-          "legendFormat": "{{status}}"
-        }
-      ],
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "decimals": 3,
-          "min": 0,
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "showPoints": "never",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      }
-    },
-    {
-      "id": 8,
-      "type": "timeseries",
-      "title": "Extension requests by route (15m rate)",
-      "description": "Requests served by the Twitch Extension API, split by route. This includes state reads and action requests.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 15
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum by (route) (rate(pantry_bot_extension_requests_total[15m]))",
-          "legendFormat": "{{route}}"
-        }
-      ],
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "decimals": 3,
-          "min": 0,
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "showPoints": "never",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      }
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "fieldConfig": { "defaults": { "unit": "ops", "decimals": 3, "min": 0, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 12, "showPoints": "never", "spanNulls": false } }, "overrides": [] }
     },
     {
       "type": "row",
       "title": "Chat command activity",
       "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 24
-      },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
       "panels": []
     },
     {
-      "id": 9,
+      "id": 7,
       "type": "timeseries",
       "title": "Commands by name (15m rate)",
-      "description": "Successfully handled chat commands, split by command name. This measures command activity separately from free engagement actions.",
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 25
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "description": "Successfully handled chat commands, split by command name, from the chat-worker service.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 15 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum by (command) (rate(pantry_bot_commands_total[15m]))",
-          "legendFormat": "{{command}}"
-        }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (command) (rate(pantry_bot_commands_total[15m]))", "legendFormat": "{{command}}" }
       ],
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "decimals": 3,
-          "min": 0,
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "showPoints": "never",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      }
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "fieldConfig": { "defaults": { "unit": "ops", "decimals": 3, "min": 0, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 12, "showPoints": "never", "spanNulls": false } }, "overrides": [] }
     },
     {
       "type": "row",
       "title": "HA service health (live)",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 34
-      },
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
       "panels": []
     },
     {
-      "id": 10,
+      "id": 8,
       "type": "stat",
       "title": "Ready PantryBot pods",
-      "description": "Current ready pods in the pantry-bot namespace.",
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 0,
-        "y": 35
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "description": "Current ready pods in the pantry-bot namespace, across every microservice (worker, dispatcher, gateway, api, sites, cloudflared, postgres).",
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(kube_pod_status_ready{namespace=\"pantry-bot\",condition=\"true\"})",
-          "legendFormat": "ready"
-        }
+        { "refId": "A", "expr": "sum(kube_pod_status_ready{namespace=\"pantry-bot\",condition=\"true\"})", "legendFormat": "ready" }
       ],
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "value_and_name"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      }
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
     },
     {
-      "id": 11,
+      "id": 9,
       "type": "timeseries",
       "title": "PantryBot container restarts",
       "description": "Restarts in the pantry-bot namespace; useful during failover and recovery.",
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 35
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (pod, container) (increase(kube_pod_container_status_restarts_total{namespace=\"pantry-bot\"}[1h]))",
-          "legendFormat": "{{pod}}/{{container}}"
-        }
+        { "refId": "A", "expr": "sum by (pod, container) (increase(kube_pod_container_status_restarts_total{namespace=\"pantry-bot\"}[1h]))", "legendFormat": "{{pod}}/{{container}}" }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      }
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
     },
     {
-      "id": 12,
+      "id": 10,
       "type": "timeseries",
       "title": "PantryBot CPU and memory",
       "description": "Current resource use for pantry-bot pods from kubelet cAdvisor.",
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 35
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"pantry-bot\",container!=\"\",container!=\"POD\"}[5m]))",
-          "legendFormat": "{{pod}} CPU"
-        },
-        {
-          "refId": "B",
-          "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"pantry-bot\",container!=\"\",container!=\"POD\"})",
-          "legendFormat": "{{pod}} memory"
-        }
+        { "refId": "A", "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"pantry-bot\",container!=\"\",container!=\"POD\"}[5m]))", "legendFormat": "{{pod}} CPU" },
+        { "refId": "B", "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"pantry-bot\",container!=\"\",container!=\"POD\"})", "legendFormat": "{{pod}} memory" }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      }
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
     }
   ]
 }

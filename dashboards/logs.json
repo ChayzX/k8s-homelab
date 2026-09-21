@@ -24,13 +24,24 @@
         "skipUrlSync": false
       },
       {
+        "name": "DS_PROMETHEUS",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 2,
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false
+      },
+      {
         "name": "namespace",
         "label": "Namespace (app)",
-        "description": "Each app has its own namespace, so this doubles as the app selector: jmusicbot, pantry-bot, minecraft, observability, keel, kube-system.",
+        "description": "Each app has its own namespace, so this doubles as the app selector: jmusicbot, pantry-bot, minecraft, observability, kube-system, etc. FIXED 2026-09-21: Alloy's current log pipeline (observability/alloy-logs-home.yaml) does not promote a `namespace` Loki label at all -- verified live, /loki/api/v1/labels currently returns only __stream_shard__, instance, job, level, service_name. Every pod's identity now lives in one composite label, `instance` = \"namespace/podname:container\". Rather than guess at a static namespace list (which would drift, the same mistake apps.json made), this variable queries Prometheus's kube_pod_status_phase namespace label instead -- unaffected by the Loki change -- and the LogQL below matches it as an instance-prefix regex.",
         "type": "query",
-        "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-        "definition": "label_values(namespace)",
-        "query": { "label": "namespace", "refId": "LokiVariableQueryEditor-VariableQuery", "stream": "", "type": 1 },
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "definition": "label_values(kube_pod_status_phase, namespace)",
+        "query": { "qryType": 1, "query": "label_values(kube_pod_status_phase, namespace)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
         "refresh": 1,
         "includeAll": true,
         "allValue": ".+",
@@ -42,14 +53,15 @@
       },
       {
         "name": "pod",
-        "label": "Pod",
+        "label": "Pod (instance = namespace/pod:container)",
+        "description": "FIXED 2026-09-21: there is no separate `pod` Loki label any more (see the namespace variable's description). This now lists the full `instance` label value -- \"namespace/podname:container\" -- scoped to the selected namespace(s), and the LogQL below matches it directly with instance=~\"$pod\" rather than a bare pod name.",
         "type": "query",
         "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-        "definition": "label_values({namespace=~\"$namespace\"}, pod)",
+        "definition": "label_values({instance=~\"($namespace)/.*\"}, instance)",
         "query": {
-          "label": "pod",
+          "label": "instance",
           "refId": "LokiVariableQueryEditor-VariableQuery",
-          "stream": "{namespace=~\"$namespace\"}",
+          "stream": "{instance=~\"($namespace)/.*\"}",
           "type": 1
         },
         "refresh": 2,
@@ -112,7 +124,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__range]))",
+          "expr": "sum(count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__range]))",
           "queryType": "instant",
           "instant": true,
           "legendFormat": "lines"
@@ -147,7 +159,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__range]))",
+          "expr": "sum(count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__range]))",
           "queryType": "instant",
           "instant": true,
           "legendFormat": "errors"
@@ -188,7 +200,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"warn\"} |~ \"(?i)$search\" [$__range]))",
+          "expr": "sum(count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=\"warn\"} |~ \"(?i)$search\" [$__range]))",
           "queryType": "instant",
           "instant": true,
           "legendFormat": "warnings"
@@ -223,7 +235,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"\"} |~ \"(?i)$search\" [$__range]))",
+          "expr": "sum(count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=\"\"} |~ \"(?i)$search\" [$__range]))",
           "queryType": "instant",
           "instant": true,
           "legendFormat": "unclassified"
@@ -257,7 +269,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "count(sum by (pod) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__range])))",
+          "expr": "count(sum by (pod) (count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__range])))",
           "queryType": "instant",
           "instant": true,
           "legendFormat": "pods"
@@ -294,7 +306,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum by (level) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__auto]))",
+          "expr": "sum by (level) (count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__auto]))",
           "queryType": "range",
           "legendFormat": "{{level}}"
         }
@@ -350,23 +362,23 @@
       "id": 7,
       "type": "timeseries",
       "title": "Error & Warning Volume by Pod",
-      "description": "Which pod is producing the errors. Ignores the Severity variable on purpose.",
+      "description": "Which pod is producing the errors. Ignores the Severity variable on purpose. FIXED 2026-09-21: grouped by the `instance` label (namespace/pod:container) instead of `app_kubernetes_io_name`, which is not a Loki label -- Alloy's current discovery.relabel stage (observability/alloy-logs-home.yaml) does not promote any Kubernetes pod labels into Loki, only job/instance/service_name/level exist.",
       "gridPos": { "h": 9, "w": 10, "x": 14, "y": 7 },
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum by (namespace, app_kubernetes_io_name) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__auto]))",
+          "expr": "sum by (instance) (count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__auto]))",
           "queryType": "range",
-          "legendFormat": "ERROR {{namespace}}/{{app_kubernetes_io_name}}"
+          "legendFormat": "ERROR {{instance}}"
         },
         {
           "refId": "B",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "sum by (namespace, app_kubernetes_io_name) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"warn\"} |~ \"(?i)$search\" [$__auto]))",
+          "expr": "sum by (instance) (count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=\"warn\"} |~ \"(?i)$search\" [$__auto]))",
           "queryType": "range",
-          "legendFormat": "warn {{namespace}}/{{app_kubernetes_io_name}}"
+          "legendFormat": "warn {{instance}}"
         }
       ],
       "options": {
@@ -411,14 +423,14 @@
       "id": 8,
       "type": "logs",
       "title": "Logs (namespace + pod + severity + search)",
-      "description": "The full filter chain: {namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\". Click a line to expand its labels; use the label values there to narrow the variables above.",
+      "description": "The full filter chain: {instance=~\"($namespace)/.*\", instance=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\". Click a line to expand its labels; use the label values there to narrow the variables above.",
       "gridPos": { "h": 17, "w": 17, "x": 0, "y": 17 },
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "{namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\"",
+          "expr": "{instance=~\"($namespace)/.*\", instance=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\"",
           "queryType": "range",
           "maxLines": 2000
         }
@@ -439,17 +451,17 @@
       "id": 9,
       "type": "bargauge",
       "title": "Top Error Producers (this range)",
-      "description": "topk(10) by error-line count. Ignores the Severity variable.",
+      "description": "topk(10) by error-line count. Ignores the Severity variable. Legend is the `instance` label (namespace/pod:container) -- see the Error & Warning Volume by Pod panel note for why this isn't app_kubernetes_io_name.",
       "gridPos": { "h": 17, "w": 7, "x": 17, "y": 17 },
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "topk(10, sum by (namespace, app_kubernetes_io_name) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__range])))",
+          "expr": "topk(10, sum by (instance) (count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__range])))",
           "queryType": "instant",
           "instant": true,
-          "legendFormat": "{{namespace}}/{{app_kubernetes_io_name}}"
+          "legendFormat": "{{instance}}"
         }
       ],
       "options": {
@@ -485,7 +497,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "expr": "{namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\"",
+          "expr": "{instance=~\"($namespace)/.*\", instance=~\"$pod\", level=\"error\"} |~ \"(?i)$search\"",
           "queryType": "range",
           "maxLines": 1000
         }

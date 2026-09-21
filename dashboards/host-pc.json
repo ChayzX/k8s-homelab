@@ -10,7 +10,7 @@
   "timezone": "browser",
   "editable": true,
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "refresh": "30s",
   "time": {
     "from": "now-6h",
@@ -459,94 +459,6 @@
           "unit": "celsius"
         },
         "overrides": []
-      }
-    },
-    {
-      "type": "row",
-      "title": "Greenies Windows GPU",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 28
-      },
-      "panels": []
-    },
-    {
-      "id": 10,
-      "type": "timeseries",
-      "title": "GPU engine utilisation",
-      "description": "Greenies main PC GPU engine activity from windows_exporter.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 29
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (host, engtype) (rate(windows_gpu_engine_time_seconds{site=\"windows-remote\"}[5m])) * 100",
-          "legendFormat": "{{host}} {{engtype}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "max": 100
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom"
-        }
-      }
-    },
-    {
-      "id": 11,
-      "type": "timeseries",
-      "title": "GPU memory",
-      "description": "Dedicated and shared GPU memory for Greenies main PC.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 29
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "windows_gpu_adapter_memory_dedicated_bytes{site=\"windows-remote\"}",
-          "legendFormat": "{{host}} dedicated"
-        },
-        {
-          "refId": "B",
-          "expr": "windows_gpu_adapter_memory_shared_bytes{site=\"windows-remote\"}",
-          "legendFormat": "{{host}} shared"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom"
-        }
       }
     }
   ]

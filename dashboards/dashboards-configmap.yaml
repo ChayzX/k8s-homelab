@@ -1,593 +1,5 @@
 apiVersion: v1
 data:
-  apps.json: |
-    {
-      "uid": "homelab-apps",
-      "title": "Apps — Minecraft / jmusicbot / pantry-bot",
-      "description": "App-specific panels for the three bespoke workloads. Minecraft has a real application-level exporter (RCON-based), and pantry-bot exposes usage counters at /metrics. The shared app dashboard keeps Kubernetes health signals; detailed pantry-bot participation and outcome charts live on the separate Pantry Bot — Usage dashboard.",
-      "tags": ["homelab", "k3s", "apps"],
-      "timezone": "browser",
-      "editable": true,
-      "schemaVersion": 39,
-      "version": 1,
-      "refresh": "15s",
-      "graphTooltip": 1,
-      "time": { "from": "now-6h", "to": "now" },
-      "templating": {
-        "list": [
-          {
-            "name": "DS_PROMETHEUS",
-            "label": "Prometheus",
-            "type": "datasource",
-            "query": "prometheus",
-            "current": {},
-            "hide": 0,
-            "refresh": 1,
-            "regex": "",
-            "skipUrlSync": false
-          },
-          {
-            "name": "DS_LOKI",
-            "label": "Loki",
-            "type": "datasource",
-            "query": "loki",
-            "current": {},
-            "hide": 0,
-            "refresh": 1,
-            "regex": "",
-            "skipUrlSync": false
-          }
-        ]
-      },
-      "panels": [
-        {
-          "type": "row",
-          "title": "Minecraft — RCON-based exporter (TPS, players, world size); memory via cAdvisor, not psutil",
-          "collapsed": false,
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
-          "panels": []
-        },
-        {
-          "id": 1,
-          "type": "stat",
-          "title": "Server Up",
-          "description": "minecraft_server_up, from minecraft_exporter's RCON poll (in-cluster now, via the minecraft-rcon ClusterIP Service). 1 = RCON connected successfully.",
-          "gridPos": { "h": 4, "w": 5, "x": 0, "y": 1 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_server_up", "legendFormat": "up" }],
-          "options": {
-            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-            "orientation": "auto",
-            "textMode": "auto",
-            "colorMode": "background",
-            "graphMode": "none",
-            "justifyMode": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "mappings": [
-                { "type": "value", "options": { "0": { "text": "DOWN", "color": "red", "index": 0 } } },
-                { "type": "value", "options": { "1": { "text": "UP", "color": "green", "index": 1 } } }
-              ],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 2,
-          "type": "stat",
-          "title": "Players Online / Max",
-          "gridPos": { "h": 4, "w": 5, "x": 5, "y": 1 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_players_online", "legendFormat": "online" },
-            { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_players_max", "legendFormat": "max" }
-          ],
-          "options": {
-            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-            "orientation": "horizontal",
-            "textMode": "value_and_name",
-            "colorMode": "none",
-            "graphMode": "none",
-            "justifyMode": "auto"
-          },
-          "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] }
-        },
-        {
-          "id": 3,
-          "type": "gauge",
-          "title": "TPS (1m)",
-          "description": "20.0 is perfect. Below 15 is visibly laggy (mob AI, redstone, block breaking slow down); below 10 is severe. Heap is capped at -Xmx6G (down from 12G) as of this migration -- if TPS regresses versus the old Docker deployment, check the JVM Memory panel below before assuming it's unrelated.",
-          "gridPos": { "h": 4, "w": 6, "x": 10, "y": 1 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_tps_1m", "legendFormat": "tps" }],
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true },
-          "fieldConfig": {
-            "defaults": {
-              "min": 0,
-              "max": 20,
-              "decimals": 1,
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "#EAB839", "value": 15 }, { "color": "green", "value": 19 }] }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 4,
-          "type": "gauge",
-          "title": "Pod Memory vs 8Gi Limit",
-          "description": "container_memory_working_set_bytes for the minecraft container, from kubelet's cAdvisor endpoint -- NOT the old minecraft_process_memory_bytes gauge. That gauge is gone: it came from psutil reading the java process's RSS from outside the container's PID namespace, which does not work once the process is containerized. This is the cgroup working-set number, which is what the OOM killer actually compares against the 8Gi limit. Heap is -Xmx6G, so 2Gi of headroom above the heap ceiling is expected for JVM overhead (metaspace, off-heap, native buffers) -- watch this trend after a few days of real play per the migration plan's verification step.",
-          "gridPos": { "h": 4, "w": 8, "x": 16, "y": 1 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum(container_memory_working_set_bytes{namespace=\"minecraft\", pod=~\"minecraft-.*\", container=\"minecraft\"})"
-            }
-          ],
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "bytes",
-              "min": 0,
-              "max": 8589934592,
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  { "color": "green", "value": null },
-                  { "color": "#EAB839", "value": 6442450944 },
-                  { "color": "red", "value": 7301444813 }
-                ]
-              }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 5,
-          "type": "timeseries",
-          "title": "TPS Over Time (1m / 5m / 15m)",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_tps_1m", "legendFormat": "1m" },
-            { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_tps_5m", "legendFormat": "5m" },
-            { "refId": "C", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_tps_15m", "legendFormat": "15m" }
-          ],
-          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-          "fieldConfig": {
-            "defaults": {
-              "min": 0,
-              "max": 20,
-              "color": { "mode": "palette-classic" },
-              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 6,
-          "type": "timeseries",
-          "title": "Pod Memory vs Limit Over Time",
-          "description": "Solid = working set (cAdvisor). Dashed = 8Gi limit. Dotted = 3Gi request. A second dashed reference at 6Gi marks the -Xmx heap ceiling, so you can see how much of the gap above it is JVM overhead vs actual growth.",
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum(container_memory_working_set_bytes{namespace=\"minecraft\", pod=~\"minecraft-.*\", container=\"minecraft\"})",
-              "legendFormat": "working set"
-            },
-            {
-              "refId": "B",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum(kube_pod_container_resource_limits{namespace=\"minecraft\", pod=~\"minecraft-.*\", container=\"minecraft\", resource=\"memory\"})",
-              "legendFormat": "LIMIT (8Gi)"
-            },
-            {
-              "refId": "C",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum(kube_pod_container_resource_requests{namespace=\"minecraft\", pod=~\"minecraft-.*\", container=\"minecraft\", resource=\"memory\"})",
-              "legendFormat": "request (3Gi)"
-            },
-            {
-              "refId": "D",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "vector(6442450944)",
-              "legendFormat": "-Xmx6G heap ceiling"
-            }
-          ],
-          "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "bytes",
-              "min": 0,
-              "color": { "mode": "palette-classic" },
-              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false }
-            },
-            "overrides": [
-              {
-                "matcher": { "id": "byName", "options": "LIMIT (8Gi)" },
-                "properties": [
-                  { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } },
-                  { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [12, 6] } },
-                  { "id": "custom.fillOpacity", "value": 0 },
-                  { "id": "custom.lineWidth", "value": 2 }
-                ]
-              },
-              {
-                "matcher": { "id": "byName", "options": "request (3Gi)" },
-                "properties": [
-                  { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } },
-                  { "id": "custom.lineStyle", "value": { "fill": "dot", "dash": [2, 6] } },
-                  { "id": "custom.fillOpacity", "value": 0 }
-                ]
-              },
-              {
-                "matcher": { "id": "byName", "options": "-Xmx6G heap ceiling" },
-                "properties": [
-                  { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } },
-                  { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [4, 4] } },
-                  { "id": "custom.fillOpacity", "value": 0 },
-                  { "id": "custom.lineWidth", "value": 2 }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": 7,
-          "type": "timeseries",
-          "title": "Players Online Over Time",
-          "gridPos": { "h": 7, "w": 8, "x": 0, "y": 13 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_players_online", "legendFormat": "players" }],
-          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false, "calcs": [] }, "tooltip": { "mode": "single", "sort": "none" } },
-          "fieldConfig": {
-            "defaults": {
-              "min": 0,
-              "decimals": 0,
-              "color": { "mode": "fixed", "fixedColor": "green" },
-              "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 40, "showPoints": "never", "spanNulls": false }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 8,
-          "type": "timeseries",
-          "title": "CPU Usage vs Limit (cores)",
-          "description": "Request 2 cores, limit 6 cores. cAdvisor rate of container_cpu_usage_seconds_total.",
-          "gridPos": { "h": 7, "w": 8, "x": 8, "y": 13 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"minecraft\", pod=~\"minecraft-.*\", container=\"minecraft\"}[5m]))",
-              "legendFormat": "usage"
-            },
-            {
-              "refId": "B",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum(kube_pod_container_resource_limits{namespace=\"minecraft\", pod=~\"minecraft-.*\", container=\"minecraft\", resource=\"cpu\"})",
-              "legendFormat": "LIMIT (6 cores)"
-            }
-          ],
-          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "none",
-              "min": 0,
-              "decimals": 2,
-              "color": { "mode": "palette-classic" },
-              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "cores" }
-            },
-            "overrides": [
-              {
-                "matcher": { "id": "byName", "options": "LIMIT (6 cores)" },
-                "properties": [
-                  { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } },
-                  { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [12, 6] } },
-                  { "id": "custom.fillOpacity", "value": 0 }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": 9,
-          "type": "timeseries",
-          "title": "World Size on Disk",
-          "description": "minecraft_world_size_bytes, checked every 10 minutes (not continuously -- walking thousands of small region files on every 15s poll would be wasteful and would itself add HDD load). A sudden jump can indicate world corruption/duplication, not just normal exploration growth.",
-          "gridPos": { "h": 7, "w": 8, "x": 16, "y": 13 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_world_size_bytes", "legendFormat": "{{world}}" }],
-          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "bytes",
-              "min": 0,
-              "color": { "mode": "palette-classic" },
-              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 10,
-          "type": "stat",
-          "title": "Pod Restarts (24h)",
-          "description": "There is deliberately NO livenessProbe on the minecraft container -- a wedged JVM restarting mid-tick would risk world corruption, which is a worse outcome than a hung server. So this number will not self-heal a hang; readinessProbe alone drives traffic/RCON gating. A restart here means either an OOMKill (see cluster/pods dashboards) or the container process actually exiting.",
-          "gridPos": { "h": 5, "w": 6, "x": 0, "y": 20 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"minecraft\"}[24h])) or vector(0)", "legendFormat": "restarts" }],
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0,
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "#EAB839", "value": 1 }, { "color": "red", "value": 2 }] }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 11,
-          "type": "logs",
-          "title": "Minecraft Server Logs",
-          "description": "Paper/Log4j format, level extracted by Alloy. Use the Logs dashboard for full severity-filter/search controls -- this is a fixed quick view scoped to this pod.",
-          "gridPos": { "h": 10, "w": 24, "x": 6, "y": 20 },
-          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "{namespace=\"minecraft\"}", "maxLines": 1000 }],
-          "options": { "showTime": true, "showLabels": false, "showCommonLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" },
-          "fieldConfig": { "defaults": {}, "overrides": [] }
-        },
-        {
-          "type": "row",
-          "title": "jmusicbot — no application metrics exist; pod-level signals only",
-          "collapsed": false,
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 },
-          "panels": []
-        },
-        {
-          "id": 12,
-          "type": "text",
-          "title": "About this section",
-          "gridPos": { "h": 3, "w": 24, "x": 0, "y": 31 },
-          "options": {
-            "mode": "markdown",
-            "content": "jmusicbot is a Discord bot with **no Prometheus exporter or metrics endpoint** -- it never had one on Docker either. There is no TODO to \"add\" a real metric here; the honest state is that the only signal available is what Kubernetes itself observes about the pod (running/not, restarts, memory). `release-notifier` (GitHub release poller, posts to Discord) is included below since it shares the namespace."
-          }
-        },
-        {
-          "id": 13,
-          "type": "table",
-          "title": "Pod Status (jmusicbot namespace)",
-          "gridPos": { "h": 7, "w": 10, "x": 0, "y": 34 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "(kube_pod_status_phase{namespace=\"jmusicbot\"} == 1) * on(namespace, pod) group_left(label_app_kubernetes_io_name) kube_pod_labels{namespace=\"jmusicbot\"}", "format": "table", "instant": true },
-            { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (pod) (kube_pod_container_status_restarts_total{namespace=\"jmusicbot\"})", "format": "table", "instant": true }
-          ],
-          "transformations": [
-            { "id": "joinByField", "options": { "byField": "pod", "mode": "outer" } },
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": { "Time": true, "Time 1": true, "Time 2": true, "__name__": true, "job": true, "instance": true, "namespace": true, "uid": true, "Value #A": true, "pod": true },
-                "renameByName": { "label_app_kubernetes_io_name": "Pod", "phase": "Phase", "Value #B": "Restarts" },
-                "indexByName": {}
-              }
-            }
-          ],
-          "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false, "reducer": ["sum"], "countRows": false, "fields": "" } },
-          "fieldConfig": {
-            "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
-            "overrides": [
-              {
-                "matcher": { "id": "byName", "options": "Phase" },
-                "properties": [
-                  {
-                    "id": "mappings",
-                    "value": [
-                      { "type": "value", "options": { "Running": { "color": "green", "index": 0 } } },
-                      { "type": "value", "options": { "Pending": { "color": "orange", "index": 1 } } },
-                      { "type": "value", "options": { "Failed": { "color": "red", "index": 2 } } }
-                    ]
-                  },
-                  { "id": "custom.cellOptions", "value": { "type": "color-text" } }
-                ]
-              },
-              {
-                "matcher": { "id": "byName", "options": "Restarts" },
-                "properties": [
-                  { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "#EAB839", "value": 1 }, { "color": "red", "value": 5 }] } },
-                  { "id": "custom.cellOptions", "value": { "type": "color-text" } }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": 14,
-          "type": "timeseries",
-          "title": "Memory vs Limit — jmusicbot (1Gi) / release-notifier (128Mi)",
-          "gridPos": { "h": 7, "w": 14, "x": 10, "y": 34 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum by (container) (container_memory_working_set_bytes{namespace=\"jmusicbot\", container!=\"\", container!=\"POD\"})",
-              "legendFormat": "{{container}}"
-            },
-            {
-              "refId": "B",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum by (container) (kube_pod_container_resource_limits{namespace=\"jmusicbot\", resource=\"memory\"})",
-              "legendFormat": "{{container}} LIMIT"
-            }
-          ],
-          "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "bytes",
-              "min": 0,
-              "color": { "mode": "palette-classic" },
-              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false }
-            },
-            "overrides": [
-              {
-                "matcher": { "id": "byRegexp", "options": ".*LIMIT$" },
-                "properties": [
-                  { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [12, 6] } },
-                  { "id": "custom.fillOpacity", "value": 0 },
-                  { "id": "custom.lineWidth", "value": 2 }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": 15,
-          "type": "timeseries",
-          "title": "jmusicbot Restarts (rolling 1h)",
-          "gridPos": { "h": 6, "w": 12, "x": 0, "y": 41 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (pod, container) (increase(kube_pod_container_status_restarts_total{namespace=\"jmusicbot\"}[1h]))", "legendFormat": "{{container}}" }],
-          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "min": 0,
-              "decimals": 0,
-              "color": { "mode": "palette-classic" },
-              "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 70, "showPoints": "never", "spanNulls": false }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 16,
-          "type": "logs",
-          "title": "jmusicbot Logs",
-          "description": "Java/Log4j format. Watch here for the exact YouTube itag-18 decode failure this deployment is a workaround for (see the deployment manifest's CUSTOM-BUILD-NOTE) -- 'Something went wrong when decoding the track' is the signature string.",
-          "gridPos": { "h": 12, "w": 12, "x": 12, "y": 41 },
-          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "{namespace=\"jmusicbot\"}", "maxLines": 1000 }],
-          "options": { "showTime": true, "showLabels": true, "showCommonLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" },
-          "fieldConfig": { "defaults": {}, "overrides": [] }
-        },
-        {
-          "type": "row",
-          "title": "pantry-bot — Twitch bot; usage is on the separate dashboard, readiness is the health signal here",
-          "collapsed": false,
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 53 },
-          "panels": []
-        },
-        {
-          "id": 17,
-          "type": "text",
-          "title": "About HTTP health here",
-          "gridPos": { "h": 4, "w": 24, "x": 0, "y": 54 },
-          "options": {
-            "mode": "markdown",
-            "content": "pantry-bot now exposes application usage counters at `/metrics`; this dashboard keeps Kubernetes health context. It still has **no `/health` or `/healthz` endpoint** -- `GET /` returns a bare 404 (verified through the live tunnel). The k8s probes are `exec` checks (`node -e \"require('http').get(...)\"`) reproducing the old Compose healthcheck's \"any response, even a 404, proves the server is alive\" logic, specifically *because* an `httpGet` probe would treat that same 404 as a failure and crash-loop a healthy pod. That means there is no Prometheus series for HTTP health -- the panels below (readiness, restarts) are the only signal Kubernetes can give us, sourced from the exec probe's pass/fail via kube-state-metrics. **TODO for real HTTP health visibility:** add `app.get('/healthz', (_req, res) => res.status(200).send('ok'))` to the bot (noted as the preferred fix in `pantry-bot/40-deployment.yaml`), switch the probes to `httpGet`, and this dashboard could then plot actual request latency/status if the route is later instrumented with `prom-client`. Until then, do not invent a metric name for this."
-          }
-        },
-        {
-          "id": 18,
-          "type": "stat",
-          "title": "Readiness (proxy for HTTP health)",
-          "description": "kube_pod_status_ready, condition=true. This reflects the exec probe passing, which only proves the Node HTTP server on :3000 accepted a TCP connection and returned any response -- not that Twitch auth, the SQLite DB, or the Cloudflare tunnel are functioning.",
-          "gridPos": { "h": 5, "w": 6, "x": 0, "y": 58 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "min(kube_pod_status_ready{namespace=\"pantry-bot\", condition=\"true\"})", "legendFormat": "ready" }],
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" },
-          "fieldConfig": {
-            "defaults": {
-              "mappings": [
-                { "type": "value", "options": { "0": { "text": "NOT READY", "color": "red", "index": 0 } } },
-                { "type": "value", "options": { "1": { "text": "READY", "color": "green", "index": 1 } } }
-              ],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 19,
-          "type": "stat",
-          "title": "Restarts (24h)",
-          "description": "livenessProbe failureThreshold is 5 (150s of continuous failure) specifically because a restart here means real downtime -- strategy: Recreate + a single RWO SQLite PVC means the old pod fully terminates before the new one mounts. Frequent restarts are worth chasing down, not shrugging off.",
-          "gridPos": { "h": 5, "w": 6, "x": 6, "y": 58 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"pantry-bot\", container=\"bot\"}[24h])) or vector(0)", "legendFormat": "restarts" }],
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0,
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "#EAB839", "value": 1 }, { "color": "red", "value": 2 }] }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 20,
-          "type": "gauge",
-          "title": "bot Memory vs 256Mi Limit",
-          "gridPos": { "h": 5, "w": 6, "x": 12, "y": 58 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(container_memory_working_set_bytes{namespace=\"pantry-bot\", container=\"bot\"})" }],
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "bytes",
-              "min": 0,
-              "max": 268435456,
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "#EAB839", "value": 201326592 }, { "color": "red", "value": 228065280 }] }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 21,
-          "type": "stat",
-          "title": "cloudflared Sidecar Up",
-          "description": "The Cloudflare tunnel container in the same pod. If pantry-bot itself is Ready but this container has restarted, the Twitch bot may be running with no public ingress at all.",
-          "gridPos": { "h": 5, "w": 6, "x": 18, "y": 58 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "min(kube_pod_container_status_running{namespace=\"pantry-bot\", container=\"cloudflared\"})", "legendFormat": "running" }],
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" },
-          "fieldConfig": {
-            "defaults": {
-              "mappings": [
-                { "type": "value", "options": { "0": { "text": "DOWN", "color": "red", "index": 0 } } },
-                { "type": "value", "options": { "1": { "text": "UP", "color": "green", "index": 1 } } }
-              ],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 22,
-          "type": "logs",
-          "title": "pantry-bot Logs (bot + cloudflared)",
-          "description": "Node.js format for the bot container; cloudflared has its own plain-text log format. Both share the pod's namespace label.",
-          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 63 },
-          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "{namespace=\"pantry-bot\"}", "maxLines": 1000 }],
-          "options": { "showTime": true, "showLabels": true, "showCommonLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" },
-          "fieldConfig": { "defaults": {}, "overrides": [] }
-        }
-      ]
-    }
   cloudflared.json: |
     {
       "uid": "homelab-cloudflared",
@@ -597,14 +9,14 @@ data:
       "timezone": "browser",
       "editable": true,
       "schemaVersion": 39,
-      "version": 1,
+      "version": 3,
       "refresh": "15s",
       "graphTooltip": 1,
       "time": { "from": "now-6h", "to": "now" },
       "templating": { "list": [
         { "name": "DS_PROMETHEUS", "label": "Prometheus", "type": "datasource", "query": "prometheus", "current": {}, "hide": 0, "refresh": 1, "regex": "", "skipUrlSync": false },
         { "name": "DS_LOKI", "label": "Loki", "type": "datasource", "query": "loki", "current": {}, "hide": 0, "refresh": 1, "regex": "", "skipUrlSync": false },
-        { "name": "pod", "label": "Connector pod", "type": "query", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "definition": "label_values({namespace=\"pantry-bot\", container=\"cloudflared\"}, pod)", "query": { "label": "pod", "refId": "LokiVariableQueryEditor-VariableQuery", "stream": "{namespace=\"pantry-bot\", container=\"cloudflared\"}", "type": 1 }, "refresh": 2, "includeAll": true, "allValue": ".+", "multi": true, "sort": 1, "hide": 0, "current": { "selected": true, "text": ["All"], "value": ["$__all"] }, "skipUrlSync": false },
+        { "name": "pod", "label": "Connector pod (instance = namespace/pod:container)", "description": "FIXED 2026-09-21: there is no `namespace`/`container` Loki label any more -- Alloy's current pipeline (observability/alloy-logs-home.yaml) only produces __stream_shard__/instance/job/level/service_name, verified live. Pod+container identity now lives in one composite label, `instance` = \"namespace/podname:container\" (e.g. pantry-bot/commands-cloudflared-xxxx:cloudflared). This lists every instance under pantry-bot whose container is cloudflared, and the LogQL below matches instance=~\"$pod\" directly instead of separate namespace/container matchers.", "type": "query", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "definition": "label_values({instance=~\"pantry-bot/.*:cloudflared\"}, instance)", "query": { "label": "instance", "refId": "LokiVariableQueryEditor-VariableQuery", "stream": "{instance=~\"pantry-bot/.*:cloudflared\"}", "type": 1 }, "refresh": 2, "includeAll": true, "allValue": ".+", "multi": true, "sort": 1, "hide": 0, "current": { "selected": true, "text": ["All"], "value": ["$__all"] }, "skipUrlSync": false },
         { "name": "level", "label": "Severity", "type": "custom", "query": "debug,info,warn,error", "options": [{ "selected": false, "text": "debug", "value": "debug" }, { "selected": false, "text": "info", "value": "info" }, { "selected": false, "text": "warn", "value": "warn" }, { "selected": false, "text": "error", "value": "error" }], "includeAll": true, "allValue": ".*", "multi": true, "hide": 0, "current": { "selected": true, "text": ["All"], "value": ["$__all"] }, "skipUrlSync": false }
       ] },
       "panels": [
@@ -612,13 +24,13 @@ data:
         { "id": 1, "type": "stat", "title": "Connector Ready", "description": "Kubernetes readiness is cloudflared's /ready endpoint. It returns 200 only after a connection is registered with Cloudflare's edge, making it more useful than merely observing a running process.", "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "min(kube_pod_container_status_ready{namespace=\"pantry-bot\", container=\"cloudflared\"})", "legendFormat": "ready" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" }, "fieldConfig": { "defaults": { "mappings": [{ "type": "value", "options": { "0": { "text": "NOT READY", "color": "red", "index": 0 }, "1": { "text": "READY", "color": "green", "index": 1 } } }], "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] } },
         { "id": 2, "type": "stat", "title": "Connector Running", "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "min(kube_pod_container_status_running{namespace=\"pantry-bot\", container=\"cloudflared\"})", "legendFormat": "running" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" }, "fieldConfig": { "defaults": { "mappings": [{ "type": "value", "options": { "0": { "text": "DOWN", "color": "red", "index": 0 }, "1": { "text": "RUNNING", "color": "green", "index": 1 } } }], "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] } },
         { "id": 3, "type": "stat", "title": "Restarts (24h)", "description": "The liveness probe allows a 2.5-minute sustained Cloudflare-edge disconnection before restarting the connector. A nonzero value is a signal to inspect the log panels.", "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"pantry-bot\", container=\"cloudflared\"}[24h])) or vector(0)", "legendFormat": "restarts" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" }, "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "#EAB839", "value": 1 }, { "color": "red", "value": 2 }] } }, "overrides": [] } },
-        { "id": 4, "type": "stat", "title": "Deployment Desired / Ready", "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "kube_deployment_spec_replicas{namespace=\"pantry-bot\", deployment=\"cloudflared\"}", "legendFormat": "desired" }, { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "kube_deployment_status_replicas_available{namespace=\"pantry-bot\", deployment=\"cloudflared\"}", "legendFormat": "ready" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "horizontal", "textMode": "value_and_name", "colorMode": "none", "graphMode": "none", "justifyMode": "auto" }, "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] } },
+        { "id": 4, "type": "stat", "title": "Deployment Desired / Ready", "description": "Summed across every Deployment whose name matches *cloudflared* in this namespace. The connector's Deployment has been renamed more than once (retired `cloudflared` and `app-cloudflared` sit at 0/0; the active one is currently `commands-cloudflared`) -- matching on the exact old name silently showed 0/0 forever after the rename. This regex keeps the panel correct across future renames too.", "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(kube_deployment_spec_replicas{namespace=\"pantry-bot\", deployment=~\".*cloudflared.*\"})", "legendFormat": "desired" }, { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(kube_deployment_status_replicas_available{namespace=\"pantry-bot\", deployment=~\".*cloudflared.*\"})", "legendFormat": "ready" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "horizontal", "textMode": "value_and_name", "colorMode": "none", "graphMode": "none", "justifyMode": "auto" }, "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] } },
         { "type": "row", "title": "Connector resources", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 }, "panels": [] },
         { "id": 5, "type": "timeseries", "title": "Memory Working Set vs Limit / Request", "description": "Solid cAdvisor working set, dashed 128Mi limit, and dotted 64Mi request.", "gridPos": { "h": 9, "w": 12, "x": 0, "y": 7 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(container_memory_working_set_bytes{namespace=\"pantry-bot\", container=\"cloudflared\"})", "legendFormat": "working set" }, { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(kube_pod_container_resource_limits{namespace=\"pantry-bot\", container=\"cloudflared\", resource=\"memory\"})", "legendFormat": "LIMIT" }, { "refId": "C", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(kube_pod_container_resource_requests{namespace=\"pantry-bot\", container=\"cloudflared\", resource=\"memory\"})", "legendFormat": "request" }], "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }, "fieldConfig": { "defaults": { "unit": "bytes", "min": 0, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false } }, "overrides": [] } },
         { "id": 6, "type": "timeseries", "title": "CPU Usage vs Limit (cores)", "description": "Solid cAdvisor CPU usage and dashed 200m CPU limit.", "gridPos": { "h": 9, "w": 12, "x": 12, "y": 7 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"pantry-bot\", container=\"cloudflared\"}[5m]))", "legendFormat": "usage" }, { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(kube_pod_container_resource_limits{namespace=\"pantry-bot\", container=\"cloudflared\", resource=\"cpu\"})", "legendFormat": "LIMIT" }], "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }, "fieldConfig": { "defaults": { "unit": "none", "min": 0, "decimals": 3, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "cores" } }, "overrides": [] } },
         { "type": "row", "title": "Connector logs", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 }, "panels": [] },
-        { "id": 7, "type": "timeseries", "title": "Log Volume by Severity", "description": "Zerolog severity is extracted by Alloy. Warning or error spikes around an edge disconnect are visible before the connector has accumulated enough failures for a liveness restart.", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 }, "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "sum by (level) (count_over_time({namespace=\"pantry-bot\", container=\"cloudflared\", pod=~\"$pod\", level=~\"$level\"} [$__auto]))", "queryType": "range", "legendFormat": "{{level}}" }], "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["sum", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }, "fieldConfig": { "defaults": { "unit": "short", "min": 0, "decimals": 0, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "bars", "lineWidth": 0, "fillOpacity": 85, "showPoints": "never", "spanNulls": false, "barAlignment": 0, "stacking": { "mode": "normal", "group": "A" } } }, "overrides": [] } },
-        { "id": 8, "type": "logs", "title": "cloudflared Logs", "description": "Live connector log stream. The Cloudflare warning 'accept stream listener encountered a failure' is directly visible here alongside reconnect and registration messages.", "gridPos": { "h": 12, "w": 12, "x": 12, "y": 17 }, "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "{namespace=\"pantry-bot\", container=\"cloudflared\", pod=~\"$pod\", level=~\"$level\"}", "maxLines": 2000 }], "options": { "showTime": true, "showLabels": true, "showCommonLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" }, "fieldConfig": { "defaults": {}, "overrides": [] } }
+        { "id": 7, "type": "timeseries", "title": "Log Volume by Severity", "description": "Zerolog severity is extracted by Alloy. Warning or error spikes around an edge disconnect are visible before the connector has accumulated enough failures for a liveness restart.", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 }, "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "sum by (level) (count_over_time({instance=~\"$pod\", level=~\"$level\"} [$__auto]))", "queryType": "range", "legendFormat": "{{level}}" }], "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["sum", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }, "fieldConfig": { "defaults": { "unit": "short", "min": 0, "decimals": 0, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "bars", "lineWidth": 0, "fillOpacity": 85, "showPoints": "never", "spanNulls": false, "barAlignment": 0, "stacking": { "mode": "normal", "group": "A" } } }, "overrides": [] } },
+        { "id": 8, "type": "logs", "title": "cloudflared Logs", "description": "Live connector log stream. The Cloudflare warning 'accept stream listener encountered a failure' is directly visible here alongside reconnect and registration messages.", "gridPos": { "h": 12, "w": 12, "x": 12, "y": 17 }, "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "{instance=~\"$pod\", level=~\"$level\"}", "maxLines": 2000 }], "options": { "showTime": true, "showLabels": true, "showCommonLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" }, "fieldConfig": { "defaults": {}, "overrides": [] } }
       ]
     }
   cluster-overview.json: |
@@ -1940,6 +1352,43 @@ data:
         }
       ]
     }
+  greenies-main-pc-health.json: |
+    {
+      "uid": "greenies-main-pc-health",
+      "title": "Greenie's Main PC — Health",
+      "description": "Windows/Docker gaming PC ('ThePantry'), monitored via windows_exporter and forwarded into this Prometheus through Grafana Alloy's remote-write receiver -- the same path used for Canada's host telemetry when that becomes available. No host selector is needed: every panel is scoped to the one remote Windows job. Labels verified live against Prometheus on 2026-09-21: site=\"windows-remote\", job=\"integrations/windows\", host=\"ThePantry\", instance=\"ThePantry\" -- this replaces the stale never-merged draft on feat/greenies-main-pc-dashboard, which assumed site=\"remote\"/job=\"host\" and never matched anything live.",
+      "tags": ["homelab", "windows", "remote", "alloy", "pc", "gpu"],
+      "timezone": "browser",
+      "editable": true,
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "time": { "from": "now-6h", "to": "now" },
+      "templating": { "list": [
+        { "name": "DS_PROMETHEUS", "label": "Prometheus", "type": "datasource", "query": "prometheus", "refresh": 1 }
+      ] },
+      "panels": [
+        { "type": "row", "title": "Current state", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "panels": [] },
+        { "id": 1, "type": "stat", "title": "Host Reachable", "description": "Alloy remote-write scrape health for ThePantry. 0/no-data means Alloy on the Windows box has stopped forwarding metrics -- it does not by itself mean the PC is powered off.", "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "up{site=\"windows-remote\", job=\"integrations/windows\"}", "legendFormat": "ThePantry" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" }, "fieldConfig": { "defaults": { "mappings": [{ "type": "value", "options": { "0": { "text": "DOWN / NOT REPORTING", "color": "red", "index": 0 }, "1": { "text": "UP", "color": "green", "index": 1 } } }], "noValue": "NO DATA", "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] } },
+        { "id": 2, "type": "gauge", "title": "CPU Used", "description": "Whole-host CPU used, averaged across all logical cores from the idle-mode counter.", "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "100 * (1 - avg(rate(windows_cpu_time_total{site=\"windows-remote\", mode=\"idle\"}[5m])))", "legendFormat": "CPU" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true }, "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 70 }, { "color": "red", "value": 90 }] } }, "overrides": [] } },
+        { "id": 3, "type": "gauge", "title": "Memory Used", "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "100 * (1 - windows_memory_available_bytes{site=\"windows-remote\"} / windows_memory_physical_total_bytes{site=\"windows-remote\"})", "legendFormat": "memory" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true }, "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 80 }, { "color": "red", "value": 95 }] } }, "overrides": [] } },
+        { "id": 4, "type": "stat", "title": "Uptime", "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "time() - windows_system_boot_time_timestamp{site=\"windows-remote\"}", "legendFormat": "uptime" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name", "colorMode": "value" }, "fieldConfig": { "defaults": { "unit": "dtdurations", "decimals": 1 }, "overrides": [] } },
+        { "type": "row", "title": "CPU and memory", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 }, "panels": [] },
+        { "id": 5, "type": "timeseries", "title": "CPU by Mode", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "100 * avg by (mode) (rate(windows_cpu_time_total{site=\"windows-remote\"}[5m]))", "legendFormat": "{{mode}}" }], "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] }, "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } } },
+        { "id": 6, "type": "timeseries", "title": "Memory Available vs Total", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "windows_memory_available_bytes{site=\"windows-remote\"}", "legendFormat": "available" }, { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "windows_memory_physical_total_bytes{site=\"windows-remote\"}", "legendFormat": "total" }], "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] }, "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } } },
+        { "type": "row", "title": "Disk and network", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 }, "panels": [] },
+        { "id": 7, "type": "timeseries", "title": "Disk Used % by Volume", "description": "Label is `volume` (e.g. C:, D:), not `volume_id` -- the draft on the stale branch used the wrong label name for this exporter version.", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "100 * (1 - windows_logical_disk_free_bytes{site=\"windows-remote\"} / windows_logical_disk_size_bytes{site=\"windows-remote\"})", "legendFormat": "{{volume}}" }], "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 80 }, { "color": "red", "value": 90 }] } }, "overrides": [] }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } } },
+        { "id": 8, "type": "timeseries", "title": "Network Throughput", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(windows_net_bytes_received_total{site=\"windows-remote\"}[5m])", "legendFormat": "{{nic}} received" }, { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(windows_net_bytes_sent_total{site=\"windows-remote\"}[5m])", "legendFormat": "{{nic}} sent" }], "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] }, "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } } },
+        { "type": "row", "title": "Windows host details", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 }, "panels": [] },
+        { "id": 9, "type": "timeseries", "title": "Disk Free by Volume", "gridPos": { "h": 7, "w": 12, "x": 0, "y": 25 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "windows_logical_disk_free_bytes{site=\"windows-remote\"}", "legendFormat": "{{volume}}" }], "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } } },
+        { "id": 10, "type": "stat", "title": "Last Boot", "gridPos": { "h": 7, "w": 12, "x": 12, "y": 25 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "windows_system_boot_time_timestamp{site=\"windows-remote\"}", "legendFormat": "boot time" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value" }, "fieldConfig": { "defaults": { "unit": "dateTimeAsIso", "decimals": 0 }, "overrides": [] } },
+        { "type": "row", "title": "GPU (NVIDIA GeForce RTX 3070)", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 }, "panels": [] },
+        { "id": 11, "type": "table", "title": "GPU Adapter", "description": "Identity of the adapter windows_exporter is reporting on, from windows_gpu_info. An info-style metric: the value is always 1, the label set is the payload.", "gridPos": { "h": 5, "w": 24, "x": 0, "y": 33 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "windows_gpu_info{site=\"windows-remote\"}", "format": "table", "instant": true }], "transformations": [{ "id": "organize", "options": { "excludeByName": { "Time": true, "Value": true, "__name__": true, "instance": true, "job": true, "site": true }, "renameByName": { "name": "Adapter", "host": "Host", "device_id": "PCI Device ID", "bus_number": "Bus", "function_number": "Function", "luid": "LUID", "phys": "Physical Adapter Index" } } }], "options": { "showHeader": true, "cellHeight": "sm" }, "fieldConfig": { "defaults": {}, "overrides": [] } },
+        { "id": 12, "type": "timeseries", "title": "GPU Engine Utilisation", "description": "windows_gpu_engine_time_seconds is a per-process, per-engine counter; rate() gives fractional engine-seconds/sec (i.e. percent busy) summed across every process, broken out by engine type (3D, Copy, VideoDecode, etc).", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 38 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (host, engtype) (rate(windows_gpu_engine_time_seconds{site=\"windows-remote\"}[5m])) * 100", "legendFormat": "{{host}} {{engtype}}" }], "fieldConfig": { "defaults": { "unit": "percent", "min": 0 }, "overrides": [] }, "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } } },
+        { "id": 13, "type": "timeseries", "title": "GPU Adapter Memory", "description": "Dedicated (on-board VRAM), shared (system RAM borrowed by the GPU), and committed (total the adapter has reserved) memory for the whole adapter.", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 38 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "windows_gpu_adapter_memory_dedicated_bytes{site=\"windows-remote\"}", "legendFormat": "dedicated" }, { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "windows_gpu_adapter_memory_shared_bytes{site=\"windows-remote\"}", "legendFormat": "shared" }, { "refId": "C", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "windows_gpu_adapter_memory_committed_bytes{site=\"windows-remote\"}", "legendFormat": "committed" }], "fieldConfig": { "defaults": { "unit": "bytes", "min": 0 }, "overrides": [] }, "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } } },
+        { "id": 14, "type": "timeseries", "title": "Top GPU Memory Consumers (dedicated, by process)", "description": "windows_exporter only labels this by process_id, not process name (no name label is exposed) -- cross-reference the PID with Task Manager on the box if you need to know which application this is. topk(8) keeps the panel readable when many processes touch the GPU.", "gridPos": { "h": 8, "w": 24, "x": 0, "y": 46 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "topk(8, windows_gpu_process_memory_dedicated_bytes{site=\"windows-remote\"})", "legendFormat": "pid {{process_id}}" }], "fieldConfig": { "defaults": { "unit": "bytes", "min": 0 }, "overrides": [] }, "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } } }
+      ]
+    }
   host-pc.json: |
     {
       "uid": "homelab-host-pc",
@@ -1953,7 +1402,7 @@ data:
       "timezone": "browser",
       "editable": true,
       "schemaVersion": 39,
-      "version": 3,
+      "version": 4,
       "refresh": "30s",
       "time": {
         "from": "now-6h",
@@ -2403,94 +1852,6 @@ data:
             },
             "overrides": []
           }
-        },
-        {
-          "type": "row",
-          "title": "Greenies Windows GPU",
-          "gridPos": {
-            "h": 1,
-            "w": 24,
-            "x": 0,
-            "y": 28
-          },
-          "panels": []
-        },
-        {
-          "id": 10,
-          "type": "timeseries",
-          "title": "GPU engine utilisation",
-          "description": "Greenies main PC GPU engine activity from windows_exporter.",
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 29
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "sum by (host, engtype) (rate(windows_gpu_engine_time_seconds{site=\"windows-remote\"}[5m])) * 100",
-              "legendFormat": "{{host}} {{engtype}}"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "percent",
-              "min": 0,
-              "max": 100
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom"
-            }
-          }
-        },
-        {
-          "id": 11,
-          "type": "timeseries",
-          "title": "GPU memory",
-          "description": "Dedicated and shared GPU memory for Greenies main PC.",
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 29
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "windows_gpu_adapter_memory_dedicated_bytes{site=\"windows-remote\"}",
-              "legendFormat": "{{host}} dedicated"
-            },
-            {
-              "refId": "B",
-              "expr": "windows_gpu_adapter_memory_shared_bytes{site=\"windows-remote\"}",
-              "legendFormat": "{{host}} shared"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "bytes"
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom"
-            }
-          }
         }
       ]
     }
@@ -2503,7 +1864,7 @@ data:
       "timezone": "browser",
       "editable": true,
       "schemaVersion": 39,
-      "version": 1,
+      "version": 2,
       "refresh": "15s",
       "graphTooltip": 1,
       "time": { "from": "now-24h", "to": "now" },
@@ -2526,15 +1887,15 @@ data:
         { "id": 9, "type": "stat", "title": "Last Termination: OOMKilled", "description": "Containers whose most recent termination reason was OOMKilled. This can remain nonzero after recovery; inspect logs and the restart panel for timing.", "gridPos": { "h": 6, "w": 6, "x": 0, "y": 30 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "expr": "sum(kube_pod_container_status_last_terminated_reason{namespace=\"jmusicbot\", reason=\"OOMKilled\"}) or vector(0)", "legendFormat": "OOMKilled" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "none" }, "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] } },
         { "id": 12, "type": "stat", "title": "Containers Waiting / Pull Failures", "description": "Current Kubernetes waiting states across the namespace. The second value isolates ImagePullBackOff, ErrImagePull, invalid images, and container-config failures—the states that produce no application logs because the process never starts.", "gridPos": { "h": 6, "w": 18, "x": 6, "y": 30 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "expr": "sum(kube_pod_container_status_waiting_reason{namespace=\"jmusicbot\"} == 1) or vector(0)", "legendFormat": "all waiting" }, { "refId": "B", "expr": "sum(kube_pod_container_status_waiting_reason{namespace=\"jmusicbot\", reason=~\"ImagePullBackOff|ErrImagePull|CreateContainerConfigError|InvalidImageName\"} == 1) or vector(0)", "legendFormat": "image/config failures" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "horizontal", "textMode": "value_and_name", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" }, "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] } },
         { "type": "row", "title": "Logs", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 37 }, "panels": [] },
-        { "id": 11, "type": "stat", "title": "Log Lines (24h)", "description": "Independent Loki ingestion check. A nonzero count proves the logs exist even when the raw panel is filtered or the bot has been quiet during the dashboard's selected range.", "gridPos": { "h": 12, "w": 5, "x": 0, "y": 38 }, "datasource": { "type": "loki", "uid": "Loki" }, "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "Loki" }, "editorMode": "code", "expr": "sum(count_over_time({namespace=\"jmusicbot\"}[24h])) or vector(0)", "queryType": "instant" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "none", "graphMode": "none", "justifyMode": "auto" }, "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] } },
-        { "id": 10, "type": "logs", "title": "jmusicbot and Release Notifier Logs (last 24h)", "description": "Raw application logs with a panel-level 24-hour lookback. JMusicBot is normally quiet after startup, so a five-minute dashboard range can correctly contain no lines; this panel intentionally keeps enough history visible. Image-pull/config failures appear in the Kubernetes panels above because a container that never starts cannot emit application logs.", "gridPos": { "h": 12, "w": 19, "x": 5, "y": 38 }, "timeFrom": "24h", "datasource": { "type": "loki", "uid": "Loki" }, "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "Loki" }, "editorMode": "code", "expr": "{namespace=\"jmusicbot\"}", "queryType": "range", "maxLines": 2000 }], "options": { "showTime": true, "showLabels": true, "showCommonLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" }, "fieldConfig": { "defaults": {}, "overrides": [] } }
+        { "id": 11, "type": "stat", "title": "Log Lines (24h)", "description": "Independent Loki ingestion check. A nonzero count proves the logs exist even when the raw panel is filtered or the bot has been quiet during the dashboard's selected range. FIXED 2026-09-21 (two issues): (1) this and the panel below hardcoded datasource uid \"Loki\" instead of the ${DS_LOKI} template variable this dashboard already defines but never used here -- works today only because that happens to be the datasource's real UID. (2) there is no `namespace` Loki label any more -- Alloy's current pipeline only produces __stream_shard__/instance/job/level/service_name; pod identity now lives in `instance` = \"namespace/podname:container\".", "gridPos": { "h": 12, "w": 5, "x": 0, "y": 38 }, "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "editorMode": "code", "expr": "sum(count_over_time({instance=~\"jmusicbot/.*\"}[24h])) or vector(0)", "queryType": "instant" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "none", "graphMode": "none", "justifyMode": "auto" }, "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] } },
+        { "id": 10, "type": "logs", "title": "jmusicbot and Release Notifier Logs (last 24h)", "description": "Raw application logs with a panel-level 24-hour lookback. JMusicBot is normally quiet after startup, so a five-minute dashboard range can correctly contain no lines; this panel intentionally keeps enough history visible. Image-pull/config failures appear in the Kubernetes panels above because a container that never starts cannot emit application logs.", "gridPos": { "h": 12, "w": 19, "x": 5, "y": 38 }, "timeFrom": "24h", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "editorMode": "code", "expr": "{instance=~\"jmusicbot/.*\"}", "queryType": "range", "maxLines": 2000 }], "options": { "showTime": true, "showLabels": true, "showCommonLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" }, "fieldConfig": { "defaults": {}, "overrides": [] } }
       ]
     }
   logs.json: |
     {
       "uid": "homelab-logs",
       "title": "Logs — Search & Severity",
-      "description": "Log exploration across every pod in the cluster. Filter by severity (the `level` label that Alloy's pipeline_stages extracts), by namespace/pod, and by free-text regex. The log-volume graph is broken down by level so an error spike is visible before you read a single line.",
+      "description": "Log exploration across every pod in the cluster. Filter by severity (the `level` label that Alloy extracts), by namespace/pod, and by free-text regex. The log-volume graph is broken down by level so an error spike is visible before you read a single line.",
       "tags": ["homelab", "k3s", "logs", "loki"],
       "timezone": "browser",
       "editable": true,
@@ -2557,13 +1918,24 @@ data:
             "skipUrlSync": false
           },
           {
+            "name": "DS_PROMETHEUS",
+            "label": "Prometheus",
+            "type": "datasource",
+            "query": "prometheus",
+            "current": {},
+            "hide": 2,
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false
+          },
+          {
             "name": "namespace",
             "label": "Namespace (app)",
-            "description": "Each app has its own namespace, so this doubles as the app selector: jmusicbot, pantry-bot, minecraft, observability, keel, kube-system.",
+            "description": "Each app has its own namespace, so this doubles as the app selector: jmusicbot, pantry-bot, minecraft, observability, kube-system, etc. FIXED 2026-09-21: Alloy's current log pipeline (observability/alloy-logs-home.yaml) does not promote a `namespace` Loki label at all -- verified live, /loki/api/v1/labels currently returns only __stream_shard__, instance, job, level, service_name. Every pod's identity now lives in one composite label, `instance` = \"namespace/podname:container\". Rather than guess at a static namespace list (which would drift, the same mistake apps.json made), this variable queries Prometheus's kube_pod_status_phase namespace label instead -- unaffected by the Loki change -- and the LogQL below matches it as an instance-prefix regex.",
             "type": "query",
-            "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-            "definition": "label_values(namespace)",
-            "query": { "label": "namespace", "refId": "LokiVariableQueryEditor-VariableQuery", "stream": "", "type": 1 },
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "definition": "label_values(kube_pod_status_phase, namespace)",
+            "query": { "qryType": 1, "query": "label_values(kube_pod_status_phase, namespace)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
             "refresh": 1,
             "includeAll": true,
             "allValue": ".+",
@@ -2575,14 +1947,15 @@ data:
           },
           {
             "name": "pod",
-            "label": "Pod",
+            "label": "Pod (instance = namespace/pod:container)",
+            "description": "FIXED 2026-09-21: there is no separate `pod` Loki label any more (see the namespace variable's description). This now lists the full `instance` label value -- \"namespace/podname:container\" -- scoped to the selected namespace(s), and the LogQL below matches it directly with instance=~\"$pod\" rather than a bare pod name.",
             "type": "query",
             "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-            "definition": "label_values({namespace=~\"$namespace\"}, pod)",
+            "definition": "label_values({instance=~\"($namespace)/.*\"}, instance)",
             "query": {
-              "label": "pod",
+              "label": "instance",
               "refId": "LokiVariableQueryEditor-VariableQuery",
-              "stream": "{namespace=~\"$namespace\"}",
+              "stream": "{instance=~\"($namespace)/.*\"}",
               "type": 1
             },
             "refresh": 2,
@@ -2645,7 +2018,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__range]))",
+              "expr": "sum(count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__range]))",
               "queryType": "instant",
               "instant": true,
               "legendFormat": "lines"
@@ -2680,7 +2053,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__range]))",
+              "expr": "sum(count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__range]))",
               "queryType": "instant",
               "instant": true,
               "legendFormat": "errors"
@@ -2721,7 +2094,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"warn\"} |~ \"(?i)$search\" [$__range]))",
+              "expr": "sum(count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=\"warn\"} |~ \"(?i)$search\" [$__range]))",
               "queryType": "instant",
               "instant": true,
               "legendFormat": "warnings"
@@ -2749,14 +2122,14 @@ data:
           "id": 4,
           "type": "stat",
           "title": "Unclassified lines (no level label)",
-          "description": "Streams where Alloy's pipeline_stages did not extract a level at all — LogQL matcher level=\"\". These lines are INVISIBLE to any severity filter, so a large number here means the severity filter is not to be trusted for that app and its Alloy pipeline needs a regex/json stage. Expect some from k8s system components.",
+          "description": "Streams where Alloy did not extract a level at all — LogQL matcher level=\"\". These lines are INVISIBLE to any severity filter, so a large number here means the severity filter is not to be trusted for that app and its parsing pipeline needs a regex/json stage. Expect some from k8s system components.",
           "gridPos": { "h": 5, "w": 5, "x": 15, "y": 1 },
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
           "targets": [
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "sum(count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"\"} |~ \"(?i)$search\" [$__range]))",
+              "expr": "sum(count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=\"\"} |~ \"(?i)$search\" [$__range]))",
               "queryType": "instant",
               "instant": true,
               "legendFormat": "unclassified"
@@ -2790,7 +2163,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "count(sum by (pod) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__range])))",
+              "expr": "count(sum by (pod) (count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__range])))",
               "queryType": "instant",
               "instant": true,
               "legendFormat": "pods"
@@ -2827,7 +2200,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "sum by (level) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__auto]))",
+              "expr": "sum by (level) (count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\" [$__auto]))",
               "queryType": "range",
               "legendFormat": "{{level}}"
             }
@@ -2883,23 +2256,23 @@ data:
           "id": 7,
           "type": "timeseries",
           "title": "Error & Warning Volume by Pod",
-          "description": "Which pod is producing the errors. Ignores the Severity variable on purpose.",
+          "description": "Which pod is producing the errors. Ignores the Severity variable on purpose. FIXED 2026-09-21: grouped by the `instance` label (namespace/pod:container) instead of `app_kubernetes_io_name`, which is not a Loki label -- Alloy's current discovery.relabel stage (observability/alloy-logs-home.yaml) does not promote any Kubernetes pod labels into Loki, only job/instance/service_name/level exist.",
           "gridPos": { "h": 9, "w": 10, "x": 14, "y": 7 },
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
           "targets": [
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "sum by (namespace, app_kubernetes_io_name) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__auto]))",
+              "expr": "sum by (instance) (count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__auto]))",
               "queryType": "range",
-              "legendFormat": "ERROR {{namespace}}/{{app_kubernetes_io_name}}"
+              "legendFormat": "ERROR {{instance}}"
             },
             {
               "refId": "B",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "sum by (namespace, app_kubernetes_io_name) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"warn\"} |~ \"(?i)$search\" [$__auto]))",
+              "expr": "sum by (instance) (count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=\"warn\"} |~ \"(?i)$search\" [$__auto]))",
               "queryType": "range",
-              "legendFormat": "warn {{namespace}}/{{app_kubernetes_io_name}}"
+              "legendFormat": "warn {{instance}}"
             }
           ],
           "options": {
@@ -2944,14 +2317,14 @@ data:
           "id": 8,
           "type": "logs",
           "title": "Logs (namespace + pod + severity + search)",
-          "description": "The full filter chain: {namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\". Click a line to expand its labels; use the label values there to narrow the variables above.",
+          "description": "The full filter chain: {instance=~\"($namespace)/.*\", instance=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\". Click a line to expand its labels; use the label values there to narrow the variables above.",
           "gridPos": { "h": 17, "w": 17, "x": 0, "y": 17 },
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
           "targets": [
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "{namespace=~\"$namespace\", pod=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\"",
+              "expr": "{instance=~\"($namespace)/.*\", instance=~\"$pod\", level=~\"$level\"} |~ \"(?i)$search\"",
               "queryType": "range",
               "maxLines": 2000
             }
@@ -2972,17 +2345,17 @@ data:
           "id": 9,
           "type": "bargauge",
           "title": "Top Error Producers (this range)",
-          "description": "topk(10) by error-line count. Ignores the Severity variable.",
+          "description": "topk(10) by error-line count. Ignores the Severity variable. Legend is the `instance` label (namespace/pod:container) -- see the Error & Warning Volume by Pod panel note for why this isn't app_kubernetes_io_name.",
           "gridPos": { "h": 17, "w": 7, "x": 17, "y": 17 },
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
           "targets": [
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "topk(10, sum by (namespace, app_kubernetes_io_name) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__range])))",
+              "expr": "topk(10, sum by (instance) (count_over_time({instance=~\"($namespace)/.*\", instance=~\"$pod\", level=\"error\"} |~ \"(?i)$search\" [$__range])))",
               "queryType": "instant",
               "instant": true,
-              "legendFormat": "{{namespace}}/{{app_kubernetes_io_name}}"
+              "legendFormat": "{{instance}}"
             }
           ],
           "options": {
@@ -3018,7 +2391,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "{namespace=~\"$namespace\", pod=~\"$pod\", level=\"error\"} |~ \"(?i)$search\"",
+              "expr": "{instance=~\"($namespace)/.*\", instance=~\"$pod\", level=\"error\"} |~ \"(?i)$search\"",
               "queryType": "range",
               "maxLines": 1000
             }
@@ -3046,7 +2419,7 @@ data:
       "timezone": "browser",
       "editable": true,
       "schemaVersion": 39,
-      "version": 1,
+      "version": 3,
       "refresh": "15s",
       "graphTooltip": 1,
       "time": { "from": "now-6h", "to": "now" },
@@ -3064,10 +2437,14 @@ data:
         { "id": 6, "type": "timeseries", "title": "Pod Memory vs Limit Over Time", "description": "Solid working set, dashed 8Gi limit, dotted 3Gi request, and 6Gi JVM heap ceiling reference.", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(container_memory_working_set_bytes{namespace=\"minecraft\", pod=~\"minecraft-.*\", container=\"minecraft\"})", "legendFormat": "working set" }, { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(kube_pod_container_resource_limits{namespace=\"minecraft\", pod=~\"minecraft-.*\", container=\"minecraft\", resource=\"memory\"})", "legendFormat": "LIMIT (8Gi)" }, { "refId": "C", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(kube_pod_container_resource_requests{namespace=\"minecraft\", pod=~\"minecraft-.*\", container=\"minecraft\", resource=\"memory\"})", "legendFormat": "request (3Gi)" }, { "refId": "D", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "vector(6442450944)", "legendFormat": "-Xmx6G heap ceiling" }], "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }, "fieldConfig": { "defaults": { "unit": "bytes", "min": 0, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false } }, "overrides": [] } },
         { "id": 7, "type": "timeseries", "title": "Players Online Over Time", "gridPos": { "h": 7, "w": 8, "x": 0, "y": 13 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_players_online", "legendFormat": "players" }], "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false, "calcs": [] }, "tooltip": { "mode": "single", "sort": "none" } }, "fieldConfig": { "defaults": { "min": 0, "decimals": 0, "color": { "mode": "fixed", "fixedColor": "green" }, "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 40, "showPoints": "never", "spanNulls": false } }, "overrides": [] } },
         { "id": 8, "type": "timeseries", "title": "CPU Usage vs Limit (cores)", "description": "cAdvisor CPU usage; request is 2 cores and limit is 6 cores.", "gridPos": { "h": 7, "w": 8, "x": 8, "y": 13 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"minecraft\", pod=~\"minecraft-.*\", container=\"minecraft\"}[5m]))", "legendFormat": "usage" }, { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(kube_pod_container_resource_limits{namespace=\"minecraft\", pod=~\"minecraft-.*\", container=\"minecraft\", resource=\"cpu\"})", "legendFormat": "LIMIT (6 cores)" }], "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } }, "fieldConfig": { "defaults": { "unit": "none", "min": 0, "decimals": 2, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "cores" } }, "overrides": [] } },
-        { "id": 9, "type": "timeseries", "title": "World Size on Disk", "description": "minecraft_world_size_bytes is intentionally collected every ten minutes to avoid adding HDD load by walking region files on every scrape.", "gridPos": { "h": 7, "w": 8, "x": 16, "y": 13 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_world_size_bytes", "legendFormat": "{{world}}" }], "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } }, "fieldConfig": { "defaults": { "unit": "bytes", "min": 0, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false } }, "overrides": [] } },
-        { "type": "row", "title": "Kubernetes lifecycle and logs", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 }, "panels": [] },
-        { "id": 10, "type": "stat", "title": "Pod Restarts (24h)", "description": "Minecraft intentionally has no liveness probe because restarting a wedged JVM mid-tick risks world corruption. A restart means an actual process exit or OOMKill.", "gridPos": { "h": 5, "w": 6, "x": 0, "y": 21 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"minecraft\"}[24h])) or vector(0)", "legendFormat": "restarts" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" }, "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "#EAB839", "value": 1 }, { "color": "red", "value": 2 }] } }, "overrides": [] } },
-        { "id": 11, "type": "logs", "title": "Minecraft Server Logs", "description": "Paper/Log4j logs with severity extracted by Alloy. Use the Logs dashboard for full cross-workload filtering.", "gridPos": { "h": 10, "w": 18, "x": 6, "y": 21 }, "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "{namespace=\"minecraft\"}", "maxLines": 1000 }], "options": { "showTime": true, "showLabels": false, "showCommonLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" }, "fieldConfig": { "defaults": {}, "overrides": [] } }
+        { "id": 9, "type": "timeseries", "title": "World Size on Disk", "description": "minecraft_world_size_bytes is intentionally collected every ten minutes to avoid adding HDD load by walking region files on every scrape. KNOWN GAP as of 2026-09-21: verified live against Prometheus, this metric currently has zero samples in the full 7-day retention window. Per the exporter's own header comment, the world moved to a local-path PVC and the host directory is now resolved from the PV's claimRef rather than a constant path; poll_world_size() in scripts/minecraft_exporter.py fails soft (logs a warning once, never calls .set()) if that resolution or a filesystem-permission check fails, so the series simply never appears rather than reporting zero. This is a real exporter-side gap, not a broken dashboard query -- see the follow-up issue.", "gridPos": { "h": 7, "w": 8, "x": 16, "y": 13 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_world_size_bytes", "legendFormat": "{{world}}" }], "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } }, "fieldConfig": { "defaults": { "unit": "bytes", "min": 0, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false } }, "overrides": [] } },
+        { "type": "row", "title": "Auto-update tracker", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 }, "panels": [] },
+        { "id": 12, "type": "table", "title": "Build on Disk", "description": "minecraft_update_current_build is an info-style gauge (always 1) labeled with the version/build currently on disk per the exporter's STATE_FILE.", "gridPos": { "h": 5, "w": 8, "x": 0, "y": 21 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_update_current_build", "format": "table", "instant": true }], "transformations": [{ "id": "organize", "options": { "excludeByName": { "Time": true, "Value": true, "__name__": true, "instance": true, "job": true }, "renameByName": { "version": "Version", "build": "Build" } } }], "options": { "showHeader": true, "cellHeight": "sm" }, "fieldConfig": { "defaults": {}, "overrides": [] } },
+        { "id": 13, "type": "stat", "title": "Last Update Attempt", "description": "Time since the last auto-update run, whether or not it shipped a new build.", "gridPos": { "h": 5, "w": 8, "x": 8, "y": 21 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "time() - minecraft_update_last_attempt_timestamp_seconds", "legendFormat": "since last attempt" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name", "colorMode": "value" }, "fieldConfig": { "defaults": { "unit": "dtdurations", "decimals": 0 }, "overrides": [] } },
+        { "id": 14, "type": "stat", "title": "Last Update Result", "description": "1 if the most recent auto-update run completed without error, including a no-op 'nothing new' result; 0 if it failed. Does not by itself mean a new build shipped -- see the Build on Disk panel for that.", "gridPos": { "h": 5, "w": 8, "x": 16, "y": 21 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_update_last_success", "legendFormat": "last run" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "none" }, "fieldConfig": { "defaults": { "mappings": [{ "type": "value", "options": { "0": { "text": "FAILED", "color": "red", "index": 0 }, "1": { "text": "OK", "color": "green", "index": 1 } } }], "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] } },
+        { "type": "row", "title": "Kubernetes lifecycle and logs", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 26 }, "panels": [] },
+        { "id": 10, "type": "stat", "title": "Pod Restarts (24h)", "description": "Minecraft intentionally has no liveness probe because restarting a wedged JVM mid-tick risks world corruption. A restart means an actual process exit or OOMKill.", "gridPos": { "h": 5, "w": 6, "x": 0, "y": 27 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"minecraft\"}[24h])) or vector(0)", "legendFormat": "restarts" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" }, "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "#EAB839", "value": 1 }, { "color": "red", "value": 2 }] } }, "overrides": [] } },
+        { "id": 11, "type": "logs", "title": "Minecraft Server Logs", "description": "Paper/Log4j logs with severity extracted by Alloy. Use the Logs dashboard for full cross-workload filtering. FIXED 2026-09-21: Alloy's current log pipeline does not promote a `namespace` Loki label -- verified live, only __stream_shard__/instance/job/level/service_name exist. Pod identity now lives entirely in `instance` = \"namespace/podname:container\", so this matches an instance prefix instead.", "gridPos": { "h": 10, "w": 18, "x": 6, "y": 27 }, "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "{instance=~\"minecraft/.*\"}", "maxLines": 1000 }], "options": { "showTime": true, "showLabels": false, "showCommonLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" }, "fieldConfig": { "defaults": {}, "overrides": [] } }
       ]
     }
   overview.json: |
@@ -3079,12 +2456,13 @@ data:
       "timezone": "browser",
       "editable": true,
       "schemaVersion": 39,
-      "version": 1,
+      "version": 3,
       "refresh": "15s",
       "graphTooltip": 1,
       "time": { "from": "now-6h", "to": "now" },
       "links": [
         { "type": "link", "title": "Main PC — Bare-Metal Health", "dashboard": "homelab-host-pc", "targetBlank": true },
+        { "type": "link", "title": "Greenie's Main PC — Health", "dashboard": "greenies-main-pc-health", "targetBlank": true },
         { "type": "link", "title": "Host Health / k3s Control Plane", "dashboard": "homelab-cluster-overview", "targetBlank": true },
         { "type": "link", "title": "Pods & Workloads", "dashboard": "homelab-pods-workloads", "targetBlank": true },
         { "type": "link", "title": "Logs", "dashboard": "homelab-logs", "targetBlank": true },
@@ -3092,7 +2470,8 @@ data:
         { "type": "link", "title": "jmusicbot", "dashboard": "homelab-jmusicbot", "targetBlank": true },
         { "type": "link", "title": "Pantry Bot", "dashboard": "homelab-pantry-bot", "targetBlank": true },
         { "type": "link", "title": "Pantry Bot Usage", "dashboard": "homelab-pantry-bot-usage", "targetBlank": true },
-        { "type": "link", "title": "Cloudflare Tunnel", "dashboard": "homelab-cloudflared", "targetBlank": true }
+        { "type": "link", "title": "Cloudflare Tunnel", "dashboard": "homelab-cloudflared", "targetBlank": true },
+        { "type": "link", "title": "Site & Service Health", "dashboard": "homelab-site-service-health", "targetBlank": true }
       ],
       "templating": {
         "list": [
@@ -3763,17 +3142,17 @@ data:
         {
           "id": 12,
           "type": "timeseries",
-          "title": "Error Rate by Namespace",
-          "description": "Error-line volume per namespace (Alloy extracts the level label). A red block here that lines up with a crash-loop bar above is the 'what actually broke' pairing for that outage.",
+          "title": "Error Rate by Pod",
+          "description": "Error-line volume per pod (Alloy extracts the level label). A red block here that lines up with a crash-loop bar above is the 'what actually broke' pairing for that outage. FIXED 2026-09-21: there is no `namespace` Loki label any more -- Alloy's current pipeline only produces __stream_shard__/instance/job/level/service_name (verified live). Grouping by (namespace) silently collapsed every namespace into one bucket instead of erroring, which made this look fine at a glance while quietly not doing its job. Now grouped by `instance` (namespace/pod:container).",
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 43 },
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
           "targets": [
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "sum by (namespace) (count_over_time({level=\"error\"} [$__auto]))",
+              "expr": "sum by (instance) (count_over_time({level=\"error\"} [$__auto]))",
               "queryType": "range",
-              "legendFormat": "{{namespace}}"
+              "legendFormat": "{{instance}}"
             }
           ],
           "options": {
@@ -3803,17 +3182,17 @@ data:
           "id": 13,
           "type": "bargauge",
           "title": "Top Error Sources (this range)",
-          "description": "topk(10) by error-line count in the selected time range. Same query shape as Logs → Top Error Producers.",
+          "description": "topk(10) by error-line count in the selected time range. Same query shape as Logs → Top Error Producers. FIXED 2026-09-21: grouped by `instance` (namespace/pod:container) instead of (namespace, app_kubernetes_io_name) -- neither is a current Loki label, see the Error Rate by Pod panel note.",
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 43 },
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
           "targets": [
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "topk(10, sum by (namespace, app_kubernetes_io_name) (count_over_time({level=\"error\"} [$__range])))",
+              "expr": "topk(10, sum by (instance) (count_over_time({level=\"error\"} [$__range])))",
               "queryType": "instant",
               "instant": true,
-              "legendFormat": "{{namespace}}/{{app_kubernetes_io_name}}"
+              "legendFormat": "{{instance}}"
             }
           ],
           "options": {
@@ -3872,7 +3251,7 @@ data:
     {
       "uid": "homelab-pantry-bot-usage",
       "title": "Pantry Bot — Usage",
-      "description": "Live HA health and usage. Application counters are unavailable until the deployed HA images expose /metrics; the operational panels below use kube-state-metrics and cAdvisor.",
+      "description": "Live HA health and usage. Application counters are scraped from the HA API Service at /metrics; operational panels use kube-state-metrics and cAdvisor. REBUILT 2026-09-21: the previous version of this dashboard queried pantry_bot_engagement_actions_total, pantry_bot_engagement_failures_total, pantry_bot_boss_damage_total, pantry_bot_boss_outcomes_total, pantry_bot_messages_total, and pantry_bot_extension_requests_total. A full enumeration of every metric name currently in this Prometheus (/api/v1/label/__name__/values), cross-checked against a 7-day count_over_time() for each of those six names, found zero samples for any of them anywhere in the retention window -- not 'currently down', genuinely absent. This lines up with the pantry-bot monolith having been split into dedicated microservices (worker/dispatcher/gateway/api/site, all ~10 days old) around the same time; the old engagement/boss-battle counters were not carried forward under those names. The three custom counters that do exist today -- pantry_bot_commands_total, pantry_bot_runtime_claims_total, pantry_bot_runtime_completions_total -- are what this dashboard now uses. If a future PantryBot release restores richer engagement/boss-battle metrics under new names, extend this dashboard rather than re-adding the old expressions.",
       "tags": [
         "homelab",
         "twitch",
@@ -3882,7 +3261,7 @@ data:
       "timezone": "browser",
       "editable": true,
       "schemaVersion": 39,
-      "version": 1,
+      "version": 2,
       "refresh": "15s",
       "graphTooltip": 1,
       "time": {
@@ -3907,672 +3286,160 @@ data:
       "panels": [
         {
           "type": "row",
-          "title": "At a glance — what the community is doing",
+          "title": "Current runtime activity",
           "collapsed": false,
-          "gridPos": {
-            "h": 1,
-            "w": 24,
-            "x": 0,
-            "y": 0
-          },
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
           "panels": []
         },
         {
           "id": 1,
           "type": "stat",
-          "title": "Successful actions (1h)",
-          "description": "Committed engagement actions across chat, the Twitch Extension, and system events in the last hour. This is action volume, not a distinct participant count.",
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 0,
-            "y": 1
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "title": "Runtime claims (1h)",
+          "description": "pantry_bot_runtime_claims_total: work items (kind=event/outbox) claimed off a lane for processing in the last hour, summed across every lane (worker, twitch.chat, twitch.channel_points, twitch.moderation).",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "expr": "sum(increase(pantry_bot_engagement_actions_total[1h])) or vector(0)",
-              "legendFormat": "actions"
-            }
+            { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(pantry_bot_runtime_claims_total[1h])) or vector(0)", "legendFormat": "claims" }
           ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "orientation": "auto",
-            "textMode": "value_and_name",
-            "colorMode": "background",
-            "graphMode": "none",
-            "justifyMode": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0,
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  },
-                  {
-                    "color": "green",
-                    "value": 1
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          }
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "value_and_name", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" },
+          "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] }
         },
         {
           "id": 2,
           "type": "stat",
-          "title": "Rejected actions (1h)",
-          "description": "Cooldown, expired, muted, or otherwise rejected engagement actions in the last hour.",
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 6,
-            "y": 1
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "title": "Runtime completions (1h)",
+          "description": "pantry_bot_runtime_completions_total for the same lanes. Persistently trailing claims by a wide margin across a range longer than the lane's expected processing time is the honest signal of a stuck queue.",
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "expr": "sum(increase(pantry_bot_engagement_failures_total[1h])) or vector(0)",
-              "legendFormat": "rejected"
-            }
+            { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(pantry_bot_runtime_completions_total[1h])) or vector(0)", "legendFormat": "completions" }
           ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "orientation": "auto",
-            "textMode": "value_and_name",
-            "colorMode": "background",
-            "graphMode": "none",
-            "justifyMode": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0,
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "orange",
-                    "value": 5
-                  },
-                  {
-                    "color": "red",
-                    "value": 20
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          }
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "value_and_name", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" },
+          "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] }
         },
         {
           "id": 3,
           "type": "stat",
-          "title": "Boss damage (24h)",
-          "description": "Boss damage recorded by the legacy donation paths in the last 24 hours; community attack activity is shown in the engagement action chart.",
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 12,
-            "y": 1
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "title": "Chat commands (1h)",
+          "description": "pantry_bot_commands_total: successfully handled chat commands (gift, grab, pantry, pantrycommands, snack, steal, ...) in the last hour, from the chat-worker service.",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "expr": "sum(increase(pantry_bot_boss_damage_total[24h])) or vector(0)",
-              "legendFormat": "damage"
-            }
+            { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(pantry_bot_commands_total[1h])) or vector(0)", "legendFormat": "commands" }
           ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "orientation": "auto",
-            "textMode": "value_and_name",
-            "colorMode": "background",
-            "graphMode": "none",
-            "justifyMode": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0
-            },
-            "overrides": []
-          }
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "value_and_name", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" },
+          "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] }
         },
         {
           "id": 4,
-          "type": "stat",
-          "title": "Boss outcomes (7d)",
-          "description": "Resolved legacy boss outcomes in the last seven days. Community outcomes are persisted in SQLite; this counter currently reports the legacy defeated/expired paths.",
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 18,
-            "y": 1
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "type": "bargauge",
+          "title": "Outstanding claims by lane (all-time claims minus completions)",
+          "description": "Both are monotonic counters, so claims-total minus completions-total approximates the current backlog per lane assuming each claim eventually completes exactly once. A counter reset (pod restart) briefly understates this; treat a single dip as noise and a sustained climb as a real backlog.",
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "expr": "sum(increase(pantry_bot_boss_outcomes_total{outcome=\"defeated\"}[7d]))",
-              "legendFormat": "defeated"
-            },
-            {
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "expr": "sum(increase(pantry_bot_boss_outcomes_total{outcome=\"expired\"}[7d]))",
-              "legendFormat": "expired"
-            }
+            { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (lane) (pantry_bot_runtime_claims_total) - on (lane) sum by (lane) (pantry_bot_runtime_completions_total)", "legendFormat": "{{lane}}" }
           ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "orientation": "horizontal",
-            "textMode": "value_and_name",
-            "colorMode": "none",
-            "graphMode": "none",
-            "justifyMode": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0
-            },
-            "overrides": []
-          }
+          "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+          "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 5 }, { "color": "red", "value": 25 }] } }, "overrides": [] }
         },
         {
           "type": "row",
-          "title": "Participation flow",
+          "title": "Runtime event flow (claims vs. completions, by lane)",
           "collapsed": false,
-          "gridPos": {
-            "h": 1,
-            "w": 24,
-            "x": 0,
-            "y": 5
-          },
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
           "panels": []
         },
         {
           "id": 5,
           "type": "timeseries",
-          "title": "Engagement actions by source (15m rate)",
-          "description": "Successful actions per second split between chat, the Twitch Extension, and system events. Query SQLite for distinct participants and first-time participation.",
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 6
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "title": "Runtime claims by lane (15m rate)",
+          "description": "kind=event is the chat-worker's internal event queue; kind=outbox with a twitch.* lane is the dispatcher's outbound-message outbox per Twitch API surface.",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "expr": "sum by (source) (rate(pantry_bot_engagement_actions_total[15m]))",
-              "legendFormat": "{{source}}"
-            }
+            { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (kind, lane) (rate(pantry_bot_runtime_claims_total[15m]))", "legendFormat": "{{kind}}/{{lane}}" }
           ],
-          "options": {
-            "legend": {
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "decimals": 3,
-              "min": 0,
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 1,
-                "fillOpacity": 12,
-                "showPoints": "never",
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          }
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "fieldConfig": { "defaults": { "unit": "ops", "decimals": 3, "min": 0, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 12, "showPoints": "never", "spanNulls": false } }, "overrides": [] }
         },
         {
           "id": 6,
           "type": "timeseries",
-          "title": "Actions by type (15m rate)",
-          "description": "Successful action mix: attacks, braces, rally support, duel actions, and other registered engagement events.",
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 6
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "title": "Runtime completions by lane (15m rate)",
+          "description": "Same lanes as the claims panel. A lane whose completion rate falls well below its claim rate for a sustained period is backing up.",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "expr": "sum by (action) (rate(pantry_bot_engagement_actions_total[15m]))",
-              "legendFormat": "{{action}}"
-            }
+            { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (kind, lane) (rate(pantry_bot_runtime_completions_total[15m]))", "legendFormat": "{{kind}}/{{lane}}" }
           ],
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true,
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "decimals": 3,
-              "min": 0,
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 1,
-                "fillOpacity": 12,
-                "showPoints": "never",
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 7,
-          "type": "timeseries",
-          "title": "Bot messages by status (15m rate)",
-          "description": "Outbound bot messages per second split into sent and failed. Daily totals are also persisted in SQLite.",
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 15
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "expr": "sum by (status) (rate(pantry_bot_messages_total[15m]))",
-              "legendFormat": "{{status}}"
-            }
-          ],
-          "options": {
-            "legend": {
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "decimals": 3,
-              "min": 0,
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 1,
-                "fillOpacity": 12,
-                "showPoints": "never",
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 8,
-          "type": "timeseries",
-          "title": "Extension requests by route (15m rate)",
-          "description": "Requests served by the Twitch Extension API, split by route. This includes state reads and action requests.",
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 15
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "expr": "sum by (route) (rate(pantry_bot_extension_requests_total[15m]))",
-              "legendFormat": "{{route}}"
-            }
-          ],
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true,
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "decimals": 3,
-              "min": 0,
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 1,
-                "fillOpacity": 12,
-                "showPoints": "never",
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          }
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "fieldConfig": { "defaults": { "unit": "ops", "decimals": 3, "min": 0, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 12, "showPoints": "never", "spanNulls": false } }, "overrides": [] }
         },
         {
           "type": "row",
           "title": "Chat command activity",
           "collapsed": false,
-          "gridPos": {
-            "h": 1,
-            "w": 24,
-            "x": 0,
-            "y": 24
-          },
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
           "panels": []
         },
         {
-          "id": 9,
+          "id": 7,
           "type": "timeseries",
           "title": "Commands by name (15m rate)",
-          "description": "Successfully handled chat commands, split by command name. This measures command activity separately from free engagement actions.",
-          "gridPos": {
-            "h": 8,
-            "w": 24,
-            "x": 0,
-            "y": 25
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "description": "Successfully handled chat commands, split by command name, from the chat-worker service.",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 15 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "expr": "sum by (command) (rate(pantry_bot_commands_total[15m]))",
-              "legendFormat": "{{command}}"
-            }
+            { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (command) (rate(pantry_bot_commands_total[15m]))", "legendFormat": "{{command}}" }
           ],
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true,
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "decimals": 3,
-              "min": 0,
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 1,
-                "fillOpacity": 12,
-                "showPoints": "never",
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          }
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "fieldConfig": { "defaults": { "unit": "ops", "decimals": 3, "min": 0, "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 12, "showPoints": "never", "spanNulls": false } }, "overrides": [] }
         },
         {
           "type": "row",
           "title": "HA service health (live)",
-          "gridPos": {
-            "h": 1,
-            "w": 24,
-            "x": 0,
-            "y": 34
-          },
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
           "panels": []
         },
         {
-          "id": 10,
+          "id": 8,
           "type": "stat",
           "title": "Ready PantryBot pods",
-          "description": "Current ready pods in the pantry-bot namespace.",
-          "gridPos": {
-            "h": 4,
-            "w": 8,
-            "x": 0,
-            "y": 35
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "description": "Current ready pods in the pantry-bot namespace, across every microservice (worker, dispatcher, gateway, api, sites, cloudflared, postgres).",
+          "gridPos": { "h": 4, "w": 8, "x": 0, "y": 24 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "targets": [
-            {
-              "refId": "A",
-              "expr": "sum(kube_pod_status_ready{namespace=\"pantry-bot\",condition=\"true\"})",
-              "legendFormat": "ready"
-            }
+            { "refId": "A", "expr": "sum(kube_pod_status_ready{namespace=\"pantry-bot\",condition=\"true\"})", "legendFormat": "ready" }
           ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "textMode": "value_and_name"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short"
-            },
-            "overrides": []
-          }
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
         },
         {
-          "id": 11,
+          "id": 9,
           "type": "timeseries",
           "title": "PantryBot container restarts",
           "description": "Restarts in the pantry-bot namespace; useful during failover and recovery.",
-          "gridPos": {
-            "h": 8,
-            "w": 8,
-            "x": 8,
-            "y": 35
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "targets": [
-            {
-              "refId": "A",
-              "expr": "sum by (pod, container) (increase(kube_pod_container_status_restarts_total{namespace=\"pantry-bot\"}[1h]))",
-              "legendFormat": "{{pod}}/{{container}}"
-            }
+            { "refId": "A", "expr": "sum by (pod, container) (increase(kube_pod_container_status_restarts_total{namespace=\"pantry-bot\"}[1h]))", "legendFormat": "{{pod}}/{{container}}" }
           ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short"
-            },
-            "overrides": []
-          }
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
         },
         {
-          "id": 12,
+          "id": 10,
           "type": "timeseries",
           "title": "PantryBot CPU and memory",
           "description": "Current resource use for pantry-bot pods from kubelet cAdvisor.",
-          "gridPos": {
-            "h": 8,
-            "w": 8,
-            "x": 16,
-            "y": 35
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "targets": [
-            {
-              "refId": "A",
-              "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"pantry-bot\",container!=\"\",container!=\"POD\"}[5m]))",
-              "legendFormat": "{{pod}} CPU"
-            },
-            {
-              "refId": "B",
-              "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"pantry-bot\",container!=\"\",container!=\"POD\"})",
-              "legendFormat": "{{pod}} memory"
-            }
+            { "refId": "A", "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"pantry-bot\",container!=\"\",container!=\"POD\"}[5m]))", "legendFormat": "{{pod}} CPU" },
+            { "refId": "B", "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"pantry-bot\",container!=\"\",container!=\"POD\"})", "legendFormat": "{{pod}} memory" }
           ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short"
-            },
-            "overrides": []
-          }
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
         }
       ]
     }
@@ -4585,7 +3452,7 @@ data:
       "timezone": "browser",
       "editable": true,
       "schemaVersion": 39,
-      "version": 2,
+      "version": 3,
       "refresh": "15s",
       "graphTooltip": 1,
       "time": { "from": "now-6h", "to": "now" },
@@ -4615,15 +3482,15 @@ data:
           },
           {
             "name": "pod",
-            "label": "Pod",
-            "description": "Drills into one pod when a Deployment briefly has two during a Recreate rollout. Both containers (bot, cloudflared) share the pod's namespace label.",
+            "label": "Pod (instance = namespace/pod:container)",
+            "description": "Drills into one pod when a Deployment briefly has two during a Recreate rollout. FIXED 2026-09-21: there is no `namespace` or `pod` Loki label any more -- Alloy's current pipeline (observability/alloy-logs-home.yaml) only produces __stream_shard__/instance/job/level/service_name, verified live. Every pod's identity now lives in one composite label, `instance` = \"namespace/podname:container\" -- e.g. pantry-bot/pantry-chat-worker-xxxx:worker. This variable lists the full instance values under the pantry-bot namespace, and the LogQL below matches instance=~\"$pod\" directly.",
             "type": "query",
             "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-            "definition": "label_values({namespace=\"pantry-bot\"}, pod)",
+            "definition": "label_values({instance=~\"pantry-bot/.*\"}, instance)",
             "query": {
-              "label": "pod",
+              "label": "instance",
               "refId": "LokiVariableQueryEditor-VariableQuery",
-              "stream": "{namespace=\"pantry-bot\"}",
+              "stream": "{instance=~\"pantry-bot/.*\"}",
               "type": 1
             },
             "refresh": 2,
@@ -4776,7 +3643,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "sum(count_over_time({namespace=\"pantry-bot\", pod=~\"$pod\", level=\"error\"} [$__range]))",
+              "expr": "sum(count_over_time({instance=~\"$pod\", level=\"error\"} [$__range]))",
               "queryType": "instant",
               "instant": true,
               "legendFormat": "errors"
@@ -4934,7 +3801,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "sum by (level) (count_over_time({namespace=\"pantry-bot\", pod=~\"$pod\", level=~\"$level\"} [$__auto]))",
+              "expr": "sum by (level) (count_over_time({instance=~\"$pod\", level=~\"$level\"} [$__auto]))",
               "queryType": "range",
               "legendFormat": "{{level}}"
             }
@@ -4990,17 +3857,17 @@ data:
           "id": 8,
           "type": "bargauge",
           "title": "Top Error Sources (this range)",
-          "description": "Always error-scoped (ignores the Severity variable, honors the Pod variable). topk(5) by pod/container of count_over_time(level=\"error\") — with only bot + cloudflared in the namespace, a bar here means a specific container is erroring. See the ERROR stat at the top for the total.",
+          "description": "Always error-scoped (ignores the Severity variable, honors the Pod variable). topk(5) by instance (namespace/pod:container) of count_over_time(level=\"error\") — pantry-bot has split into multiple microservices (worker, dispatcher, gateway, api, sites, postgres, cloudflared), so a bar here means a specific service/container is erroring. See the ERROR stat at the top for the total. FIXED 2026-09-21: was grouped by (pod, container), neither of which is a Loki label any more -- see the Pod variable's description.",
           "gridPos": { "h": 9, "w": 12, "x": 12, "y": 16 },
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
           "targets": [
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "topk(5, sum by (pod, container) (count_over_time({namespace=\"pantry-bot\", pod=~\"$pod\", level=\"error\"} [$__range])))",
+              "expr": "topk(5, sum by (instance) (count_over_time({instance=~\"$pod\", level=\"error\"} [$__range])))",
               "queryType": "instant",
               "instant": true,
-              "legendFormat": "{{pod}}/{{container}}"
+              "legendFormat": "{{instance}}"
             }
           ],
           "options": {
@@ -5029,14 +3896,14 @@ data:
           "id": 9,
           "type": "logs",
           "title": "PantryBot HA Logs",
-          "description": "All pantry-bot logs, filtered by the Pod and Severity variables: {namespace=\"pantry-bot\", pod=~\"$pod\", level=~\"$level\"}. Node.js console format for the bot container; cloudflared has its own plain-text format. Click a line to expand its labels.",
+          "description": "All pantry-bot logs, filtered by the Pod and Severity variables: {instance=~\"$pod\", level=~\"$level\"}. Node.js console format for the bot container; cloudflared has its own plain-text format. Click a line to expand its labels.",
           "gridPos": { "h": 13, "w": 24, "x": 0, "y": 25 },
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
           "targets": [
             {
               "refId": "A",
               "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-              "expr": "{namespace=\"pantry-bot\", pod=~\"$pod\", level=~\"$level\"}",
+              "expr": "{instance=~\"$pod\", level=~\"$level\"}",
               "queryType": "range",
               "maxLines": 2000
             }
@@ -6068,6 +4935,44 @@ data:
             "overrides": []
           }
         }
+      ]
+    }
+  site-service-health.json: |
+    {
+      "uid": "homelab-site-service-health",
+      "title": "Site & Service Health — Home / Oracle / Canada",
+      "description": "Single-glance view of the PantryBot multi-site failover project's three sites (tracked separately in issue #191 / pantry-bot#147 -- this dashboard only consumes signals that project already exposes, it does not implement any of it). Built 2026-09-21 by directly checking, live, what this Prometheus can and cannot currently answer: Home is this k3s cluster and is fully instrumented via kube-state-metrics/cAdvisor plus the per-microservice /metrics scrape jobs. Oracle currently has NO presence in this Prometheus at all -- no site=\"oracle\" label exists anywhere (verified via /api/v1/label/site/values) -- so every 'is Oracle up' question is answered honestly as unknown, not faked. Canada has exactly one scrape target defined (job=canada-pantry-bot-api, role=recovery, tunnelled to this host's 192.168.40.208:13101) and it is not currently returning fresh samples; there is no Alloy/windows_exporter-style host telemetry for Canada the way Greenie's PC has. The failover-witness service's own /metrics (failover_witness_lease_active, failover_witness_lease_epoch) is also not currently scraped by this Prometheus -- a scrape job for it exists in observability/prometheus-config.yaml but has not been deployed to the live ConfigMap as of this audit -- so this dashboard cannot show which site currently holds the fencing lease either. Where the answer is 'unknown from here', this dashboard says so instead of omitting the question.",
+      "tags": ["homelab", "sites", "failover", "pantry-bot", "health"],
+      "timezone": "browser",
+      "editable": true,
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "graphTooltip": 1,
+      "time": { "from": "now-6h", "to": "now" },
+      "templating": { "list": [
+        { "name": "DS_PROMETHEUS", "label": "Prometheus", "type": "datasource", "query": "prometheus", "current": {}, "hide": 0, "refresh": 1, "regex": "", "skipUrlSync": false }
+      ] },
+      "panels": [
+        { "type": "row", "title": "Home (this k3s cluster)", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "panels": [] },
+        { "id": 1, "type": "stat", "title": "Home Nodes Ready", "description": "Ready condition across every node kube-state-metrics knows about in this cluster (not hardcoded to one node name -- this cluster has had a second node, chasebot, come and go).", "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [
+            { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(kube_node_status_condition{condition=\"Ready\", status=\"true\"})", "legendFormat": "ready" },
+            { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "count(kube_node_status_condition{condition=\"Ready\"})", "legendFormat": "total" }
+          ], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "horizontal", "textMode": "value_and_name", "colorMode": "none", "graphMode": "none", "justifyMode": "auto" }, "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] } },
+        { "id": 2, "type": "table", "title": "PantryBot Microservices Up (Home)", "description": "up{} for every pantry-bot-* scrape job at site=\"home\" (api, gateway, dispatcher, worker). 0/no-row means that service's /metrics endpoint is not responding right now -- during an active failover rehearsal or a genuine incident this is expected to show 0s; cross-check against kubectl / the Pantry Bot dashboards before treating it as a surprise.", "gridPos": { "h": 5, "w": 12, "x": 6, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "up{job=~\"pantry-bot-.*\", site=\"home\"}", "format": "table", "instant": true }], "transformations": [{ "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "instance": true, "site": true }, "renameByName": { "job": "Service", "role": "Role", "Value": "Up" } } }], "options": { "showHeader": true, "cellHeight": "sm" }, "fieldConfig": { "defaults": { "custom": { "cellOptions": { "type": "color-background" } }, "mappings": [{ "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }] }, "overrides": [] } },
+        { "id": 3, "type": "stat", "title": "Ready PantryBot Pods (Home)", "description": "Across every pantry-bot microservice, including cloudflared and postgres.", "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(kube_pod_status_ready{namespace=\"pantry-bot\", condition=\"true\"})", "legendFormat": "ready" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none" }, "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] } },
+        { "id": 4, "type": "stat", "title": "Postgres Pod Present (Home) — name-based, not authoritative", "description": "Counts pods in the pantry-bot namespace whose name starts with 'postgres-'. This tells you a Postgres pod is currently scheduled at Home; it does NOT tell you whether it is primary or a replica, or currently healthy -- Postgres StatefulSet/pod names have been renamed multiple times during the failover project, and no primary/replica role is currently exposed as a Prometheus label (checked kube_pod_labels for a pantrybot.postgres/role-style label; none exists as of this audit). Use the PantryBot ops runbook or the witness's own state for an authoritative answer.", "gridPos": { "h": 5, "w": 6, "x": 0, "y": 6 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "count(kube_pod_status_phase{namespace=\"pantry-bot\", pod=~\"postgres-.*\", phase=\"Running\"}) or vector(0)", "legendFormat": "postgres pods running" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none" }, "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] } },
+
+        { "type": "row", "title": "Oracle", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 11 }, "panels": [] },
+        { "id": 5, "type": "text", "title": "Oracle is not instrumented into this Prometheus", "gridPos": { "h": 4, "w": 24, "x": 0, "y": 12 }, "options": { "mode": "markdown", "content": "**Verified live on 2026-09-21**: `label_values(up, site)` returns only `canada`, `home`, and `windows-remote` -- there is no `oracle` site anywhere in this Prometheus's series. Oracle's k3s cluster is not federated, remote-written, or otherwise scraped into this instance, so **no panel here can honestly answer whether Oracle is up**. If/when Oracle gains a scrape or remote-write path into this Prometheus (federation, an Alloy forwarder, or a direct scrape job with `site=\"oracle\"`), add real panels here instead of a placeholder. Until then, check Oracle directly or via whatever the multi-site failover project (#191 / pantry-bot#147) already uses for that." } },
+
+        { "type": "row", "title": "Canada", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 }, "panels": [] },
+        { "id": 6, "type": "stat", "title": "Canada Recovery Endpoint Reachable", "description": "up{job=\"canada-pantry-bot-api\"}. This is a single tunnelled scrape target (role=\"recovery\", reached via 192.168.40.208:13101, i.e. proxied back through the Home host) for one PantryBot API surface at Canada -- it is not a general Canada host-up signal. As of this audit it has no fresh samples (target not currently reporting); NO DATA here means 'not currently scraping successfully', not necessarily 'Canada is down'.", "gridPos": { "h": 5, "w": 8, "x": 0, "y": 17 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "up{job=\"canada-pantry-bot-api\"}", "legendFormat": "canada recovery api" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "none" }, "fieldConfig": { "defaults": { "noValue": "NOT REPORTING", "mappings": [{ "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }], "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] } },
+        { "id": 7, "type": "text", "title": "No Canada host telemetry", "gridPos": { "h": 5, "w": 16, "x": 8, "y": 17 }, "options": { "mode": "markdown", "content": "Canada is a Windows/Docker host outside Kubernetes. Greenie's Main PC proves the pattern for getting a Windows host's own health (CPU/memory/disk/GPU) into this Prometheus via Grafana Alloy remote-write (`site=\"windows-remote\"`, see the Greenie's Main PC — Health dashboard). **As of this audit, Canada has no equivalent path wired up** -- the only thing this Prometheus knows about Canada is the single `canada-pantry-bot-api` recovery-role scrape target above, which speaks to one application endpoint, not host health. If Canada host-level monitoring is wanted, the fastest route is standing up the same Alloy remote-write pattern already proven for Greenie's PC." } },
+
+        { "type": "row", "title": "Cross-site failover signals", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 }, "panels": [] },
+        { "id": 8, "type": "text", "title": "Failover-witness lease holder — not currently queryable here", "gridPos": { "h": 5, "w": 24, "x": 0, "y": 23 }, "options": { "mode": "markdown", "content": "`observability/failover-witness/witness.py` exposes `/metrics` with `failover_witness_lease_active{resource,holder}` and `failover_witness_lease_epoch{resource}` -- exactly the 'who currently holds authority' signal this dashboard would want. **It is not currently scraped by this Prometheus.** A `pantry-postgres-witness` scrape job targeting `failover-witness-relay.observability.svc.cluster.local:18765` already exists in `observability/prometheus-config.yaml` in this repo, but the *live* `prometheus-config` ConfigMap on the cluster does not have it yet (checked directly, 2026-09-21) -- so it has not been deployed. This dashboard change intentionally does not deploy that scrape config itself: touching live Prometheus scrape config is outside 'dashboards only' scope, and a production failover rehearsal is in progress elsewhere in this repo's infrastructure right now. The panel below is wired to the correct metric name so it starts working the moment that job goes live; until then it will show no data, which is the honest state." } },
+        { "id": 9, "type": "table", "title": "Fencing Lease Holder (once scraped)", "description": "failover_witness_lease_active{resource,holder}. holder is one of home/oracle/canada/none. Will show no data until the pantry-postgres-witness scrape job above is deployed.", "gridPos": { "h": 6, "w": 24, "x": 0, "y": 28 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "failover_witness_lease_active", "format": "table", "instant": true }], "transformations": [{ "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "instance": true, "job": true }, "renameByName": { "resource": "Resource", "holder": "Holder", "Value": "Active" } } }], "options": { "showHeader": true, "cellHeight": "sm" }, "fieldConfig": { "defaults": {}, "overrides": [] } }
       ]
     }
 kind: ConfigMap

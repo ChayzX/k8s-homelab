@@ -1,10 +1,42 @@
 # Grafana dashboards for the k3s home-lab
 
-Nine dashboards, built to replace the four that ran under Docker Desktop
-(`host-overview`, `container-resources`, `minecraft`, `logs-overview` — see
-`/home/chase/docker/observability/monitoring/grafana/dashboards/` for the
-originals, kept read-only for reference) with equivalents that understand
-Kubernetes objects, not just containers.
+Started as nine dashboards built to replace the four that ran under Docker
+Desktop (`host-overview`, `container-resources`, `minecraft`, `logs-overview`
+— see `/home/chase/docker/observability/monitoring/grafana/dashboards/` for
+the originals, kept read-only for reference) with equivalents that understand
+Kubernetes objects, not just containers. The set has grown and been pruned
+since; **run `ls dashboards/*.json` for the authoritative current list** —
+the file list below is kept in sync with it, but this paragraph won't be.
+
+As of the 2026-09-21 audit the set is: `cloudflared.json`,
+`cluster-overview.json`, `greenies-main-pc-health.json`, `host-pc.json`,
+`jmusicbot.json`, `logs.json`, `minecraft.json`, `overview.json`,
+`pantry-bot.json`, `pantry-bot-usage.json`, `pods-and-workloads.json`, and
+`site-service-health.json`. `apps.json` (a combined Minecraft/jmusicbot/
+pantry-bot dashboard) was retired that day — see "App dashboards" below.
+
+**2026-09-21 audit notes**: every panel below was checked for live data
+directly against Prometheus/Loki's HTTP API (via the Kubernetes API server's
+service proxy, e.g. `kubectl get --raw
+/api/v1/namespaces/observability/services/prometheus:9090/proxy/api/v1/query?query=...`)
+rather than only by inspecting the JSON. **Logging into Grafana itself with
+the credential provided for this audit (`qe1`/`Temp123` against
+`http://100.84.89.87:3002`) failed consistently** — every attempt (HTTP
+basic auth against `/api/*`, and the `/login` form endpoint) returned `401
+password-auth.failed` / `invalid password` (see Grafana's own request log:
+`errorMessageID=password-auth.failed error="failed to authenticate identity:
+[password-auth.invalid] invalid password"`). This lines up with
+`observability/grafana.yaml` setting `GF_AUTH_PROXY_ENABLED=true` and
+`GF_AUTH_DISABLE_LOGIN_FORM=true` — Grafana expects Authentik's proxy outpost
+to authenticate the browser first and pass identity via the
+`X-authentik-username` header; hitting Grafana directly on its LoadBalancer
+port bypasses that, and this account apparently has no working local
+password to fall back to. Per this audit's instructions, this was reported
+rather than worked around (no admin-password reset, no new account). As a
+result, every "confirmed live" claim below means **confirmed live via the
+direct Prometheus/Loki query proxy**, not "confirmed rendering in the
+Grafana UI" — that verification step is still outstanding and needs either a
+working Grafana credential or an Authentik-authenticated session.
 
 ## Provisioning: which file is the source of truth
 
@@ -52,16 +84,27 @@ edit):
 ```sh
 cd /home/chase/k8s-homelab/dashboards
 kubectl create configmap grafana-dashboards -n observability \
-  --from-file=apps.json=apps.json \
+  --from-file=cloudflared.json=cloudflared.json \
   --from-file=cluster-overview.json=cluster-overview.json \
+  --from-file=greenies-main-pc-health.json=greenies-main-pc-health.json \
   --from-file=host-pc.json=host-pc.json \
   --from-file=jmusicbot.json=jmusicbot.json \
   --from-file=logs.json=logs.json \
+  --from-file=minecraft.json=minecraft.json \
   --from-file=overview.json=overview.json \
   --from-file=pantry-bot.json=pantry-bot.json \
   --from-file=pantry-bot-usage.json=pantry-bot-usage.json \
   --from-file=pods-and-workloads.json=pods-and-workloads.json \
+  --from-file=site-service-health.json=site-service-health.json \
   --dry-run=client -o yaml
+
+# Simpler and less error-prone (keeps this command from silently drifting
+# again if a dashboard file is ever added or removed): from dashboards/,
+#   kubectl create configmap grafana-dashboards -n observability \
+#     $(for f in *.json; do echo --from-file="$f=$f"; done) \
+#     --dry-run=client -o yaml
+# This exact drift (two files added without updating this list) is why the
+# 2026-09-21 audit had to reconcile this command against the live ConfigMap.
 ```
 then paste the `data:` block back into `dashboards-configmap.yaml` under
 its existing `metadata:` (labels included), or just `kubectl apply -f -`
@@ -86,16 +129,75 @@ Prometheus and one Loki source configured.
 
 ## The dashboards
 
+### `overview.json` — Homelab Overview
+
+First-stop outage triage: service health (deployments + pod phases), node
+health, busiest pods and limit headroom, a crash-loop/restart detector, and
+an error-log stream, plus links to every other dashboard. **Fixed
+2026-09-21**: its two Loki-based error panels ("Error Rate by Namespace",
+retitled "Error Rate by Pod", and "Top Error Sources") grouped by `(namespace)`
+and `(namespace, app_kubernetes_io_name)` — neither is a current Loki label
+(see the `logs.json` section's audit note below). Because `sum by` on a
+label that doesn't exist collapses everything into one bucket instead of
+erroring, these panels weren't showing "no data" — they looked like they
+worked while silently not breaking down by anything. Both now group by
+`instance` (`namespace/pod:container`) instead.
+
 ### `pantry-bot-usage.json` — Pantry Bot — Usage
 
-This standalone dashboard reads the bot's Prometheus `/metrics` endpoint. It
-shows successful and rejected engagement actions, damage and outcomes, action
-and source mix, bot message volume, and extension route volume. Counters are
-process-local and reset on a bot restart, so panels use `increase()`/`rate()`;
-participant history and first-time participation remain durable in SQLite.
+This standalone dashboard reads the bot's Prometheus `/metrics` endpoint.
+**Rebuilt 2026-09-21**: the original version queried
+`pantry_bot_engagement_actions_total`, `pantry_bot_engagement_failures_total`,
+`pantry_bot_boss_damage_total`, `pantry_bot_boss_outcomes_total`,
+`pantry_bot_messages_total`, and `pantry_bot_extension_requests_total`. A full
+`/api/v1/label/__name__/values` enumeration plus a 7-day `count_over_time()`
+check for each of those six names found zero samples anywhere in the
+retention window — not "currently down", genuinely absent from this
+Prometheus. This lines up with the pantry-bot monolith being split into
+dedicated microservices (worker/dispatcher/gateway/api/site, all deployed
+~10 days before the audit) around the same time; those old engagement/
+boss-battle counters were not carried forward under those names. The
+dashboard now uses the three custom counters that do exist —
+`pantry_bot_commands_total` (chat commands, by name), and
+`pantry_bot_runtime_claims_total` / `pantry_bot_runtime_completions_total`
+(the new event/outbox runtime queue, labeled by `kind` and `lane`, e.g.
+`kind="outbox", lane="twitch.chat"`) — plus the same kube-state-metrics/
+cAdvisor operational panels (ready pods, restarts, CPU/memory) as before. If
+a future PantryBot release restores richer engagement/boss-battle metrics
+under new names, extend this dashboard rather than reintroducing the old
+expressions blind.
 
 Open it at `/d/homelab-pantry-bot-usage/pantry-bot-usage` after Grafana loads the
 provisioned dashboard.
+
+### `cloudflared.json` — Cloudflare Tunnel — cloudflared Health
+
+Kubernetes/Loki-only visibility (no scrape of cloudflared's native `:2000`
+metrics endpoint) for the cloudflared connector fronting PantryBot's tunnel:
+readiness/running/restarts, a Deployment desired-vs-ready panel, memory/CPU
+vs limit, and severity-filtered logs with `pod`/`level` variables. **Fixed
+2026-09-21**: the Deployment panel matched the exact name `cloudflared`,
+which is a retired Deployment now permanently scaled to 0/0 — the connector
+had already been renamed to `app-cloudflared` (also 0/0) and then
+`commands-cloudflared` (the one actually running), so that panel had been
+silently showing "0 desired / 0 ready" the whole time despite the connector
+being up. It now sums `deployment=~".*cloudflared.*"` so a future rename
+doesn't repeat this.
+
+### `minecraft.json` — Minecraft — Server Health & Performance
+
+Standalone version of the Minecraft section formerly duplicated inside the
+now-retired `apps.json`; see "App dashboards" below for the RCON-exporter
+metric details. **Added 2026-09-21**: an "Auto-update tracker" row using
+`minecraft_update_current_build`, `minecraft_update_last_attempt_timestamp_seconds`,
+and `minecraft_update_last_success` — all live, previously not on any
+dashboard. Also flagged (not fixed; out of scope for a dashboards-only pass):
+`minecraft_world_size_bytes` currently has zero samples over the full 7-day
+retention window. The exporter's own header comment explains why this is
+plausible without being a dashboard bug — the world moved to a local-path
+PVC, and `poll_world_size()` fails soft (warns once, never calls `.set()`) if
+it can't resolve the PV's claimRef or a permission check fails — so the panel
+description now says this explicitly instead of leaving an unexplained gap.
 
 ### `host-pc.json` — Main PC — Bare-Metal Health
 
@@ -110,6 +212,15 @@ The host selector uses the native `node_exporter` `node_uname_info` series.
 Open it at `/d/homelab-host-pc/main-pc-bare-metal-health` (or use the link on
 the Overview dashboard). `cluster-overview.json` remains the mixed host + k3s
 control-plane dashboard for workload-aware triage.
+
+**Fixed 2026-09-21**: this file had a "Greenies Windows GPU" row bolted onto
+the end (two panels querying `windows_gpu_*{site="windows-remote"}`) that had
+nothing to do with MinecraftMachine and ignored this dashboard's own `$node`
+variable entirely — a clear case of one dashboard mixing an unrelated
+service in, presumably added as a stopgap before a dedicated Greenie's PC
+dashboard existed. Removed here and rebuilt properly (with more panels, since
+the GPU metrics support much more than utilisation/memory) in
+`greenies-main-pc-health.json`.
 
 ### `cluster-overview.json` — Host Health / Cluster Overview — Node & k3s Control Plane
 
@@ -197,6 +308,38 @@ silently guessed at.
 
 ### `logs.json` — Logs — Search & Severity — **the key new deliverable**
 
+**MAJOR FIX, 2026-09-21 — every LogQL panel in this repo was structurally
+broken.** The "obs: retire legacy collector and standardize on Alloy"
+migration changed Alloy's log-shipping label scheme (`observability/
+alloy-logs-home.yaml`'s `loki.source.kubernetes "pods"` component) without
+updating any dashboard. Verified live against `/loki/api/v1/labels`: Loki
+currently exposes only `__stream_shard__`, `instance`, `job`, `level`, and
+`service_name` — **there is no `namespace`, `pod`, `container`, or
+`app_kubernetes_io_name` label at all.** Every pod's identity now lives in
+one composite label, `instance`, formatted as `namespace/podname:container`
+(e.g. `pantry-bot/pantry-chat-worker-84b5f85984-tbwrv:worker`). Every LogQL
+query in `logs.json`, `minecraft.json`, `jmusicbot.json`, `pantry-bot.json`,
+and `cloudflared.json` that filtered on `{namespace="...", pod=~"...", ...}`
+was therefore matching zero streams — not a documented gap, a real
+structurally-broken label reference, at the widest scale found in this
+audit. Fixed by matching `instance` with a prefix/substring regex instead
+(e.g. `instance=~"minecraft/.*"`, or `instance=~"pantry-bot/.*:cloudflared"`
+where a specific container matters), and — for dashboards with a `namespace`
+variable — sourcing that variable from **Prometheus**'s
+`kube_pod_status_phase` namespace label instead (unaffected by the Loki
+change, and avoids hardcoding a namespace list that would drift the way
+`apps.json` did). `pod` variables now query `label_values(instance)` scoped
+by the instance-prefix regex, so their dropdown values are full
+`namespace/pod:container` strings rather than bare pod names — less pretty,
+but guaranteed correct and verifiable directly against the Loki HTTP API
+(which is how every fix here was checked, since Grafana login was not
+available during this audit — see the top of this file's audit notes). This
+is a Loki-label change, not something addressed by editing Alloy's
+relabeling rules back to the old scheme — that decision (fewer indexed
+labels, presumably for cardinality) was made deliberately elsewhere and is
+out of scope for a dashboards-only pass; the dashboards now match reality
+instead.
+
 Everything the plan's log-search requirement asked for:
 
 - **`level` variable** (custom, multi-select `debug`/`info`/`warn`/`error`,
@@ -205,11 +348,14 @@ Everything the plan's log-search requirement asked for:
   `pipeline_stages` extracts at ingest — filtering happens at the Loki
   query layer, not client-side text matching, so it actually scales and
   actually works for Java/Log4j (jmusicbot, minecraft) and Node.js
-  (pantry-bot) logs alike, whatever their native format.
+  (pantry-bot) logs alike, whatever their native format. Unaffected by the
+  label-scheme change above — `level` is added by Alloy's own pipeline
+  stage, not by Kubernetes service discovery.
 - **`namespace` variable** doubles as the app selector (each app has its
-  own namespace) and a **`pod` variable** scoped under it
-  (`label_values({namespace=~"$namespace"}, pod)`), for drilling into one
-  pod when a Deployment briefly has two pods during a `Recreate` rollout.
+  own namespace) — now backed by Prometheus, see above — and a **`pod`
+  variable** scoped under it (`label_values({instance=~"($namespace)/.*"},
+  instance)`), for drilling into one pod when a Deployment briefly has two
+  pods during a `Recreate` rollout.
 - **`search` free-text variable**, applied as a case-insensitive LogQL
   line filter (`|~ "(?i)$search"`), RE2 syntax.
 - **Log Volume by Severity** (panel 6): stacked bars, one series per
@@ -234,16 +380,30 @@ Everything the plan's log-search requirement asked for:
 `level` value from each line and promotes it to a Loki **label** (not
 just a parsed field) via a `labels:` stage. Because it's a label, every
 LogQL query in this dashboard can select on it directly in the stream
-selector — `{namespace=~"$namespace", pod=~"$pod", level=~"$level"}` —
-which Loki resolves at the index/chunk level before it even starts
-reading log bodies. If that Alloy stage is ever removed or breaks for
-one app, that app's logs don't disappear — they just stop carrying a
-`level` label and fall into the "unclassified" bucket above, which is
-exactly what panel 4 exists to catch.
+selector — `{instance=~"($namespace)/.*", instance=~"$pod", level=~"$level"}`
+(two `instance=~` matchers on the same label are ANDed together, same as
+repeating any label matcher in PromQL/LogQL) — which Loki resolves at the
+index/chunk level before it even starts reading log bodies. If that Alloy
+stage is ever removed or breaks for one app, that app's logs don't
+disappear — they just stop carrying a `level` label and fall into the
+"unclassified" bucket above, which is exactly what panel 4 exists to catch.
 
-### App dashboards — `apps.json`, `jmusicbot.json`, and `pantry-bot.json`
+### App dashboards — `minecraft.json`, `jmusicbot.json`, and `pantry-bot.json`
 
 The Overview dashboard links to the workload dashboards, with Pantry Bot health and usage split into separate views.
+
+**`apps.json` (a combined Minecraft/jmusicbot/pantry-bot dashboard, `uid:
+homelab-apps`) was retired on 2026-09-21.** It predated the three dedicated
+dashboards below and had drifted badly since: its Minecraft section
+duplicated `minecraft.json` exactly (and was never linked from the Overview
+dashboard — only the standalone dashboards were), its jmusicbot section
+covered a fraction of what `jmusicbot.json` now does, and its pantry-bot
+section queried `container="bot"` and `deployment="cloudflared"`, both of
+which stopped existing once pantry-bot split into microservices — that
+section was not just redundant, it was actively broken. Nothing was migrated
+out of it because nothing in it was both unique and still correct; it was
+deleted outright, its ConfigMap entry removed, and it was never linked from
+`overview.json` to begin with so no link updates were needed there.
 
 App-specific panels, and deliberately not padded with invented metrics.
 
@@ -271,25 +431,104 @@ App-specific panels, and deliberately not padded with invented metrics.
   from kube-state-metrics + cAdvisor, plus a raw log panel with a note
   pointing at the itag-18 decode-failure string this custom build exists
   to work around.
-- **pantry-bot** similarly has no `/health` endpoint — `GET /` returns a
-  bare 404 (verified through the live Cloudflare tunnel), which is why
-  the deployment uses an `exec` probe reproducing the old Compose
-  healthcheck rather than `httpGet` (an `httpGet` probe would treat that
-  same 404 as failure and crash-loop a healthy pod — see the extensive
-  comment in `pantry-bot/40-deployment.yaml`). So "HTTP health" here is
-  honestly just `kube_pod_status_ready`, i.e. whether the exec probe's
-  TCP connect + any-response check is passing — **not** request latency,
-  status codes, or whether Twitch auth/SQLite/the tunnel actually work.
-  The panel description says exactly this and gives the concrete
-  follow-up (add a real `/healthz` route, switch to `httpGet`, then
-  optionally instrument with `prom-client`) rather than inventing a
-  metric name that doesn't exist. Cloudflared is separately dashboarded from
-  Kubernetes readiness/running/restart/resource metrics and its Loki logs;
-  its native `:2000` endpoint is used by probes but is not scraped by
-  Prometheus.
+- **pantry-bot** originally shipped as one monolith deployment (single
+  `bot` container, `GET /` a bare 404, healthchecked with an `exec` probe
+  reproducing the old Compose healthcheck rather than `httpGet` — see
+  `pantry-bot/40-deployment.yaml.retired`, now retired). **As of 2026-09-21
+  it has been split into dedicated microservices**
+  (`pantry-private-api`/`api`, `pantry-chat-worker`/`worker`,
+  `pantry-twitch-dispatcher`/`dispatcher`, `pantry-twitch-gateway`/`gateway`,
+  `pantry-commands-site`/`public-site`, `pantry-private-site`/`private-site`,
+  plus `postgres` for the HA Postgres pod) — their Deployment manifests live
+  outside this repo, so their exact probe types are not re-documented here.
+  `pantry-bot.json` and `pantry-bot-usage.json` both aggregate `by
+  (container)`/`by (pod)` rather than filtering on a single hardcoded
+  container name, specifically so this kind of split doesn't silently break
+  them the way it broke the retired `apps.json`. "HTTP health" here is still
+  honestly just `kube_pod_status_ready` per pod — **not** request latency,
+  status codes, or whether Twitch auth/Postgres/the tunnel actually work.
+  Cloudflared is separately dashboarded (`cloudflared.json`) from Kubernetes
+  readiness/running/restart/resource metrics and its Loki logs; its native
+  `:2000` endpoint is used by probes but is not scraped by Prometheus.
+
+### `greenies-main-pc-health.json` — Greenie's Main PC — Health
+
+Added 2026-09-21. A real, deployed version of the dashboard that only ever
+existed as a stub on the long-diverged, never-merged
+`feat/greenies-main-pc-dashboard` branch (`git show
+79adc42:dashboards/greenies-main-pc-health.json`). That draft is useful as a
+structural reference only — **its label assumptions were stale and matched
+nothing live** (`site="remote"`, `job="host"`); verified live against
+Prometheus, the real labels are `site="windows-remote"`,
+`job="integrations/windows"`, `host="ThePantry"`, `instance="ThePantry"`, and
+the disk-volume label is `volume`, not `volume_id` as the draft assumed.
+Metrics arrive via Grafana Alloy remote-write from `windows_exporter` running
+on Greenie's Windows gaming PC ("ThePantry"). Covers host reachability,
+CPU/memory/uptime, CPU-by-mode, disk free/used by volume, network
+throughput, and last-boot time — plus a full **GPU** section that did not
+exist in the draft at all: adapter identity (`windows_gpu_info`, an
+NVIDIA GeForce RTX 3070), engine utilisation by engine type
+(`windows_gpu_engine_time_seconds`, needs `rate()` since it's a per-process
+counter), adapter memory (dedicated/shared/committed), and top GPU memory
+consumers by process (`windows_gpu_process_memory_dedicated_bytes`, labeled
+only by `process_id` — this exporter version does not expose a process
+name label). Linked from the Overview dashboard alongside the other host
+dashboards.
+
+### `site-service-health.json` — Site & Service Health — Home / Oracle / Canada
+
+Added 2026-09-21 to give a single-glance view of the PantryBot multi-site
+failover project's three sites (Home, Oracle, Canada — tracked separately in
+issue #191 / pantry-bot#147; this dashboard only consumes whatever that
+project already exposes, it implements none of it). Built by checking, live,
+exactly what this Prometheus can answer before drawing any panel:
+
+- **Home** is this k3s cluster itself and is fully instrumented — node
+  readiness (summed across every node kube-state-metrics knows about, not
+  hardcoded to one node name), per-microservice `up{}` for every
+  `pantry-bot-*` scrape job, ready-pod count, and a **name-based, explicitly
+  non-authoritative** "Postgres pod present" count (Postgres pod names have
+  been renamed multiple times during this project and no primary/replica
+  role is currently exposed as a Prometheus label — checked `kube_pod_labels`
+  for anything resembling `pantrybot.postgres/role`; nothing exists).
+- **Oracle has zero presence in this Prometheus.** `label_values(up, site)`
+  returns only `canada`, `home`, `windows-remote` — no `oracle` site exists
+  anywhere. Rather than omit the question, the dashboard has a plain-text
+  panel saying exactly this.
+- **Canada** has exactly one scrape target defined
+  (`job="canada-pantry-bot-api"`, `role="recovery"`, tunnelled to this host's
+  `192.168.40.208:13101`) and it was not returning fresh samples as of this
+  audit — the panel shows "NOT REPORTING" rather than faking a state. There
+  is no Alloy/`windows_exporter`-style host telemetry for Canada the way
+  Greenie's PC has; a text panel says so and points at that dashboard as the
+  proven pattern if Canada host monitoring is ever wanted.
+- **The failover-witness's lease-holder signal is not currently queryable
+  either.** `observability/failover-witness/witness.py` exposes
+  `failover_witness_lease_active{resource,holder}` and
+  `failover_witness_lease_epoch{resource}` on `/metrics` — exactly the
+  "who holds authority" signal this dashboard wants — but this Prometheus
+  does not currently scrape it. A `pantry-postgres-witness` job targeting
+  `failover-witness-relay.observability.svc.cluster.local:18765` already
+  exists in `observability/prometheus-config.yaml` in this repo, but the
+  *live* ConfigMap on the cluster does not have it (checked directly). This
+  dashboard deliberately does not deploy that scrape config itself — changing
+  live Prometheus scrape config is outside "dashboards only" scope, and a
+  production failover rehearsal was in progress elsewhere in this repo's
+  infrastructure at the time of this audit. The panel is wired to the correct
+  metric name so it starts working the moment that job is deployed; a text
+  panel explains the current gap so "no data" doesn't get mistaken for "no
+  lease held".
 
 ## Metric-existence notes (why each metric was chosen)
 
+- **Loki labels** (all LogQL-using dashboards) — as of 2026-09-21, verified
+  live: `__stream_shard__`, `instance`, `job`, `level`, `service_name`. `job`
+  and `service_name` are both always `loki.source.kubernetes.pods` (Alloy's
+  component name), so they're useless for filtering. `instance` is the only
+  per-pod label and is formatted `namespace/podname:container`. `level` is
+  added by Alloy's own pipeline stage (see the `logs.json` section above).
+  There is no `namespace`, `pod`, `container`, or `app_kubernetes_io_name`
+  Loki label — do not reintroduce queries that assume one.
 - `node_*` — native `node_exporter` on `192.168.40.208:9100`.
 - `container_memory_working_set_bytes`, `container_cpu_usage_seconds_total`,
   `container_cpu_cfs_throttled_periods_total` / `_periods_total`,
@@ -316,7 +555,27 @@ App-specific panels, and deliberately not padded with invented metrics.
 - `kubelet_volume_stats_*` — **flagged, not assumed**. See the
   PersistentVolumeClaim Usage panel note above.
 - `minecraft_*` — the bespoke exporter, unchanged names except memory
-  (see Apps section above).
+  (see Apps section above). `minecraft_update_*` (added to `minecraft.json`
+  2026-09-21) comes from the same exporter's auto-update tracker.
+  `minecraft_world_size_bytes` is defined by the same exporter but currently
+  emits no samples — see the `minecraft.json` section above.
+- `pantry_bot_commands_total`, `pantry_bot_runtime_claims_total`,
+  `pantry_bot_runtime_completions_total` — the current PantryBot custom
+  metrics namespace (verified live 2026-09-21 via a full `__name__`
+  enumeration). The engagement/boss-battle counters this dashboard used
+  before that date no longer exist; see the `pantry-bot-usage.json` section
+  above.
+- `windows_*` / `windows_gpu_*` — `windows_exporter` on Greenie's Main PC,
+  forwarded via Grafana Alloy remote-write with `site="windows-remote"`,
+  `job="integrations/windows"`, `host="ThePantry"`, `instance="ThePantry"`.
+  All verified live 2026-09-21; see the `greenies-main-pc-health.json`
+  section above for the specific metric names and the one label-name
+  correction (`volume`, not `volume_id`) versus the stale draft branch.
+- `failover_witness_lease_active` / `_lease_epoch` — defined by
+  `observability/failover-witness/witness.py`'s own `/metrics`, but **not
+  currently scraped by this Prometheus**; used in `site-service-health.json`
+  in anticipation of that scrape job being deployed. See that dashboard's
+  section above.
 
 ## What's intentionally not here
 
