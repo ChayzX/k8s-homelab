@@ -5,7 +5,14 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DASHBOARD_DIR="$REPO_ROOT/dashboards"
-CONFIGMAP="$DASHBOARD_DIR/dashboards-configmap.yaml"
+
+# Each entry is "<source glob depth>|<configmap path>". The top-level
+# dashboards and the generated per-service dashboards ship as two separate
+# ConfigMaps; see scripts/gen-dashboards-configmap.py.
+SETS=(
+  "$DASHBOARD_DIR|$DASHBOARD_DIR/dashboards-configmap.yaml"
+  "$DASHBOARD_DIR/services|$DASHBOARD_DIR/services-configmap.yaml"
+)
 
 for required in jq kubectl; do
   command -v "$required" >/dev/null || {
@@ -14,13 +21,19 @@ for required in jq kubectl; do
   }
 done
 
-mapfile -t dashboard_files < <(find "$DASHBOARD_DIR" -maxdepth 1 -type f -name '*.json' -print | sort)
+total=0
+declare -A dashboard_uids=()
+
+for entry in "${SETS[@]}"; do
+  SRC_DIR="${entry%%|*}"
+  CONFIGMAP="${entry##*|}"
+
+mapfile -t dashboard_files < <(find "$SRC_DIR" -maxdepth 1 -type f -name '*.json' -print | sort)
 (( ${#dashboard_files[@]} > 0 )) || {
   echo "no dashboard JSON files found" >&2
   exit 1
 }
 
-declare -A dashboard_uids=()
 for dashboard_file in "${dashboard_files[@]}"; do
   jq -e '
     (.uid | type == "string" and length > 0) and
@@ -71,4 +84,8 @@ if (( configmap_bytes >= 900000 )); then
   exit 1
 fi
 
-echo "Validated ${#dashboard_files[@]} dashboards; ConfigMap copy is synchronized (${configmap_bytes} bytes)."
+echo "Validated ${#dashboard_files[@]} dashboards in ${SRC_DIR#$REPO_ROOT/}; ConfigMap copy is synchronized (${configmap_bytes} bytes)."
+  total=$((total + ${#dashboard_files[@]}))
+done
+
+echo "Validated ${total} dashboards across ${#SETS[@]} ConfigMaps."

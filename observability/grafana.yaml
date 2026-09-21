@@ -199,6 +199,12 @@ spec:
             - name: dashboards
               mountPath: /etc/grafana/dashboards
               readOnly: true
+            # Per-service dashboards live in their own ConfigMap and their
+            # own Grafana folder. Split out because both together would
+            # approach the 1 MiB ConfigMap ceiling.
+            - name: dashboards-services
+              mountPath: /etc/grafana/dashboards-services
+              readOnly: true
             - name: data
               mountPath: /var/lib/grafana
       volumes:
@@ -214,6 +220,9 @@ spec:
         - name: dashboards
           configMap:
             name: grafana-dashboards
+        - name: dashboards-services
+          configMap:
+            name: grafana-dashboards-services
         - name: data
           persistentVolumeClaim:
             claimName: grafana-data

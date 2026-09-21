@@ -163,7 +163,7 @@
       "id": 2,
       "type": "table",
       "title": "Pod Status by Namespace",
-      "description": "Per-namespace pod phases plus container restarts in the last rolling hour. CrashLoopBackOff is not a pod phase in kube-state-metrics -- a crash loop shows up here as a Pending/Not-Running pod whose namespace is already racking up restarts.",
+      "description": "Per-namespace pod phases plus container restarts in the last rolling hour. CrashLoopBackOff is not a pod phase in kube-state-metrics -- a crash loop shows up here as a Pending/Not-Running pod whose namespace is already racking up restarts. FIXED 2026-09-21: the Pending and Failed/Unknown queries now fall back to a zeroed copy of the Running series, so a namespace with none in that phase shows 0 instead of an empty cell -- an empty cell is indistinguishable from a broken query.",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
@@ -177,14 +177,14 @@
         {
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "count by (namespace) (kube_pod_status_phase{phase=\"Pending\"} == 1)",
+          "expr": "count by (namespace) (kube_pod_status_phase{phase=\"Pending\"} == 1) or count by (namespace) (kube_pod_status_phase{phase=\"Running\"} == 1) * 0",
           "format": "table",
           "instant": true
         },
         {
           "refId": "C",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "count by (namespace) (kube_pod_status_phase{phase=~\"Failed|Unknown\"} == 1)",
+          "expr": "count by (namespace) (kube_pod_status_phase{phase=~\"Failed|Unknown\"} == 1) or count by (namespace) (kube_pod_status_phase{phase=\"Running\"} == 1) * 0",
           "format": "table",
           "instant": true
         },

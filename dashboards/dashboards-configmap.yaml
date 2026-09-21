@@ -2613,7 +2613,7 @@ data:
           "id": 2,
           "type": "table",
           "title": "Pod Status by Namespace",
-          "description": "Per-namespace pod phases plus container restarts in the last rolling hour. CrashLoopBackOff is not a pod phase in kube-state-metrics -- a crash loop shows up here as a Pending/Not-Running pod whose namespace is already racking up restarts.",
+          "description": "Per-namespace pod phases plus container restarts in the last rolling hour. CrashLoopBackOff is not a pod phase in kube-state-metrics -- a crash loop shows up here as a Pending/Not-Running pod whose namespace is already racking up restarts. FIXED 2026-09-21: the Pending and Failed/Unknown queries now fall back to a zeroed copy of the Running series, so a namespace with none in that phase shows 0 instead of an empty cell -- an empty cell is indistinguishable from a broken query.",
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "targets": [
@@ -2627,14 +2627,14 @@ data:
             {
               "refId": "B",
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "count by (namespace) (kube_pod_status_phase{phase=\"Pending\"} == 1)",
+              "expr": "count by (namespace) (kube_pod_status_phase{phase=\"Pending\"} == 1) or count by (namespace) (kube_pod_status_phase{phase=\"Running\"} == 1) * 0",
               "format": "table",
               "instant": true
             },
             {
               "refId": "C",
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "count by (namespace) (kube_pod_status_phase{phase=~\"Failed|Unknown\"} == 1)",
+              "expr": "count by (namespace) (kube_pod_status_phase{phase=~\"Failed|Unknown\"} == 1) or count by (namespace) (kube_pod_status_phase{phase=\"Running\"} == 1) * 0",
               "format": "table",
               "instant": true
             },
@@ -3246,6 +3246,668 @@ data:
           "fieldConfig": { "defaults": {}, "overrides": [] }
         }
       ]
+    }
+  pantry-bot-postgres.json: |
+    {
+     "description": "Application usage read from Pantry Bot's PostgreSQL tables through the home standby replica (postgres-authority-home-return), which streams from the Oracle writer. No Prometheus scrape required, so this works while the home app plane is parked and Oracle holds the Twitch leases. Standby reads lag the writer by seconds; extension-route and per-command counters have no table and remain pending the /metrics-per-role code fix. Imported into the repo 2026-09-21: this dashboard existed only in the live Grafana and was therefore outside the dashboards-configmap.yaml pipeline -- a pod restart or a rollback would have silently lost it.",
+     "editable": true,
+     "graphTooltip": 1,
+     "panels": [
+      {
+       "collapsed": false,
+       "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+       },
+       "panels": [],
+       "title": "Ingest \u2014 is Twitch reaching the bot?",
+       "type": "row"
+      },
+      {
+       "datasource": {
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
+       },
+       "description": "Rows appended to pantry_events in the last hour, all sources. This is raw Twitch ingest (chat messages, redemptions, subs), not game actions.",
+       "fieldConfig": {
+        "defaults": {
+         "decimals": 0,
+         "thresholds": {
+          "mode": "absolute",
+          "steps": [
+           {
+            "color": "text",
+            "value": null
+           },
+           {
+            "color": "green",
+            "value": 1
+           }
+          ]
+         },
+         "unit": "short"
+        },
+        "overrides": []
+       },
+       "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 1
+       },
+       "id": 1,
+       "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+         "calcs": [
+          "lastNotNull"
+         ],
+         "fields": "",
+         "values": false
+        },
+        "textMode": "value_and_name"
+       },
+       "targets": [
+        {
+         "datasource": {
+          "type": "postgres",
+          "uid": "${DS_POSTGRES}"
+         },
+         "format": "table",
+         "rawQuery": true,
+         "rawSql": "SELECT count(*) AS \"events\" FROM pantry_events WHERE created_at > now() - interval '1 hour'",
+         "refId": "A"
+        }
+       ],
+       "title": "Events ingested (1h)",
+       "type": "stat"
+      },
+      {
+       "datasource": {
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
+       },
+       "description": "pantry_events rows still awaiting a worker. Sustained non-zero means workers are behind or stopped on the writer site.",
+       "fieldConfig": {
+        "defaults": {
+         "decimals": 0,
+         "thresholds": {
+          "mode": "absolute",
+          "steps": [
+           {
+            "color": "green",
+            "value": null
+           },
+           {
+            "color": "#EAB839",
+            "value": 1
+           },
+           {
+            "color": "red",
+            "value": 50
+           }
+          ]
+         },
+         "unit": "short"
+        },
+        "overrides": []
+       },
+       "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 1
+       },
+       "id": 2,
+       "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+         "calcs": [
+          "lastNotNull"
+         ],
+         "fields": "",
+         "values": false
+        },
+        "textMode": "value_and_name"
+       },
+       "targets": [
+        {
+         "datasource": {
+          "type": "postgres",
+          "uid": "${DS_POSTGRES}"
+         },
+         "format": "table",
+         "rawQuery": true,
+         "rawSql": "SELECT count(*) AS \"pending\" FROM pantry_events WHERE status = 'pending'",
+         "refId": "A"
+        }
+       ],
+       "title": "Pending events now",
+       "type": "stat"
+      },
+      {
+       "datasource": {
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
+       },
+       "description": "pantry_outbox rows that exhausted retries. Any non-zero row deserves a look at last_error on the writer.",
+       "fieldConfig": {
+        "defaults": {
+         "decimals": 0,
+         "thresholds": {
+          "mode": "absolute",
+          "steps": [
+           {
+            "color": "green",
+            "value": null
+           },
+           {
+            "color": "red",
+            "value": 1
+           }
+          ]
+         },
+         "unit": "short"
+        },
+        "overrides": []
+       },
+       "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 1
+       },
+       "id": 3,
+       "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+         "calcs": [
+          "lastNotNull"
+         ],
+         "fields": "",
+         "values": false
+        },
+        "textMode": "value_and_name"
+       },
+       "targets": [
+        {
+         "datasource": {
+          "type": "postgres",
+          "uid": "${DS_POSTGRES}"
+         },
+         "format": "table",
+         "rawQuery": true,
+         "rawSql": "SELECT count(*) AS \"dead_letter\" FROM pantry_outbox WHERE status = 'dead_letter'",
+         "refId": "A"
+        }
+       ],
+       "title": "Dead-letter outbox",
+       "type": "stat"
+      },
+      {
+       "datasource": {
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
+       },
+       "description": "Distinct user_ids in community_participants (all time on this DB generation). first_time counts users whose first recorded game was here \u2014 the distinct-participant answer the Prometheus dashboard cannot give.",
+       "fieldConfig": {
+        "defaults": {
+         "decimals": 0,
+         "unit": "short"
+        },
+        "overrides": []
+       },
+       "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 1
+       },
+       "id": 4,
+       "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+         "calcs": [
+          "lastNotNull"
+         ],
+         "fields": "",
+         "values": false
+        },
+        "textMode": "value_and_name"
+       },
+       "targets": [
+        {
+         "datasource": {
+          "type": "postgres",
+          "uid": "${DS_POSTGRES}"
+         },
+         "format": "table",
+         "rawQuery": true,
+         "rawSql": "SELECT count(DISTINCT user_id) AS \"participants\", count(*) FILTER (WHERE first_time) AS \"first_time_rows\" FROM community_participants",
+         "refId": "A"
+        }
+       ],
+       "title": "Distinct community participants",
+       "type": "stat"
+      },
+      {
+       "datasource": {
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
+       },
+       "description": "pantry_events rows per interval, split by source and event type. chat.message is the steady background; redemption/raid/cheer spikes are the interesting overlays.",
+       "fieldConfig": {
+        "defaults": {
+         "color": {
+          "mode": "palette-classic"
+         },
+         "custom": {
+          "drawStyle": "line",
+          "fillOpacity": 12,
+          "lineWidth": 1,
+          "showPoints": "never",
+          "spanNulls": false
+         },
+         "decimals": 0,
+         "min": 0,
+         "unit": "short"
+        },
+        "overrides": []
+       },
+       "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+       },
+       "id": 5,
+       "options": {
+        "legend": {
+         "calcs": [
+          "sum"
+         ],
+         "displayMode": "table",
+         "placement": "bottom",
+         "showLegend": true
+        },
+        "tooltip": {
+         "mode": "multi",
+         "sort": "desc"
+        }
+       },
+       "targets": [
+        {
+         "datasource": {
+          "type": "postgres",
+          "uid": "${DS_POSTGRES}"
+         },
+         "format": "time_series",
+         "rawQuery": true,
+         "rawSql": "SELECT $__timeGroup(created_at,$__interval) AS \"time\", source || '/' || event_type AS metric, count(*) AS \"events\" FROM pantry_events WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1,2 ORDER BY 1",
+         "refId": "A"
+        }
+       ],
+       "title": "Ingested events by source/type",
+       "type": "timeseries"
+      },
+      {
+       "datasource": {
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
+       },
+       "description": "community_actions rows per interval (at is epoch millis). Attacks, joins, shields, combos \u2014 the actual game mix. Flat here means a quiet game, not a broken pipeline; cross-check panel 5 ingest first. FIXED 2026-09-21: $__timeGroup previously wrapped to_timestamp(at/1000.0) directly. Grafana's macro-argument parser stops at the first \")\", so the nested call broke interpolation and the panel failed with \"macro __timeGroup needs time column and interval\" before it ever reached Postgres. The conversion now happens in a subquery and the macro gets a bare column.",
+       "fieldConfig": {
+        "defaults": {
+         "color": {
+          "mode": "palette-classic"
+         },
+         "custom": {
+          "drawStyle": "line",
+          "fillOpacity": 12,
+          "lineWidth": 1,
+          "showPoints": "never",
+          "spanNulls": false
+         },
+         "decimals": 0,
+         "min": 0,
+         "unit": "short"
+        },
+        "overrides": []
+       },
+       "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+       },
+       "id": 6,
+       "options": {
+        "legend": {
+         "calcs": [
+          "sum"
+         ],
+         "displayMode": "table",
+         "placement": "bottom",
+         "showLegend": true
+        },
+        "tooltip": {
+         "mode": "multi",
+         "sort": "desc"
+        }
+       },
+       "targets": [
+        {
+         "datasource": {
+          "type": "postgres",
+          "uid": "${DS_POSTGRES}"
+         },
+         "format": "time_series",
+         "rawQuery": true,
+         "rawSql": "SELECT $__timeGroup(ts,$__interval) AS \"time\", action AS metric, count(*) AS \"actions\" FROM (SELECT to_timestamp(at/1000.0) AS ts, action FROM community_actions) s WHERE ts BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1,2 ORDER BY 1",
+         "refId": "A"
+        }
+       ],
+       "title": "Community game actions by action",
+       "type": "timeseries"
+      },
+      {
+       "collapsed": false,
+       "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 13
+       },
+       "panels": [],
+       "title": "Boss activity and bot messages",
+       "type": "row"
+      },
+      {
+       "datasource": {
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
+       },
+       "description": "Sum of damage_dealt in boss_contributions over the last 24 hours. Real dealt damage, not the legacy donation-path counter.",
+       "fieldConfig": {
+        "defaults": {
+         "decimals": 0,
+         "thresholds": {
+          "mode": "absolute",
+          "steps": [
+           {
+            "color": "text",
+            "value": null
+           },
+           {
+            "color": "green",
+            "value": 1
+           }
+          ]
+         },
+         "unit": "short"
+        },
+        "overrides": []
+       },
+       "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 14
+       },
+       "id": 7,
+       "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+         "calcs": [
+          "lastNotNull"
+         ],
+         "fields": "",
+         "values": false
+        },
+        "textMode": "value_and_name"
+       },
+       "targets": [
+        {
+         "datasource": {
+          "type": "postgres",
+          "uid": "${DS_POSTGRES}"
+         },
+         "format": "table",
+         "rawQuery": true,
+         "rawSql": "SELECT coalesce(sum(damage_dealt),0) AS \"damage\" FROM boss_contributions WHERE created_at > now() - interval '24 hours'",
+         "refId": "A"
+        }
+       ],
+       "title": "Boss damage (24h)",
+       "type": "stat"
+      },
+      {
+       "datasource": {
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
+       },
+       "description": "boss_events resolutions in the last seven days by status. defeated vs expired is the real outcome mix.",
+       "fieldConfig": {
+        "defaults": {
+         "decimals": 0,
+         "unit": "short"
+        },
+        "overrides": []
+       },
+       "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 14
+       },
+       "id": 8,
+       "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+         "calcs": [
+          "lastNotNull"
+         ],
+         "fields": "",
+         "values": false
+        },
+        "textMode": "value_and_name"
+       },
+       "targets": [
+        {
+         "datasource": {
+          "type": "postgres",
+          "uid": "${DS_POSTGRES}"
+         },
+         "format": "table",
+         "rawQuery": true,
+         "rawSql": "SELECT status AS \"outcome\", count(*) AS \"fights\" FROM boss_events WHERE start_time > now() - interval '7 days' GROUP BY 1 ORDER BY 2 DESC",
+         "refId": "A"
+        }
+       ],
+       "title": "Boss outcomes (7d)",
+       "type": "stat"
+      },
+      {
+       "datasource": {
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
+       },
+       "description": "engagement_message_counts is a daily rollup (day/status/count) written by the bot itself \u2014 daily grain, not per-second. Use for 7d/30d ranges.",
+       "fieldConfig": {
+        "defaults": {
+         "color": {
+          "mode": "palette-classic"
+         },
+         "custom": {
+          "barAlignment": 0,
+          "drawStyle": "bars",
+          "fillOpacity": 85,
+          "lineWidth": 0,
+          "showPoints": "never",
+          "spanNulls": false,
+          "stacking": {
+           "group": "A",
+           "mode": "normal"
+          }
+         },
+         "decimals": 0,
+         "min": 0,
+         "unit": "short"
+        },
+        "overrides": []
+       },
+       "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 14
+       },
+       "id": 9,
+       "options": {
+        "legend": {
+         "displayMode": "list",
+         "placement": "bottom",
+         "showLegend": true
+        },
+        "tooltip": {
+         "mode": "multi",
+         "sort": "desc"
+        }
+       },
+       "targets": [
+        {
+         "datasource": {
+          "type": "postgres",
+          "uid": "${DS_POSTGRES}"
+         },
+         "format": "time_series",
+         "rawQuery": true,
+         "rawSql": "SELECT day AS \"time\", status AS metric, sum(count)::bigint AS \"messages\" FROM engagement_message_counts WHERE day BETWEEN $__timeFrom()::date - interval '1 day' AND $__timeTo()::date GROUP BY 1,2 ORDER BY 1",
+         "refId": "A"
+        }
+       ],
+       "title": "Bot messages by status (daily)",
+       "type": "timeseries"
+      },
+      {
+       "datasource": {
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
+       },
+       "description": "pantry_outbox lifetime mix per dispatch target. completed is delivered; anything else (pending lease-held, retrying, dead_letter) is dispatcher backlog.",
+       "fieldConfig": {
+        "defaults": {
+         "custom": {
+          "align": "auto",
+          "cellOptions": {
+           "type": "auto"
+          }
+         }
+        },
+        "overrides": []
+       },
+       "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 18
+       },
+       "id": 10,
+       "options": {
+        "cellHeight": "sm",
+        "footer": {
+         "countRows": false,
+         "fields": "",
+         "reducer": [
+          "sum"
+         ],
+         "show": false
+        },
+        "showHeader": true
+       },
+       "targets": [
+        {
+         "datasource": {
+          "type": "postgres",
+          "uid": "${DS_POSTGRES}"
+         },
+         "format": "table",
+         "rawQuery": true,
+         "rawSql": "SELECT target AS \"target\", status AS \"status\", count(*) AS \"messages\" FROM pantry_outbox GROUP BY 1,2 ORDER BY 3 DESC",
+         "refId": "A"
+        }
+       ],
+       "title": "Outbound deliveries by target/status",
+       "type": "table"
+      },
+      {
+       "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 26
+       },
+       "id": 11,
+       "options": {
+        "content": "Reads the **home standby replica** (`postgres-authority-home-return`, streaming from the Oracle writer), so numbers lag real time by seconds and stay visible while the home app plane is parked. If Oracle fails over, repoint the `PantryPostgres` datasource at the new primary. **Not here on purpose:** Extension requests by route and commands by name have no backing table \u2014 they only exist as process-local Prometheus counters in unscraped worker processes, and need the per-role `/metrics` code fix before any dashboard can show them.",
+        "mode": "markdown"
+       },
+       "title": "About this dashboard",
+       "type": "text"
+      }
+     ],
+     "refresh": "1m",
+     "schemaVersion": 39,
+     "tags": [
+      "homelab",
+      "twitch",
+      "pantry-bot",
+      "usage",
+      "postgres"
+     ],
+     "templating": {
+      "list": [
+       {
+        "current": {},
+        "hide": 0,
+        "label": "Postgres",
+        "name": "DS_POSTGRES",
+        "query": "postgres",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+       }
+      ]
+     },
+     "time": {
+      "from": "now-24h",
+      "to": "now"
+     },
+     "timezone": "browser",
+     "title": "Pantry Bot \u2014 Usage (Postgres)",
+     "uid": "homelab-pantry-bot-postgres",
+     "version": 1
     }
   pantry-bot-usage.json: |
     {
@@ -4940,39 +5602,1424 @@ data:
   site-service-health.json: |
     {
       "uid": "homelab-site-service-health",
-      "title": "Site & Service Health — Home / Oracle / Canada",
-      "description": "Single-glance view of the PantryBot multi-site failover project's three sites (tracked separately in issue #191 / pantry-bot#147 -- this dashboard only consumes signals that project already exposes, it does not implement any of it). Built 2026-09-21 by directly checking, live, what this Prometheus can and cannot currently answer: Home is this k3s cluster and is fully instrumented via kube-state-metrics/cAdvisor plus the per-microservice /metrics scrape jobs. Oracle currently has NO presence in this Prometheus at all -- no site=\"oracle\" label exists anywhere (verified via /api/v1/label/site/values) -- so every 'is Oracle up' question is answered honestly as unknown, not faked. Canada has exactly one scrape target defined (job=canada-pantry-bot-api, role=recovery, tunnelled to this host's 192.168.40.208:13101) and it is not currently returning fresh samples; there is no Alloy/windows_exporter-style host telemetry for Canada the way Greenie's PC has. The failover-witness service's own /metrics (failover_witness_lease_active, failover_witness_lease_epoch) is also not currently scraped by this Prometheus -- a scrape job for it exists in observability/prometheus-config.yaml but has not been deployed to the live ConfigMap as of this audit -- so this dashboard cannot show which site currently holds the fencing lease either. Where the answer is 'unknown from here', this dashboard says so instead of omitting the question.",
-      "tags": ["homelab", "sites", "failover", "pantry-bot", "health"],
+      "title": "Site & Service Health \u2014 Home / Oracle / Canada",
+      "description": "Which site is each service at, and is it up. Every service row carries an explicit Site column. HOME is this k3s cluster and is fully instrumented; Kubernetes objects have no site label of their own, so this dashboard stamps site=\"home\" onto them with label_replace \u2014 a definition, not a measurement. ORACLE runs a separate, non-federated Prometheus and CANADA has no scrape target at all, so both are reported as \"unknown from here\" rather than faked. Both of those panels count targets instead of probing a hard-coded job name, so they start working by themselves once the corresponding scrape job is added. Rebuilt 2026-09-21: the previous Canada panel queried up{job=\"canada-pantry-bot-api\"}, a job present in neither the repo nor the live Prometheus config, so it could only ever render No data.",
+      "tags": [
+        "homelab",
+        "sites",
+        "failover",
+        "health",
+        "pantry-bot"
+      ],
       "timezone": "browser",
       "editable": true,
       "schemaVersion": 39,
-      "version": 1,
-      "refresh": "30s",
-      "graphTooltip": 1,
-      "time": { "from": "now-6h", "to": "now" },
-      "templating": { "list": [
-        { "name": "DS_PROMETHEUS", "label": "Prometheus", "type": "datasource", "query": "prometheus", "current": {}, "hide": 0, "refresh": 1, "regex": "", "skipUrlSync": false }
-      ] },
+      "version": 2,
+      "refresh": "1m",
+      "graphTooltip": 0,
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "links": [
+        {
+          "title": "Per-service dashboards",
+          "type": "dashboards",
+          "tags": [
+            "service"
+          ],
+          "asDropdown": true,
+          "icon": "external link",
+          "includeVars": false,
+          "keepTime": true,
+          "targetBlank": false,
+          "tooltip": "",
+          "url": ""
+        }
+      ],
+      "templating": {
+        "list": [
+          {
+            "name": "DS_PROMETHEUS",
+            "label": "Prometheus",
+            "type": "datasource",
+            "query": "prometheus",
+            "current": {},
+            "hide": 0,
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false
+          }
+        ]
+      },
       "panels": [
-        { "type": "row", "title": "Home (this k3s cluster)", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "panels": [] },
-        { "id": 1, "type": "stat", "title": "Home Nodes Ready", "description": "Ready condition across every node kube-state-metrics knows about in this cluster (not hardcoded to one node name -- this cluster has had a second node, chasebot, come and go).", "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [
-            { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(kube_node_status_condition{condition=\"Ready\", status=\"true\"})", "legendFormat": "ready" },
-            { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "count(kube_node_status_condition{condition=\"Ready\"})", "legendFormat": "total" }
-          ], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "horizontal", "textMode": "value_and_name", "colorMode": "none", "graphMode": "none", "justifyMode": "auto" }, "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] } },
-        { "id": 2, "type": "table", "title": "PantryBot Microservices Up (Home)", "description": "up{} for every pantry-bot-* scrape job at site=\"home\" (api, gateway, dispatcher, worker). 0/no-row means that service's /metrics endpoint is not responding right now -- during an active failover rehearsal or a genuine incident this is expected to show 0s; cross-check against kubectl / the Pantry Bot dashboards before treating it as a surprise.", "gridPos": { "h": 5, "w": 12, "x": 6, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "up{job=~\"pantry-bot-.*\", site=\"home\"}", "format": "table", "instant": true }], "transformations": [{ "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "instance": true, "site": true }, "renameByName": { "job": "Service", "role": "Role", "Value": "Up" } } }], "options": { "showHeader": true, "cellHeight": "sm" }, "fieldConfig": { "defaults": { "custom": { "cellOptions": { "type": "color-background" } }, "mappings": [{ "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }] }, "overrides": [] } },
-        { "id": 3, "type": "stat", "title": "Ready PantryBot Pods (Home)", "description": "Across every pantry-bot microservice, including cloudflared and postgres.", "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(kube_pod_status_ready{namespace=\"pantry-bot\", condition=\"true\"})", "legendFormat": "ready" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none" }, "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] } },
-        { "id": 4, "type": "stat", "title": "Postgres Pod Present (Home) — name-based, not authoritative", "description": "Counts pods in the pantry-bot namespace whose name starts with 'postgres-'. This tells you a Postgres pod is currently scheduled at Home; it does NOT tell you whether it is primary or a replica, or currently healthy -- Postgres StatefulSet/pod names have been renamed multiple times during the failover project, and no primary/replica role is currently exposed as a Prometheus label (checked kube_pod_labels for a pantrybot.postgres/role-style label; none exists as of this audit). Use the PantryBot ops runbook or the witness's own state for an authoritative answer.", "gridPos": { "h": 5, "w": 6, "x": 0, "y": 6 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "count(kube_pod_status_phase{namespace=\"pantry-bot\", pod=~\"postgres-.*\", phase=\"Running\"}) or vector(0)", "legendFormat": "postgres pods running" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none" }, "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] } },
-
-        { "type": "row", "title": "Oracle", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 11 }, "panels": [] },
-        { "id": 5, "type": "text", "title": "Oracle is not instrumented into this Prometheus", "gridPos": { "h": 4, "w": 24, "x": 0, "y": 12 }, "options": { "mode": "markdown", "content": "**Verified live on 2026-09-21**: `label_values(up, site)` returns only `canada`, `home`, and `windows-remote` -- there is no `oracle` site anywhere in this Prometheus's series. Oracle's k3s cluster is not federated, remote-written, or otherwise scraped into this instance, so **no panel here can honestly answer whether Oracle is up**. If/when Oracle gains a scrape or remote-write path into this Prometheus (federation, an Alloy forwarder, or a direct scrape job with `site=\"oracle\"`), add real panels here instead of a placeholder. Until then, check Oracle directly or via whatever the multi-site failover project (#191 / pantry-bot#147) already uses for that." } },
-
-        { "type": "row", "title": "Canada", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 }, "panels": [] },
-        { "id": 6, "type": "stat", "title": "Canada Recovery Endpoint Reachable", "description": "up{job=\"canada-pantry-bot-api\"}. This is a single tunnelled scrape target (role=\"recovery\", reached via 192.168.40.208:13101, i.e. proxied back through the Home host) for one PantryBot API surface at Canada -- it is not a general Canada host-up signal. As of this audit it has no fresh samples (target not currently reporting); NO DATA here means 'not currently scraping successfully', not necessarily 'Canada is down'.", "gridPos": { "h": 5, "w": 8, "x": 0, "y": 17 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "up{job=\"canada-pantry-bot-api\"}", "legendFormat": "canada recovery api" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "none" }, "fieldConfig": { "defaults": { "noValue": "NOT REPORTING", "mappings": [{ "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }], "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] } },
-        { "id": 7, "type": "text", "title": "No Canada host telemetry", "gridPos": { "h": 5, "w": 16, "x": 8, "y": 17 }, "options": { "mode": "markdown", "content": "Canada is a Windows/Docker host outside Kubernetes. Greenie's Main PC proves the pattern for getting a Windows host's own health (CPU/memory/disk/GPU) into this Prometheus via Grafana Alloy remote-write (`site=\"windows-remote\"`, see the Greenie's Main PC — Health dashboard). **As of this audit, Canada has no equivalent path wired up** -- the only thing this Prometheus knows about Canada is the single `canada-pantry-bot-api` recovery-role scrape target above, which speaks to one application endpoint, not host health. If Canada host-level monitoring is wanted, the fastest route is standing up the same Alloy remote-write pattern already proven for Greenie's PC." } },
-
-        { "type": "row", "title": "Cross-site failover signals", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 }, "panels": [] },
-        { "id": 8, "type": "text", "title": "Failover-witness lease holder — not currently queryable here", "gridPos": { "h": 5, "w": 24, "x": 0, "y": 23 }, "options": { "mode": "markdown", "content": "`observability/failover-witness/witness.py` exposes `/metrics` with `failover_witness_lease_active{resource,holder}` and `failover_witness_lease_epoch{resource}` -- exactly the 'who currently holds authority' signal this dashboard would want. **It is not currently scraped by this Prometheus.** A `pantry-postgres-witness` scrape job targeting `failover-witness-relay.observability.svc.cluster.local:18765` already exists in `observability/prometheus-config.yaml` in this repo, but the *live* `prometheus-config` ConfigMap on the cluster does not have it yet (checked directly, 2026-09-21) -- so it has not been deployed. This dashboard change intentionally does not deploy that scrape config itself: touching live Prometheus scrape config is outside 'dashboards only' scope, and a production failover rehearsal is in progress elsewhere in this repo's infrastructure right now. The panel below is wired to the correct metric name so it starts working the moment that job goes live; until then it will show no data, which is the honest state." } },
-        { "id": 9, "type": "table", "title": "Fencing Lease Holder (once scraped)", "description": "failover_witness_lease_active{resource,holder}. holder is one of home/oracle/canada/none. Will show no data until the pantry-postgres-witness scrape job above is deployed.", "gridPos": { "h": 6, "w": 24, "x": 0, "y": 28 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "failover_witness_lease_active", "format": "table", "instant": true }], "transformations": [{ "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "instance": true, "job": true }, "renameByName": { "resource": "Resource", "holder": "Holder", "Value": "Active" } } }], "options": { "showHeader": true, "cellHeight": "sm" }, "fieldConfig": { "defaults": {}, "overrides": [] } }
+        {
+          "type": "row",
+          "title": "Site map \u2014 which site is each service at?",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "panels": []
+        },
+        {
+          "id": 1,
+          "type": "text",
+          "title": "How to read this dashboard",
+          "gridPos": {
+            "h": 5,
+            "w": 24,
+            "x": 0,
+            "y": 1
+          },
+          "options": {
+            "mode": "markdown",
+            "content": "Every service row below carries an explicit **Site** column, so no panel here requires you to already know where something runs.\n\n| Site | What it is | How this Prometheus sees it |\n|---|---|---|\n| **HOME** | MinecraftMachine, the single-node k3s cluster on the home LAN (192.168.40.208) | Fully instrumented: kube-state-metrics, cAdvisor, Alloy/Loki, plus per-microservice `/metrics` scrape jobs. Kubernetes objects carry no `site` label, so this dashboard stamps `site=\"home\"` onto them with `label_replace` \u2014 that is a definition, not a measurement. |\n| **ORACLE** | Oracle Cloud failover site | **Not federated into this Prometheus.** `observability/oracle-prometheus-config.yaml` configures a *separate* Prometheus at Oracle; nothing from it is remote-written or federated here, so every Oracle question is answered \"unknown from here\" rather than guessed. |\n| **CANADA** | Last-resort recovery site | **No scrape target exists.** There is no `canada-*` job in `observability/prometheus-config.yaml` and no series carries `site=\"canada\"`. The Canada panel below reports the count of configured Canada targets, so it turns green by itself the day one is added. |\n| **GREENIE'S PC** | Windows/Docker gaming PC (`ThePantry`) | Reaches this Prometheus via Alloy remote-write as `site=\"windows-remote\"`. Detail on the Greenie's Main PC dashboard. |"
+          }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "HOME \u2014 scrape targets up",
+          "description": "Targets this Prometheus scrapes that belong to the home cluster.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(up{site=\"home\"} or up{job!~\".*oracle.*|canada-.*\"} unless up{site!=\"\"})",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "GREENIE'S PC \u2014 remote-write up",
+          "description": "",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(up{site=\"windows-remote\"}) or vector(0)",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "DOWN",
+                      "color": "red",
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "ORACLE \u2014 instrumented here?",
+          "description": "Number of Oracle scrape targets in THIS Prometheus. 0 means Oracle health is unknown from here \u2014 not that Oracle is down.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "count(up{site=\"oracle\"}) or vector(0)",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "NOT INSTRUMENTED",
+                      "color": "text",
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 5,
+          "type": "stat",
+          "title": "CANADA \u2014 targets configured",
+          "description": "Counts Canada scrape targets rather than probing a hard-coded job name, so this panel starts working on its own once a canada-* job is added to observability/prometheus-config.yaml.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 18,
+            "y": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "count(up{site=\"canada\"}) or vector(0)",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "NO TARGET CONFIGURED",
+                      "color": "text",
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 6,
+          "type": "table",
+          "title": "Every service and its site",
+          "description": "Workloads from kube-state-metrics, stamped site=\"home\" because they are objects of the home cluster. Remote sites appear here only once they are scraped into this Prometheus.",
+          "gridPos": {
+            "h": 14,
+            "w": 24,
+            "x": 0,
+            "y": 10
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "label_replace(sum by (namespace, deployment) (kube_deployment_status_replicas_available), \"site\", \"home\", \"\", \"\")",
+              "instant": true,
+              "format": "table"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "label_replace(sum by (namespace, deployment) (kube_deployment_spec_replicas), \"site\", \"home\", \"\", \"\")",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "joinByField",
+              "options": {
+                "byField": "deployment",
+                "mode": "outer"
+              }
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "Time 1": true,
+                  "Time 2": true,
+                  "namespace 2": true,
+                  "site 2": true
+                },
+                "renameByName": {
+                  "site 1": "Site",
+                  "site": "Site",
+                  "namespace 1": "Namespace",
+                  "namespace": "Namespace",
+                  "deployment": "Service",
+                  "Value #A": "Ready",
+                  "Value #B": "Desired"
+                },
+                "indexByName": {
+                  "site 1": 0,
+                  "namespace 1": 1,
+                  "deployment": 2,
+                  "Value #A": 3,
+                  "Value #B": 4
+                }
+              }
+            },
+            {
+              "id": "sortBy",
+              "options": {
+                "fields": {},
+                "sort": [
+                  {
+                    "field": "Site"
+                  },
+                  {
+                    "field": "Namespace"
+                  }
+                ]
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                }
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Site"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 150
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "home": {
+                            "text": "HOME",
+                            "color": "green",
+                            "index": 0
+                          },
+                          "oracle": {
+                            "text": "ORACLE",
+                            "color": "purple",
+                            "index": 1
+                          },
+                          "canada": {
+                            "text": "CANADA",
+                            "color": "blue",
+                            "index": 2
+                          },
+                          "windows-remote": {
+                            "text": "GREENIE'S PC",
+                            "color": "orange",
+                            "index": 3
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background",
+                      "mode": "basic"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Ready"
+                },
+                "properties": [
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-text"
+                    }
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "red",
+                          "value": null
+                        },
+                        {
+                          "color": "green",
+                          "value": 1
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false,
+              "reducer": [
+                "sum"
+              ],
+              "countRows": false,
+              "fields": ""
+            }
+          }
+        },
+        {
+          "type": "row",
+          "title": "Scrape targets by site",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 24
+          },
+          "panels": []
+        },
+        {
+          "id": 7,
+          "type": "table",
+          "title": "Every scrape target, with its site",
+          "description": "Targets with no site label are home-cluster infrastructure; label_replace stamps them site=\"home\" so the column is never blank.",
+          "gridPos": {
+            "h": 12,
+            "w": 24,
+            "x": 0,
+            "y": 25
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "label_replace(up, \"site\", \"home\", \"site\", \"\")",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "role": false
+                },
+                "renameByName": {
+                  "site": "Site",
+                  "job": "Job",
+                  "instance": "Instance",
+                  "role": "Role",
+                  "Value": "Up"
+                },
+                "indexByName": {
+                  "site": 0,
+                  "job": 1,
+                  "instance": 2,
+                  "Value": 3
+                }
+              }
+            },
+            {
+              "id": "sortBy",
+              "options": {
+                "fields": {},
+                "sort": [
+                  {
+                    "field": "Up"
+                  },
+                  {
+                    "field": "Site"
+                  }
+                ]
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                }
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Site"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 150
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "home": {
+                            "text": "HOME",
+                            "color": "green",
+                            "index": 0
+                          },
+                          "oracle": {
+                            "text": "ORACLE",
+                            "color": "purple",
+                            "index": 1
+                          },
+                          "canada": {
+                            "text": "CANADA",
+                            "color": "blue",
+                            "index": 2
+                          },
+                          "windows-remote": {
+                            "text": "GREENIE'S PC",
+                            "color": "orange",
+                            "index": 3
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background",
+                      "mode": "basic"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Up"
+                },
+                "properties": [
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "0": {
+                            "text": "DOWN",
+                            "color": "red",
+                            "index": 0
+                          },
+                          "1": {
+                            "text": "UP",
+                            "color": "green",
+                            "index": 1
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background",
+                      "mode": "basic"
+                    }
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 110
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm"
+          }
+        },
+        {
+          "type": "row",
+          "title": "HOME \u2014 this k3s cluster",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 37
+          },
+          "panels": []
+        },
+        {
+          "id": 8,
+          "type": "stat",
+          "title": "Home Nodes Ready",
+          "description": "A node stuck at condition Ready/status=unknown has stopped heartbeating; its pods keep counting as scheduled while nothing runs.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 38
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(kube_node_status_condition{condition=\"Ready\", status=\"true\"})",
+              "legendFormat": "ready",
+              "instant": true
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "count(kube_node_status_condition{condition=\"Ready\"})",
+              "legendFormat": "total",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 9,
+          "type": "stat",
+          "title": "Home Nodes NOT Ready",
+          "description": "",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 38
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "count(kube_node_status_condition{condition=\"Ready\", status=\"true\"} == 0) or vector(0)",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "ALL READY",
+                      "color": "green",
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 10,
+          "type": "stat",
+          "title": "Ready PantryBot Pods (home)",
+          "description": "",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 38
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(kube_pod_status_ready{namespace=\"pantry-bot\", condition=\"true\"}) or vector(0)",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 11,
+          "type": "stat",
+          "title": "PantryBot Containers CrashLooping (home)",
+          "description": "Non-zero means the home app plane is failing, not parked. A parked plane has its Deployments scaled to 0 and shows nothing here.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 18,
+            "y": 38
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(kube_pod_container_status_waiting_reason{namespace=\"pantry-bot\", reason=\"CrashLoopBackOff\"}) or vector(0)",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "NONE",
+                      "color": "green",
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 12,
+          "type": "table",
+          "title": "PantryBot microservices \u2014 home scrape targets",
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 42
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "up{job=~\"pantry-bot-.*\"}",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true
+                },
+                "renameByName": {
+                  "site": "Site",
+                  "job": "Job",
+                  "instance": "Instance",
+                  "Value": "Up"
+                },
+                "indexByName": {
+                  "site": 0,
+                  "job": 1,
+                  "instance": 2,
+                  "Value": 3
+                }
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Site"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 150
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "home": {
+                            "text": "HOME",
+                            "color": "green",
+                            "index": 0
+                          },
+                          "oracle": {
+                            "text": "ORACLE",
+                            "color": "purple",
+                            "index": 1
+                          },
+                          "canada": {
+                            "text": "CANADA",
+                            "color": "blue",
+                            "index": 2
+                          },
+                          "windows-remote": {
+                            "text": "GREENIE'S PC",
+                            "color": "orange",
+                            "index": 3
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background",
+                      "mode": "basic"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Up"
+                },
+                "properties": [
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "0": {
+                            "text": "DOWN",
+                            "color": "red",
+                            "index": 0
+                          },
+                          "1": {
+                            "text": "UP",
+                            "color": "green",
+                            "index": 1
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background",
+                      "mode": "basic"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm"
+          }
+        },
+        {
+          "type": "row",
+          "title": "ORACLE",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 50
+          },
+          "panels": []
+        },
+        {
+          "id": 13,
+          "type": "text",
+          "title": "Oracle is not instrumented into this Prometheus",
+          "gridPos": {
+            "h": 5,
+            "w": 24,
+            "x": 0,
+            "y": 51
+          },
+          "options": {
+            "mode": "markdown",
+            "content": "No series in this Prometheus carries `site=\"oracle\"`, and there is no Oracle job in `observability/prometheus-config.yaml`. Oracle runs its own Prometheus, configured by `observability/oracle-prometheus-config.yaml`; it is neither federated nor remote-written here.\n\n**So: this dashboard cannot say whether Oracle is up.** The ORACLE stat above counts Oracle targets, so it stops saying NOT INSTRUMENTED the moment federation or remote-write is added \u2014 no dashboard edit needed."
+          }
+        },
+        {
+          "type": "row",
+          "title": "CANADA",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 56
+          },
+          "panels": []
+        },
+        {
+          "id": 14,
+          "type": "text",
+          "title": "Canada has no scrape target in this Prometheus",
+          "gridPos": {
+            "h": 5,
+            "w": 24,
+            "x": 0,
+            "y": 57
+          },
+          "options": {
+            "mode": "markdown",
+            "content": "Canada is a Windows/Docker host outside Kubernetes. `observability/failover-witness/CANADA-METRICS-RELAY.md` describes a relay and says the Prometheus target is enabled, but **no `canada-*` job exists in `observability/prometheus-config.yaml` and no series carries `site=\"canada\"`** \u2014 the document is ahead of the config.\n\nAn earlier version of this dashboard hard-coded `up{job=\"canada-pantry-bot-api\"}`, a job name that exists in neither the repo config nor the live one, so the panel could only ever render \"No data\". The CANADA stat above counts `site=\"canada\"` targets instead, which is truthful today and self-healing later.\n\nHost telemetry for Canada would follow the pattern Greenie's PC already proves: Alloy remote-write with a `site` label."
+          }
+        },
+        {
+          "type": "row",
+          "title": "Cross-site failover signals",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 62
+          },
+          "panels": []
+        },
+        {
+          "id": 15,
+          "type": "stat",
+          "title": "Fencing lease metric scraped?",
+          "description": "absent() returns 1 while the metric has no series, so this panel always renders something instead of going blank. The pantry-postgres-witness job exists in observability/prometheus-config.yaml but is not in the live Prometheus config \u2014 a deploy drift, not a missing exporter.",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 0,
+            "y": 63
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "absent(failover_witness_lease_active)",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "1": {
+                      "text": "NOT SCRAPED",
+                      "color": "orange",
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 16,
+          "type": "table",
+          "title": "Fencing lease holder (once the witness job is live)",
+          "description": "Empty until the pantry-postgres-witness scrape job is applied to the live Prometheus ConfigMap.",
+          "gridPos": {
+            "h": 8,
+            "w": 16,
+            "x": 8,
+            "y": 63
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "failover_witness_lease_active",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "instance": true,
+                  "job": true
+                },
+                "renameByName": {
+                  "resource": "Resource",
+                  "holder": "Holder",
+                  "site": "Site",
+                  "Value": "Active"
+                }
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Site"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 150
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "home": {
+                            "text": "HOME",
+                            "color": "green",
+                            "index": 0
+                          },
+                          "oracle": {
+                            "text": "ORACLE",
+                            "color": "purple",
+                            "index": 1
+                          },
+                          "canada": {
+                            "text": "CANADA",
+                            "color": "blue",
+                            "index": 2
+                          },
+                          "windows-remote": {
+                            "text": "GREENIE'S PC",
+                            "color": "orange",
+                            "index": 3
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background",
+                      "mode": "basic"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm"
+          }
+        }
       ]
     }
 kind: ConfigMap
