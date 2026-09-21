@@ -125,3 +125,53 @@ Prometheus in this repository.
 
 See
 `docs/recovery/GRAFANA-CLOUD-MIGRATION.md` for the staged cutover gates.
+
+---
+
+## 5. `mcp-grafana-grafana-token` — Grafana service account token for mcp-grafana
+
+Consumed by `mcp-grafana.yaml`'s `GRAFANA_SERVICE_ACCOUNT_TOKEN` env var. Create
+a service account + token in the self-hosted Grafana (Administration ->
+Service accounts), scoped to read-only roles sufficient for the MCP tools you
+intend to use (dashboards/datasources/query at minimum), then:
+
+```bash
+kubectl -n observability create secret generic mcp-grafana-grafana-token \
+  --from-literal=token='<glsa_... service account token>'
+```
+
+The key must be exactly `token`. A missing Secret sits the pod in
+`CreateContainerConfigError`, same as every other required Secret in this
+namespace.
+
+## 6. `mcp-grafana-server-token` — mcp-grafana's own caller-auth bearer token
+
+Consumed as `MCP_GRAFANA_SERVER_TOKEN`. This is a second, independent access
+check inside mcp-grafana itself, on top of whatever network-level restriction
+guards `mcp-grafana.greeniespantry.uk` (see `MCP-GRAFANA-SETUP.md`). Generate
+a random value -- this is not a Grafana credential, just a shared secret
+between this server and whatever MCP client (Claude) calls it:
+
+```bash
+kubectl -n observability create secret generic mcp-grafana-server-token \
+  --from-literal=token="$(openssl rand -hex 32)"
+```
+
+Save the generated value somewhere you can paste it into the MCP client's
+connector config (as its Bearer token) -- `kubectl` will not show it back to
+you unencoded.
+
+## 7. `mcp-grafana-cloudflared-tunnel-token` — dedicated tunnel token for the mcp-grafana connector
+
+Same shape as `ci-tunnel-token` / `commands-cloudflared-tunnel-token`: a
+brand-new Cloudflare Tunnel created for this hostname only (do not reuse an
+existing tunnel -- see `mcp-grafana-cloudflared.yaml`'s header for why).
+
+```bash
+kubectl -n observability create secret generic mcp-grafana-cloudflared-tunnel-token \
+  --from-literal=TUNNEL_TOKEN='<paste the token from the Cloudflare dashboard>'
+```
+
+Full dashboard-side setup (tunnel, public hostname, Cloudflare Access policy)
+is in `MCP-GRAFANA-SETUP.md` -- it can't be scripted from a repo-only change,
+same caveat as `ci-tunnel/MANUAL-SETUP.md`.

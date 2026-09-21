@@ -1,0 +1,167 @@
+# grafana/mcp-grafana -- MCP server giving an AI agent (Claude) query access
+# to this cluster's self-hosted Grafana, over Streamable HTTP.
+#
+# Why this exists instead of using Grafana Cloud's OAuth-based MCP connector:
+# that connector's browser OAuth flow doesn't fit a non-interactive agent
+# session the same way a static service account token does. This runs the
+# upstream grafana/mcp-grafana server as its own workload instead, talking to
+# the *self-hosted* Grafana at grafana.greeniespantry.uk (retained here as the
+# rollback-only instance -- see grafana-deploy.yml's header -- not Grafana
+# Cloud, which is production).
+#
+# GRAFANA_URL below points at the in-cluster ClusterIP path
+# (grafana.observability.svc.cluster.local:3002), NOT the public
+# grafana.greeniespantry.uk hostname. That's deliberate, not an oversight:
+# the public hostname is fronted by Authentik's proxy outpost
+# (GF_AUTH_PROXY_ENABLED in grafana.yaml expects the browser-auth
+# X-authentik-username header), and routing this server's Bearer-token API
+# calls through that outpost would just repeat the redirect-to-login failure
+# that broke the Grafana Cloud MCP connector in the first place. Grafana's
+# service-account-token auth (Authorization: Bearer <token>) is handled by a
+# separate, earlier stage of Grafana's auth chain than the proxy-header path,
+# so it works the same whether GF_AUTH_PROXY_ENABLED is set or not -- but
+# going in-cluster sidesteps the question entirely rather than relying on
+# that. Verify with the curl commands in MCP-GRAFANA-SETUP.md before trusting
+# this in production.
+#
+# Required Secrets (never committed -- see SECRETS.md):
+#   mcp-grafana-grafana-token  -- the Grafana service account token
+#   mcp-grafana-server-token   -- this server's own caller-auth bearer token
+#     (MCP_GRAFANA_SERVER_TOKEN; defense in depth underneath the Cloudflare
+#     Access policy set up in MCP-GRAFANA-SETUP.md -- a caller needs both the
+#     network-level allow and this token, not just one or the other).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mcp-grafana-sa
+  namespace: observability
+  labels:
+    app: mcp-grafana
+    app.kubernetes.io/name: mcp-grafana
+    app.kubernetes.io/part-of: observability
+# This server never talks to the Kubernetes API, same as grafana-sa.
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-grafana
+  namespace: observability
+  labels:
+    app: mcp-grafana
+    app.kubernetes.io/name: mcp-grafana
+    app.kubernetes.io/part-of: observability
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: mcp-grafana
+  template:
+    metadata:
+      labels:
+        app: mcp-grafana
+        app.kubernetes.io/name: mcp-grafana
+        app.kubernetes.io/part-of: observability
+    spec:
+      serviceAccountName: mcp-grafana-sa
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 15
+      securityContext:
+        # Assumes the upstream image supports running as a non-root UID.
+        # 65532 is the common distroless/nonroot convention (same UID this
+        # repo's cloudflared connectors already run as) -- NOT independently
+        # verified against grafana/mcp-grafana's own Dockerfile. If the pod
+        # CrashLoopBackOffs with a permission error after first apply, drop
+        # runAsUser/runAsGroup here (falls back to the image's built-in
+        # user) and confirm that user is non-root before keeping
+        # runAsNonRoot: true.
+        runAsUser: 65532
+        runAsGroup: 65532
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mcp-grafana
+          # Pin by digest before relying on this in production, matching
+          # every other third-party image in this repo (see
+          # ci-tunnel/20-deployment.yaml's cloudflared pin for the pattern):
+          #   docker buildx imagetools inspect grafana/mcp-grafana:1.5.1
+          image: grafana/mcp-grafana:1.5.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-t"
+            - "streamable-http"
+            # Default bind is localhost:8000 -- unreachable from the Service
+            # without this. Must stay in sync with the containerPort/probes
+            # below.
+            - "--address"
+            - ":8000"
+          env:
+            - name: GRAFANA_URL
+              value: http://grafana.observability.svc.cluster.local:3002
+            - name: GRAFANA_SERVICE_ACCOUNT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: mcp-grafana-grafana-token
+                  key: token
+            - name: MCP_GRAFANA_SERVER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: mcp-grafana-server-token
+                  key: token
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-grafana
+  namespace: observability
+  labels:
+    app: mcp-grafana
+    app.kubernetes.io/name: mcp-grafana
+    app.kubernetes.io/part-of: observability
+spec:
+  type: ClusterIP
+  selector:
+    app: mcp-grafana
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP

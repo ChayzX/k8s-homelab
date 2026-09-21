@@ -26,6 +26,8 @@ Node LAN IP: `192.168.40.208`. StorageClass: `local-path`.
 | `grafana-verify-nodeport.yaml` | **Verification only.** NodePort 30002. |
 | `alloy-logs-home.yaml` / `alloy-logs-oracle.yaml` | Alloy Kubernetes log collectors for the home and Oracle sites. |
 | `kube-state-metrics.yaml` | kube-state-metrics SA, ClusterRole/Binding, Deployment, headless Service (8080/8081). |
+| `mcp-grafana.yaml` | mcp-grafana SA, Deployment, ClusterIP Service (8000). Gives an MCP client (Claude) query access to the self-hosted Grafana. See `MCP-GRAFANA-SETUP.md`. |
+| `mcp-grafana-cloudflared.yaml` | Dedicated tunnel connector for `mcp-grafana.greeniespantry.uk` only — separate tunnel/token from every other hostname in this repo. |
 
 Every stateful app (loki, prometheus, grafana) is a
 `Deployment` with `strategy: Recreate` and a `ReadWriteOnce` PVC -- never
@@ -335,6 +337,23 @@ with a Grafana Explore query against Loki:
 
 should return only genuinely error-level lines, once at least one app is
 producing some.
+
+## mcp-grafana — MCP server for agent access to Grafana
+
+`mcp-grafana.yaml` runs the upstream `grafana/mcp-grafana` server so an MCP
+client (Claude) can query this self-hosted Grafana instance instead of using
+Grafana Cloud's OAuth-based MCP connector, which doesn't fit a non-interactive
+agent session. It talks to Grafana over the in-cluster ClusterIP path, not
+the public `grafana.greeniespantry.uk` hostname, specifically to avoid
+Authentik's proxy outpost (fronting that public hostname) redirecting its
+Bearer-token API calls to a login page.
+
+The server itself is exposed publicly at `mcp-grafana.greeniespantry.uk` via
+its own dedicated Cloudflare Tunnel connector (`mcp-grafana-cloudflared.yaml`)
+so Claude can reach it — gated by a Cloudflare Access **Service Token**
+policy (or an IP allowlist), deliberately **not** an Authentik/IdP policy, for
+the same reason. Full setup: `MCP-GRAFANA-SETUP.md`. Required Secrets:
+`SECRETS.md` items 5–7.
 
 ## Grafana Cloud ingestion check
 
