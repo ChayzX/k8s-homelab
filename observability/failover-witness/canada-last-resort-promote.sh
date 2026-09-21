@@ -66,18 +66,31 @@ echo 'canada_last_resort_guard=home_dark oracle_dark' >&2
 
 ssh_args=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o ConnectTimeout=10 -i "$CANADA_ADMIN_KEY" "BotAdmin@$CANADA_ADDRESS")
 
+# Windows OpenSSH runs the remote command through cmd.exe, which does not
+# preserve argv boundaries the way ssh's array-style invocation assumes on a
+# POSIX remote shell: ssh flattens "${ssh_args[@]}" cmd arg1 arg2 'arg three'
+# into one space-joined string, and single quotes are not special to cmd.exe.
+# Found live 2026-09-21 mid-rehearsal: 'select pg_is_in_recovery();' arrived
+# at psql as two bare words, "select" as the -c argument and
+# "pg_is_in_recovery();" as an ignored extra positional argument. The fix is
+# to build the entire remote command as ONE pre-quoted string ourselves,
+# using double quotes (which cmd.exe does honor for grouping), and pass that
+# single string as ssh's only trailing argument.
+canada_psql() {
+  ssh "${ssh_args[@]}" "docker exec $CANADA_POSTGRES_CONTAINER psql -U pantry -d pantry -tAc \"$1\""
+}
+
 if [[ "$mode" == "--dry-run" ]]; then
-  ssh "${ssh_args[@]}" powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
-    -Command "docker inspect --format '{{.State.Status}}' $CANADA_POSTGRES_CONTAINER" >/dev/null
+  ssh "${ssh_args[@]}" "docker inspect --format=\"{{.State.Status}}\" $CANADA_POSTGRES_CONTAINER" >/dev/null
   echo 'promotion_site=canada dry_run=true postgres_container_reachable=true'
   exit 0
 fi
 
 echo 'canada_last_resort=promoting local standby' >&2
-recovery_before="$(ssh "${ssh_args[@]}" docker exec "$CANADA_POSTGRES_CONTAINER" psql -U pantry -d pantry -tAc 'select pg_is_in_recovery();')"
+recovery_before="$(canada_psql 'select pg_is_in_recovery();')"
 case "$recovery_before" in
   t)
-    ssh "${ssh_args[@]}" docker exec "$CANADA_POSTGRES_CONTAINER" psql -U pantry -d pantry -tAc 'select pg_promote();' >/dev/null
+    canada_psql 'select pg_promote();' >/dev/null
     ;;
   f)
     echo 'canada_last_resort=already primary, resuming without re-promoting' >&2
@@ -90,7 +103,7 @@ esac
 
 deadline=$((SECONDS + 60))
 while (( SECONDS < deadline )); do
-  role="$(ssh "${ssh_args[@]}" docker exec "$CANADA_POSTGRES_CONTAINER" psql -U pantry -d pantry -tAc 'select pg_is_in_recovery();')"
+  role="$(canada_psql 'select pg_is_in_recovery();')"
   [[ "$role" == f ]] && break
   sleep 1
 done
@@ -101,12 +114,10 @@ fi
 echo 'canada_last_resort=promoted verified' >&2
 
 echo 'canada_last_resort=starting application containers via the existing authority gate (-Once)' >&2
-ssh "${ssh_args[@]}" powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
-  -File 'C:\ProgramData\PantryBotCanadaPrep\authority-gate.ps1' -Once
+ssh "${ssh_args[@]}" "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:\\ProgramData\\PantryBotCanadaPrep\\authority-gate.ps1 -Once"
 
 echo 'canada_last_resort=verifying readiness' >&2
-readiness="$(ssh "${ssh_args[@]}" powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
-  -File 'C:\ProgramData\PantryBotCanadaPrep\check-canada-ready.ps1')"
+readiness="$(ssh "${ssh_args[@]}" "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:\\ProgramData\\PantryBotCanadaPrep\\check-canada-ready.ps1")"
 echo "$readiness"
 if grep -q ERROR <<<"$readiness"; then
   echo 'promotion failed: one or more canada services failed readiness after promotion' >&2
