@@ -47,7 +47,7 @@ class PromotionAdapters:
     check_replication: Callable[[], None] | None = None
     publish_routes: Callable[[], None] | None = None
     verify_service: Callable[[], None] | None = None
-    validate_generation: Callable[[dict[str, Any]], None] | None = None
+    validate_generation: Callable[[dict[str, Any]], bool] | None = None
     record_progress: Callable[[dict[str, Any], str], None] | None = None
 
 
@@ -197,22 +197,24 @@ class OraclePromoter:
             if guard:
                 guard.check()
             return result
+        resuming = False
         try:
             if guard:
                 guard.start()
             if self.adapters.validate_generation:
-                step(lambda: self.adapters.validate_generation(token))
-            if self.adapters.fence_old_writer:
-                step(self.adapters.fence_old_writer)
-            if self.adapters.check_replication:
-                step(self.adapters.check_replication)
-            if self.adapters.record_progress:
-                step(lambda: self.adapters.record_progress(token, "promoting"))
-            step(lambda: self.adapters.promote(token))
-            if self.adapters.verify_promoted and not step(self.adapters.verify_promoted):
-                raise RuntimeError("target PostgreSQL promotion could not be verified")
-            if self.adapters.record_progress:
-                step(lambda: self.adapters.record_progress(token, "promoted"))
+                resuming = bool(step(lambda: self.adapters.validate_generation(token)))
+            if not resuming:
+                if self.adapters.fence_old_writer:
+                    step(self.adapters.fence_old_writer)
+                if self.adapters.check_replication:
+                    step(self.adapters.check_replication)
+                if self.adapters.record_progress:
+                    step(lambda: self.adapters.record_progress(token, "promoting"))
+                step(lambda: self.adapters.promote(token))
+                if self.adapters.verify_promoted and not step(self.adapters.verify_promoted):
+                    raise RuntimeError("target PostgreSQL promotion could not be verified")
+                if self.adapters.record_progress:
+                    step(lambda: self.adapters.record_progress(token, "promoted"))
         except Exception:
             # Everything up to and including a verified promotion is a
             # genuine authority/safety concern: fence, because the target
@@ -472,14 +474,24 @@ def run() -> None:
         if generation:
             journal.record(generation["epoch"], generation["system_identifier"], "fenced")
 
-    def validate_generation(token: dict[str, Any]) -> None:
+    def validate_generation(token: dict[str, Any]) -> bool:
         identity = _kubectl("-n", pod_namespace, "exec", args.pod, "--", *_postgres_query_command(args.postgres_port, args.postgres_user, args.postgres_database, "select system_identifier from pg_control_system();"))
         if not identity.isdigit():
             raise RuntimeError("target database identity is unknown")
         primary = is_primary()
         generation.update(epoch=token["epoch"], system_identifier=identity, resume=primary)
-        if primary and not journal.may_resume(token["epoch"], identity):
+        if not primary:
+            return False
+        if not journal.may_resume(token["epoch"], identity):
             raise RuntimeError("already-primary target has no matching durable activation receipt")
+        # A legitimate resume: the target is already promoted with a durable
+        # receipt matching this exact epoch and database identity. Re-running
+        # fence_old_writer/check_replication/promote here would be wrong, not
+        # just redundant — check_replication in particular correctly rejects
+        # an already-primary target for not being a standby, which previously
+        # caused a resumed (successful) promotion to self-fence itself on the
+        # very next controller restart.
+        return True
 
     def record_progress(token: dict[str, Any], phase: str) -> None:
         with promoter.fence_lock:

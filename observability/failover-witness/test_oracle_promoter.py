@@ -415,6 +415,42 @@ def test_generation_validation_precedes_old_writer_fencing() -> None:
     assert calls == ["validate", "local-fence"]
 
 
+def test_resuming_a_validated_promotion_skips_redundant_fence_and_replication_steps() -> None:
+    """A controller restart after a successful promotion must not re-run
+    fence_old_writer/check_replication/promote.
+
+    Reproduced live 2026-09-21: a controller restart between switch_endpoint
+    and enable_roles correctly resumed past validate_generation (a matching
+    activation receipt existed), but the code unconditionally re-ran
+    check_replication next — which correctly rejects the target for no
+    longer being a standby, since it was already promoted — turning a
+    legitimate resume into a self-fence of the just-promoted primary.
+    validate_generation now returns True for this case and run_once() skips
+    straight to the post-promotion steps.
+    """
+    calls: list[str] = []
+
+    adapters = PromotionAdapters(
+        acquire=lambda: {"epoch": 20, "token": "test"},
+        is_primary=lambda: True,
+        promote=lambda _: calls.append("promote"),
+        switch_endpoint=lambda: calls.append("endpoint"),
+        enable_roles=lambda: calls.append("roles"),
+        fence=lambda: calls.append("local-fence"),
+        renew=lambda _: True,
+        fence_old_writer=lambda: calls.append("old-fence"),
+        check_replication=lambda: calls.append("replication-check"),
+        validate_generation=lambda _token: True,
+    )
+
+    assert OraclePromoter(adapters).run_once() is True
+    assert calls == ["endpoint", "roles"]
+    assert "old-fence" not in calls
+    assert "replication-check" not in calls
+    assert "promote" not in calls
+    assert "local-fence" not in calls
+
+
 def test_journal_failure_prevents_promotion() -> None:
     calls: list[str] = []
 
