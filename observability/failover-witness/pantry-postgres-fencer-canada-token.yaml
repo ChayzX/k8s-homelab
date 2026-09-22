@@ -1,0 +1,10 @@
+# Per-caller revocable token for Canada's remote fences (#191). Apply on BOTH
+# Home and Oracle next to their pantry-postgres-fencer RBAC; delete to revoke.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pantry-postgres-fencer-canada-token
+  namespace: pantry-bot
+  annotations:
+    kubernetes.io/service-account.name: pantry-postgres-fencer
+type: kubernetes.io/service-account-token
