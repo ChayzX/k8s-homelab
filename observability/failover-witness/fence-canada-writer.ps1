@@ -1,7 +1,10 @@
 [CmdletBinding()]
 param(
   [switch]$ConfirmFence,
-  [string]$PostgresContainer = 'pantrybot-canada-postgres'
+  [string]$PostgresContainer = 'pantrybot-canada-postgres',
+  # Windows service running the PantryBot-Canada tunnel (8392cd48) connector.
+  # It carries only mods/overlay, never the shared PantryBot tunnel 59569621.
+  [string]$ConnectorService = 'Cloudflared'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,13 +28,29 @@ $mutating = @(
   'pantrybot-canada-prod-public'
 )
 
+# Stop and disable the app tunnel connector so a fenced Canada cannot keep
+# answering (or 502-ing) its public routes. Disabled, not just stopped: the
+# service is Automatic and would return on reboot. start-canada-production.ps1
+# re-enables it on promotion. A missing service counts as fenced.
+function Stop-Connector {
+  $svc = Get-Service -Name $ConnectorService -ErrorAction SilentlyContinue
+  if ($null -eq $svc) { return 'absent' }
+  Set-Service -Name $ConnectorService -StartupType Disabled
+  if ($svc.Status -ne 'Stopped') { Stop-Service -Name $ConnectorService -Force }
+  $svc = Get-Service -Name $ConnectorService
+  $svc.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20))
+  if ((Get-Service -Name $ConnectorService).Status -ne 'Stopped') { throw "Canada connector fence verification failed: $ConnectorService still running" }
+  return 'stopped'
+}
+
 # Fencing is idempotent: a previously stopped PostgreSQL writer is already
 # fenced, but application writers must still be verified stopped.
 $postgresStatus = (docker inspect --format '{{.State.Status}}' $PostgresContainer 2>$null).Trim()
 if ($postgresStatus -ne 'running') {
   $remainingAlreadyFenced = @(docker ps --format '{{.Names}}' | Where-Object { $_ -in $mutating })
   if ($remainingAlreadyFenced.Count -ne 0) { throw "Canada application fence verification failed: $($remainingAlreadyFenced -join ', ')" }
-  Write-Output "fence_status=passed site=canada database=stopped applications=stopped postgres_container=$PostgresContainer"
+  $connector = Stop-Connector
+  Write-Output "fence_status=passed site=canada database=stopped applications=stopped connector=$connector postgres_container=$PostgresContainer"
   exit 0
 }
 
@@ -66,4 +85,5 @@ $remaining = @(docker ps --format '{{.Names}}' | Where-Object { $_ -in $mutating
 if ($remaining.Count -ne 0) { throw "Canada application fence verification failed: $($remaining -join ', ')" }
 $dbRemaining = @(docker ps --format '{{.Names}}' | Where-Object { $_ -eq $PostgresContainer })
 if ($dbRemaining.Count -ne 0) { throw "Canada PostgreSQL fence verification failed: container still running" }
-Write-Output "fence_status=passed site=canada database=stopped applications=stopped postgres_container=$PostgresContainer"
+$connector = Stop-Connector
+Write-Output "fence_status=passed site=canada database=stopped applications=stopped connector=$connector postgres_container=$PostgresContainer"

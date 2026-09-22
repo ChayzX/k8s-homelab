@@ -27,6 +27,7 @@ rules:
       - postgres-authority-home-v2
       - postgres-authority-home-failback
       - postgres-authority-home-return
+      - postgres-authority-standby-home-canada
     verbs: ["get", "patch", "update"]
   - apiGroups: [""]
     resources: ["pods"]
@@ -36,6 +37,7 @@ rules:
       - postgres-authority-home-v2-0
       - postgres-authority-home-failback-0
       - postgres-authority-home-return-0
+      - postgres-authority-standby-home-canada-0
     verbs: ["get", "delete"]
   - apiGroups: [""]
     resources: ["services", "endpoints"]
@@ -45,7 +47,23 @@ rules:
       - postgres-authority-home-v2
       - postgres-authority-home-failback
       - postgres-authority-home-return
+      - postgres-authority-standby-home-canada
     verbs: ["get"]
+  # Writer-domain fence (#191): DB-writing apps and the PantryBot-App tunnel
+  # connector. Never cloudflared (shared tunnel 59569621), commands-cloudflared
+  # or pantry-commands-site.
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames:
+      - pantry-private-api
+      - pantry-overlay-delivery
+      - pantry-twitch-gateway
+      - pantry-twitch-dispatcher
+      - pantry-chat-worker
+      - pantry-private-site
+      - app-cloudflared
+      - pantry-bot
+    verbs: ["get", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

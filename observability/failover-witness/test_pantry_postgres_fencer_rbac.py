@@ -26,30 +26,52 @@ def test_fencer_uses_a_revocable_service_account_token_secret() -> None:
     assert "stringData" not in secret
 
 
-def test_fencer_role_is_limited_to_named_pantry_postgres_objects() -> None:
-    """Catch credential expansion beyond the three Home PostgreSQL targets."""
+HOME_FENCE_DEPLOYMENTS = {
+    "pantry-private-api",
+    "pantry-overlay-delivery",
+    "pantry-twitch-gateway",
+    "pantry-twitch-dispatcher",
+    "pantry-chat-worker",
+    "pantry-private-site",
+    "app-cloudflared",
+    "pantry-bot",
+}
+
+
+def names_for(role: dict, resource: str) -> set[str]:
+    return {name for rule in role["rules"] if resource in rule["resources"] for name in rule["resourceNames"]}
+
+
+def test_fencer_role_is_limited_to_named_pantry_objects() -> None:
+    """Catch credential expansion beyond the named Home PantryBot writer domain."""
     resources = resources_by_kind()
     role = resources["Role"]
-    names = {name for rule in role["rules"] for name in rule["resourceNames"]}
-
-    assert names == {
+    postgres = {
         "postgres-authority",
-        "postgres-authority-0",
         "postgres-authority-home",
-        "postgres-authority-home-0",
         "postgres-authority-home-v2",
-        "postgres-authority-home-v2-0",
         "postgres-authority-home-failback",
-        "postgres-authority-home-failback-0",
         "postgres-authority-home-return",
-        "postgres-authority-home-return-0",
+        "postgres-authority-standby-home-canada",
     }
+
+    assert names_for(role, "statefulsets") == postgres
+    assert names_for(role, "pods") == {f"{name}-0" for name in postgres}
+    assert names_for(role, "deployments") == HOME_FENCE_DEPLOYMENTS
+    assert all(rule["resourceNames"] for rule in role["rules"]), "every grant must be name-scoped"
     assert {verb for rule in role["rules"] for verb in rule["verbs"]} <= {
         "get",
         "patch",
         "update",
         "delete",
     }
+
+
+def test_fencer_can_never_touch_shared_or_commands_connectors() -> None:
+    """Catch a grant on the shared PantryBot tunnel (SSH/RDP/k8s-api/Authentik)."""
+    role = resources_by_kind()["Role"]
+    granted = {name for rule in role["rules"] for name in rule["resourceNames"]}
+    assert not granted & {"cloudflared", "commands-cloudflared", "pantry-commands-site"}
 
 
 def test_fencer_grant_covers_the_live_home_fence_script_default() -> None:
@@ -66,20 +88,14 @@ def test_fencer_grant_covers_the_live_home_fence_script_default() -> None:
     exists so the next resource rename (e.g. a future -v3) fails loudly in
     CI instead of failing at 2am against production.
     """
-    resources = resources_by_kind()
-    role = resources["Role"]
-    names = {name for rule in role["rules"] for name in rule["resourceNames"]}
-
+    role = resources_by_kind()["Role"]
     script = Path(__file__).with_name("fence-home-direct-from-oracle.sh").read_text()
-    match = re.search(r'STS="\$\{PANTRY_HOME_STATEFULSET:-([^}]+)\}"', script)
-    assert match, "fence-home-direct-from-oracle.sh must define a PANTRY_HOME_STATEFULSET default"
-    default_statefulset = match.group(1)
 
-    assert default_statefulset in names, (
-        f"{default_statefulset!r} is the live Home fence target but is not in the "
-        "fencer Role's resourceNames — the scoped fence will fail Forbidden"
-    )
-    assert f"{default_statefulset}-0" in names, (
-        f"{default_statefulset}-0 (the pod get/delete target) is missing from the fencer Role"
-    )
+    sts = re.search(r'HOME_PANTRY_STATEFULSETS="([^"]+)"', script)
+    deploy = re.search(r'PANTRY_WRITER_DEPLOYMENTS="([^"]+)"', script)
+    assert sts and deploy, "fence-home-direct-from-oracle.sh must define its default fence lists"
 
+    for name in sts.group(1).split():
+        assert name in names_for(role, "statefulsets"), f"{name!r} is fenced but not granted — fence fails Forbidden"
+        assert f"{name}-0" in names_for(role, "pods"), f"{name}-0 (pod delete target) is not granted"
+    assert set(deploy.group(1).split()) == names_for(role, "deployments")

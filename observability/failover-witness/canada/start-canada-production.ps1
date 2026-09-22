@@ -12,6 +12,9 @@ docker run -d --name pantrybot-canada-prod-dispatcher @common -e DB_PATH=/tmp/pa
 docker run -d --name pantrybot-canada-prod-overlay @common -e DB_PATH=/tmp/pantry.db -e PANTRY_RUNTIME_ROLE=overlay -e PANTRY_INSTANCE_ID=canada-overlay -e HTTP_PORT=8080 -p 127.0.0.1:18082:8080 $img.overlay
 docker run -d --name pantrybot-canada-prod-private @common -e PANTRY_SITE_ID=canada -e PRIVATE_SITE_PORT=3001 -e PRIVATE_API_ORIGIN=http://pantrybot-canada-prod-api:3000 -p 127.0.0.1:18081:3001 $img.private
 docker run -d --name pantrybot-canada-prod-public @common -e PANTRY_SITE_ID=canada -e PUBLIC_SITE_PORT=3000 -p 127.0.0.1:18080:3000 $img.public
+# fence-canada-writer.ps1 disables the PantryBot-Canada tunnel connector; bring it back with the apps.
+Set-Service -Name Cloudflared -StartupType Automatic -ErrorAction SilentlyContinue
+Start-Service -Name Cloudflared -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 12
 Get-Process docker -ErrorAction SilentlyContinue | Out-Null
 Write-Output STARTED
