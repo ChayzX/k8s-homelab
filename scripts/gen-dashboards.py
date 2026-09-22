@@ -452,8 +452,7 @@ def machines():
     b.text('', (
         '## How is one machine doing?\n'
         'Pick a **Machine** at the top. Big dials: green is fine, orange is getting tight, '
-        'red needs attention. **chasebot is not listed** because nothing collects its '
-        'hardware numbers yet (see issue #372).'), h=3)
+        'red needs attention.'), h=3)
 
     M = '$machine'
     cpu = [t(CPU_LINUX % M, 'A', 'CPU %', instant=True),

@@ -677,7 +677,7 @@ data:
        },
        "options": {
         "mode": "markdown",
-        "content": "## How is one machine doing?\nPick a **Machine** at the top. Big dials: green is fine, orange is getting tight, red needs attention. **chasebot is not listed** because nothing collects its hardware numbers yet (see issue #372)."
+        "content": "## How is one machine doing?\nPick a **Machine** at the top. Big dials: green is fine, orange is getting tight, red needs attention."
        }
       },
       {

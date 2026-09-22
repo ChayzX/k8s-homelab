@@ -84,7 +84,6 @@ dashboards stayed in Grafana indefinitely after their files were gone.
 - `minecraft_world_size_bytes` never registers — exporter bug, #374.
 - Fencing-lease holder not scraped — Prometheus config drift, #373.
 - Canada has no scrape target — #375.
-- chasebot has no hardware exporter scraped, so it is absent from Machines — #372.
 
 The full history of the 2026-09-21 audit — every broken panel, why, and what was
 retired — is in git history for this file and in issues #371–#376.
