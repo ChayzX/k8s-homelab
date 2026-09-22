@@ -126,8 +126,15 @@ spec:
             # Password for the PantryPostgres datasource
             # (grafana-provisioning.yaml interpolates
             # $PANTRY_GRAFANA_DB_PASSWORD into its secureJsonData). The
-            # Secret is created imperatively from the existing
-            # pantry-bot-postgres-home-return Secret; no value in this repo.
+            # Secret is created imperatively; no value in this repo. Source
+            # it from the password inside pantry-bot-platform's
+            # PANTRY_DATABASE_URL -- the credential the running apps use.
+            # NOT from pantry-bot-postgres-authority's POSTGRES_PASSWORD: on
+            # a streaming standby the working password is whatever
+            # replicated from the writer, and that Secret's value is only
+            # applied at initdb, so it can be stale (it was on 2026-09-21).
+            # Grafana reads env at startup, so restart it after changing
+            # the Secret.
             - name: PANTRY_GRAFANA_DB_PASSWORD
               valueFrom:
                 secretKeyRef:
