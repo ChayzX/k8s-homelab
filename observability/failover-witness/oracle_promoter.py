@@ -286,6 +286,32 @@ class OraclePromoter:
         return False
 
 
+def attempt_hand_back(promoter: "OraclePromoter", check: Callable[[], bool], execute: Callable[[], int],
+                      on_yielded: Callable[[], None]) -> bool:
+    """Voluntary hand-back to a healthy caught-up higher-priority standby (#191).
+
+    Returns True when this site yielded (the caller must stop renewing). The
+    lease stays renewed by a LeaseGuard for the whole drain, so a slow drain
+    can never lapse it; losing it mid-drain runs the normal local fence.
+    """
+    if not promoter.promoted or not promoter.token or not promoter.adapters.renew:
+        return False
+    if not check():
+        return False
+    token = promoter.token
+    guard = LeaseGuard(lambda: promoter.adapters.renew(token), promoter._fence, promoter.renewal_interval)
+    guard.start()
+    try:
+        rc = execute()
+    finally:
+        guard.close()
+    guard.check()
+    if rc == 0:
+        on_yielded()
+        return True
+    return False
+
+
 def _post(base_url: str, secret: str, path: str, body: dict[str, Any]) -> dict[str, Any]:
     payload = json.dumps(body).encode()
     req = request.Request(
@@ -388,6 +414,8 @@ def run() -> None:
     parser.add_argument("--replication-check-command", default=os.environ.get("REPLICATION_CHECK_COMMAND"))
     parser.add_argument("--publish-routes-command", default=os.environ.get("PUBLISH_ROUTES_COMMAND"))
     parser.add_argument("--service-check-command", default=os.environ.get("SERVICE_CHECK_COMMAND"))
+    parser.add_argument("--handback-command", default=os.environ.get("HANDBACK_COMMAND"),
+                        help="'<cmd>' run as '<cmd> --check' / '<cmd> --execute' while active")
     parser.add_argument("--acquire-gate-command", default=os.environ.get("ACQUIRE_GATE_COMMAND"),
                         help="exit 0 = this site may try to acquire (priority delay + freshness)")
     parser.add_argument("--state-path", type=Path, default=Path("/var/lib/pantry-postgres-promoter/activation.json"))
@@ -582,7 +610,26 @@ def run() -> None:
     promoter = OraclePromoter(adapters, renewal_interval=min(5, args.lease_seconds / 3))
     while not promoter.run_once():
         time.sleep(max(1, args.lease_seconds // 3))
+    def hook_rc(command: str, timeout: int) -> int:
+        try:
+            run_hook(command, timeout=timeout)
+            return 0
+        except subprocess.CalledProcessError as error:
+            return error.returncode
+        except Exception:
+            return 1
+
+    last_handback_check = 0.0
     while promoter.renew_or_fence():
+        if args.handback_command and time.monotonic() - last_handback_check >= 30:
+            last_handback_check = time.monotonic()
+            if attempt_hand_back(
+                promoter,
+                check=lambda: hook_rc(f"{args.handback_command} --check", 30) == 0,
+                execute=lambda: hook_rc(f"{args.handback_command} --execute", 240),
+                on_yielded=lambda: journal.record(generation.get("epoch", promoter.token["epoch"]), generation.get("system_identifier", ""), "yielded"),
+            ):
+                raise SystemExit(f"{args.site} handed back authority voluntarily; not renewing")
         time.sleep(max(1, args.lease_seconds // 3))
     raise SystemExit(f"{args.site} authority lost; local writer domain fenced")
 

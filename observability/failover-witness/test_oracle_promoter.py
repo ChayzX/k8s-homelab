@@ -629,3 +629,60 @@ def test_resume_after_lapsed_lease_only_at_exactly_the_next_epoch(tmp_path) -> N
     assert j.may_resume(87, "S") and not j.may_resume(88, "S")
     ActivationJournal(tmp_path / "a.json", site="oracle")
     assert not ActivationJournal(tmp_path / "a.json", site="oracle").may_resume(87, "S")
+
+
+def _active_promoter(renew_ok=True):
+    from oracle_promoter import OraclePromoter, PromotionAdapters
+    calls = []
+    pr = OraclePromoter(PromotionAdapters(
+        acquire=lambda: None, is_primary=lambda: True, promote=lambda _t: None,
+        switch_endpoint=lambda: None, enable_roles=lambda: None,
+        fence=lambda: calls.append("fence"), renew=lambda _t: renew_ok,
+    ), renewal_interval=0.05)
+    pr.promoted = True; pr.token = {"epoch": 90, "token": "x"}
+    return pr, calls
+
+
+def test_hand_back_only_when_check_passes_and_execute_succeeds() -> None:
+    """Catch yielding without an eligible target, or on an aborted drain."""
+    from oracle_promoter import attempt_hand_back
+    pr, _ = _active_promoter()
+    y = []
+    assert attempt_hand_back(pr, lambda: False, lambda: 0, lambda: y.append(1)) is False
+    assert attempt_hand_back(pr, lambda: True, lambda: 2, lambda: y.append(1)) is False
+    assert y == []
+    assert attempt_hand_back(pr, lambda: True, lambda: 0, lambda: y.append(1)) is True
+    assert y == [1]
+
+
+def test_hand_back_never_runs_without_authority() -> None:
+    """Catch a non-holder (or unpromoted site) initiating a hand-back."""
+    from oracle_promoter import attempt_hand_back
+    pr, _ = _active_promoter()
+    pr.promoted = False
+    ran = []
+    assert attempt_hand_back(pr, lambda: True, lambda: ran.append(1) or 0, lambda: None) is False
+    assert ran == []
+
+
+def test_lease_is_renewed_during_a_slow_drain_and_loss_fences() -> None:
+    """Catch a drain longer than the TTL lapsing the lease silently."""
+    import time as _t
+    from oracle_promoter import attempt_hand_back, AuthorityLost
+    pr, calls = _active_promoter()
+    renewals = []
+    pr.adapters.renew = lambda _t2: renewals.append(1) or True
+    assert attempt_hand_back(pr, lambda: True, lambda: (_t.sleep(0.3), 0)[1], lambda: None) is True
+    assert len(renewals) >= 3
+    pr2, calls2 = _active_promoter(renew_ok=True)
+    state = {"n": 0}
+    def flaky(_t3):
+        state["n"] += 1
+        return state["n"] < 3
+    pr2.adapters.renew = flaky
+    try:
+        attempt_hand_back(pr2, lambda: True, lambda: (_t.sleep(0.4), 0)[1], lambda: None)
+        raised = False
+    except AuthorityLost:
+        raised = True
+    assert raised and "fence" in calls2
