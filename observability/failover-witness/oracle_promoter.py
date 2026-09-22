@@ -514,7 +514,7 @@ def run() -> None:
         except ValueError as error:
             raise RuntimeError(str(error)) from error
         # oculum-ignore-next-line [dangerous_function]: explicit operator fence argv parsed without shell interpolation and timeout-bounded
-        subprocess.run(command, check=True, timeout=30)
+        subprocess.run(command, check=True, timeout=int(os.environ.get('OLD_WRITER_FENCE_TIMEOUT_SECONDS', '90')))
 
     adapters = PromotionAdapters(
         acquire, is_primary, promote, switch_endpoint, enable_roles, fence,

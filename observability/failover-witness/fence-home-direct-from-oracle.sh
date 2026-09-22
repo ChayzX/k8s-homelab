@@ -20,7 +20,20 @@ fail() {
 [[ "${1:-}" == "--confirm" && "$#" == 1 ]] || fail "explicit_confirmation_required"
 [[ -r "$KUBECONFIG_PATH" ]] || fail "kubeconfig_unreadable"
 [[ "$TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] || fail "invalid_timeout"
-"$KUBECTL_BIN" --kubeconfig="$KUBECONFIG_PATH" version --request-timeout=5s >/dev/null 2>&1 || fail "kubernetes_api_unavailable"
+# Only this first probe may classify Home as unreachable (exit 75, accepted
+# by the composite as fenced-by-lease-expiry). Only network-level silence
+# counts: "connection refused" means the host is up with its API down, and
+# k3s's containers keep running without the API, so a writer may be alive -
+# that stays a hard failure. Any failure after this probe is also a hard
+# failure: a reachable site that cannot be positively fenced must block.
+if ! probe_err="$("$KUBECTL_BIN" --kubeconfig="$KUBECONFIG_PATH" version --request-timeout=5s 2>&1 >/dev/null)"; then
+  if grep -qiE 'i/o timeout|no route to host|network is unreachable|context deadline exceeded|Client\.Timeout' <<<"$probe_err" \
+    && ! grep -qi 'connection refused' <<<"$probe_err"; then
+    echo "home_writer_fence=unreachable ${probe_err//$'\n'/ }" >&2
+    exit 75
+  fi
+  fail "kubernetes_api_unavailable:${probe_err//$'\n'/ }"
+fi
 if ! probe="$("$KUBECTL_BIN" --kubeconfig="$KUBECONFIG_PATH" -n "$NS" get statefulset "$STS" 2>&1 >/dev/null)"; then
   # Report the real reason (e.g. Forbidden from a stale RBAC grant) instead
   # of a generic "not found" that hides an authorization problem behind what
