@@ -43,7 +43,7 @@ def call(method: str, path: str, secret: str, body: dict | None = None) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--inputs", default="/etc/failover-witness/cloudflare-route-inputs.json")
-    parser.add_argument("--active", required=True, choices=["oracle", "canada"])
+    parser.add_argument("--active", required=True, choices=["home", "oracle", "canada"])
     parser.add_argument("--zone", default="greeniespantry.uk")
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()

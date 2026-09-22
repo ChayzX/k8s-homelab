@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 : "${PANTRY_PROMOTION_SITE:?PANTRY_PROMOTION_SITE is required}"
-if [[ "$PANTRY_PROMOTION_SITE" != "canada" && "$PANTRY_PROMOTION_SITE" != "oracle" ]]; then
+if [[ "$PANTRY_PROMOTION_SITE" != "canada" && "$PANTRY_PROMOTION_SITE" != "oracle" && "$PANTRY_PROMOTION_SITE" != "home" ]]; then
   echo "unsupported promotion site" >&2
   exit 2
 fi

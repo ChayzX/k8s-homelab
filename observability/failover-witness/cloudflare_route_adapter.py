@@ -98,21 +98,25 @@ def site_tunnel_configs(site):
 def apply_routes(data, active, client, apply=False):
     sites = data["sites"]
     if active not in sites: raise RouteError(f"unknown active site: {active}")
-    changes = []
-    seen = set()
+    # A tunnel may be shared by sites with identical origins (Home and Oracle
+    # share PantryBot-App: same k8s service names, and only the active site
+    # runs its connector - #191). Sharing sites must want the exact same
+    # config; the tunnel serves routes when ANY of its sites is active.
+    tunnels = {}
     for site_name, site in sites.items():
         for tid, wanted in site_tunnel_configs(site).items():
-            if tid in seen:
-                raise RouteError(f"tunnel {tid} is assigned to multiple sites")
-            seen.add(tid)
-            current = client.configuration(tid).get("config", {})
-            target = wanted if site_name == active else {"ingress": [{"service": "http_status:404"}], "warp-routing": {"enabled": False}}
-            if current != target:
-                changes.append((site_name, "combined" if site.get("connector_tunnel_id") else "split", tid, target))
-                if apply: client.put_configuration(tid, target)
+            entry = tunnels.setdefault(tid, {"sites": [], "wanted": wanted, "combined": bool(site.get("connector_tunnel_id"))})
+            if entry["wanted"] != wanted:
+                raise RouteError(f"tunnel {tid} is shared by sites with different routes")
+            entry["sites"].append(site_name)
+    changes = []
+    for tid, entry in tunnels.items():
+        current = client.configuration(tid).get("config", {})
+        target = entry["wanted"] if active in entry["sites"] else {"ingress": [{"service": "http_status:404"}], "warp-routing": {"enabled": False}}
+        if current != target:
+            changes.append(("+".join(entry["sites"]), "combined" if entry["combined"] else "split", tid, target))
+            if apply: client.put_configuration(tid, target)
     return changes
-
-
 DEFAULT_TOKEN_FILE = "/etc/failover-witness/cloudflare-token"
 
 

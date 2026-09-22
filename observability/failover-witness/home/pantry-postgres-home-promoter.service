@@ -1,0 +1,25 @@
+[Unit]
+Description=PantryBot Home PostgreSQL promotion controller (#191)
+Wants=network-online.target
+After=network-online.target k3s.service failover-witness-home-tunnel.service
+
+[Service]
+Type=simple
+# Site-neutral promoter (oracle_promoter.py --site home). Waits while another
+# site holds pantry:postgres; when the lease is free it acquires it, fences
+# Oracle + Canada (fence-old-writers-from-home.sh), promotes the Home standby,
+# enables apps + app-cloudflared and publishes routes. Losing the lease runs
+# fence-home-postgres-local.sh.
+ExecStart=/usr/bin/python3 /usr/local/lib/failover-witness/oracle_promoter.py --site home --pod-namespace pantry-bot --service-namespace pantry-bot --pod postgres-authority-standby-home-canada-0 --service postgres-authority-standby-home-canada --statefulset postgres-authority-standby-home-canada --postgres-port 5432 --data-directory /var/lib/postgresql/data
+EnvironmentFile=/etc/failover-witness/pantry-promoter-home.env
+Restart=always
+RestartSec=5
+User=root
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+StateDirectory=pantry-postgres-promoter
+ReadWritePaths=/var/lib/pantry-postgres-promoter
+
+[Install]
+WantedBy=multi-user.target

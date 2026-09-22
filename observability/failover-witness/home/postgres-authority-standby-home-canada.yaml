@@ -13,7 +13,9 @@ metadata:
   namespace: pantry-bot
   labels: {homelab/production: "true", pantrybot.postgres/role: standby}
 spec:
-  replicas: 0            # scale to 1 only after RESEED_COMPLETE and reseed pod deleted
+  # First-time creation ONLY: 0 until RESEED_COMPLETE, then `kubectl scale --replicas=1`.
+  # Never re-apply this file to a live standby (it would scale it to 0); patch instead.
+  replicas: 0
   serviceName: postgres-authority-standby-home-canada
   persistentVolumeClaimRetentionPolicy: {whenDeleted: Retain, whenScaled: Retain}
   selector:
@@ -33,7 +35,7 @@ spec:
       - name: postgres
         image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
         args: ["-c", "hot_standby=on", "-c", "wal_receiver_timeout=10s",
-               "-c", "listen_addresses=127.0.0.1"]
+               "-c", "listen_addresses=127.0.0.1,100.84.89.87"]
         env:
         - name: POSTGRES_USER
           valueFrom: {secretKeyRef: {name: pantry-bot-postgres-authority, key: POSTGRES_USER}}
@@ -42,9 +44,9 @@ spec:
         - name: POSTGRES_PASSWORD      # unused on existing PGDATA; entrypoint requires it
           valueFrom: {secretKeyRef: {name: pantry-bot-postgres-authority, key: POSTGRES_PASSWORD}}
         ports: [{containerPort: 5432, name: postgres}]
-        readinessProbe:               # ready = streaming standby (unlike Oracle-v2 probe, which requires pg_is_in_recovery()=f)
-          exec:
-            command: ["sh", "-ec", "test \"$(psql -h 127.0.0.1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select pg_is_in_recovery() and exists(select 1 from pg_stat_wal_receiver where status='streaming')\")\" = t"]
+        readinessProbe:               # ready = writable primary OR streaming standby, so the headless
+          exec:                       # Service keeps resolving after the Home promoter promotes it
+            command: ["sh", "-ec", "test \"$(psql -h 127.0.0.1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atc \"select (not pg_is_in_recovery()) or exists(select 1 from pg_stat_wal_receiver where status='streaming')\")\" = t"]
           periodSeconds: 10
           timeoutSeconds: 3
         volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]

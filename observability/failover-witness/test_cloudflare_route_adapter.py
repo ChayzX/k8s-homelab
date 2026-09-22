@@ -49,3 +49,28 @@ def test_combined_canada_connector_has_both_route_sets_once():
         {"hostname":"commands.example","service":"http://cmd"},
         {"service":"http_status:404"},
     ]
+
+
+def shared_data():
+    d = data()
+    d["sites"]["home"] = dict(d["sites"]["oracle"])
+    return d
+
+def test_shared_tunnel_serves_when_either_sharing_site_is_active():
+    for active in ("home", "oracle"):
+        f=Fake(); apply_routes(shared_data(), active, f, apply=True)
+        puts=dict(f.puts)
+        assert puts["oa"]["ingress"][0]["hostname"] == "mods.example"
+        assert puts["a"]["ingress"] == [{"service":"http_status:404"}]
+        assert sum(1 for tid, _ in f.puts if tid == "oa") == 1
+
+def test_shared_tunnel_is_closed_when_the_other_site_is_active():
+    f=Fake(); apply_routes(shared_data(), "canada", f, apply=True)
+    assert dict(f.puts)["oa"]["ingress"] == [{"service":"http_status:404"}]
+
+def test_shared_tunnel_with_different_routes_is_refused():
+    import pytest
+    from cloudflare_route_adapter import RouteError
+    d = shared_data(); d["sites"]["home"]["application_origin"] = "http://different"
+    with pytest.raises(RouteError):
+        apply_routes(d, "home", Fake(), apply=False)

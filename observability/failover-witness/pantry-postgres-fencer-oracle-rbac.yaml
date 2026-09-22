@@ -1,0 +1,72 @@
+# Least-privilege remote fence of Oracle's PantryBot writer domain (#191),
+# used by the Home promoter (and later Canada) via fence-oracle-direct.sh.
+# Name-scoped only; never cloudflared, commands-cloudflared or
+# pantry-commands-site. Each caller gets its own revocable token Secret.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pantry-postgres-fencer
+  namespace: pantry-bot
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pantry-postgres-fencer-home-token
+  namespace: pantry-bot
+  annotations:
+    kubernetes.io/service-account.name: pantry-postgres-fencer
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pantry-postgres-fencer
+  namespace: pantry-bot
+rules:
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    resourceNames:
+      - postgres-authority-standby-oracle-v2
+      - postgres-authority-standby-oracle
+      - postgres-authority-standby
+      - postgres-authority-standby-home
+      - postgres-authority-standby-home-v2
+      - postgres-authority-standby-reseed
+      - postgres-authority-standby-reseed-v2
+    verbs: ["get", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    resourceNames:
+      - postgres-authority-standby-oracle-v2-0
+      - postgres-authority-standby-oracle-0
+      - postgres-authority-standby-0
+      - postgres-authority-standby-home-0
+      - postgres-authority-standby-home-v2-0
+      - postgres-authority-standby-reseed-0
+      - postgres-authority-standby-reseed-v2-0
+    verbs: ["get", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames:
+      - pantry-private-api
+      - pantry-overlay-delivery
+      - pantry-twitch-gateway
+      - pantry-twitch-dispatcher
+      - pantry-chat-worker
+      - pantry-private-site
+      - app-cloudflared
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pantry-postgres-fencer
+  namespace: pantry-bot
+subjects:
+  - kind: ServiceAccount
+    name: pantry-postgres-fencer
+    namespace: pantry-bot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pantry-postgres-fencer
