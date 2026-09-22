@@ -190,7 +190,7 @@ function Publish-Routes {
 # ---------- voluntary hand-back (primary -> higher-priority standby) ----------
 $StableSince = @{}
 function Handback-Target {
-  $rows = @(Sql "select application_name, state, pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) from pg_stat_replication" -split "`n")
+  $rows = @((Sql "select application_name, state, pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) from pg_stat_replication") -split "`n")
   $now = Get-Date
   foreach ($site in $Peers.Keys) {
     $row = $rows | Where-Object { $_ -like "pantry-$site-standby|*" } | Select-Object -First 1
