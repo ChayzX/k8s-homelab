@@ -1,0 +1,16 @@
+# Role-independent read endpoint for Home's PantryBot database (#191).
+# Selects the Home DB pod whatever its role: the promoter adds
+# pantrybot.postgres/role=primary to the StatefulSet's own Service on
+# promotion, so that Service has no endpoints while Home is a standby.
+# Grafana's PantryPostgres datasource reads through this Service; a hot
+# standby serves the same (read-only) queries, so dashboards keep working
+# through every failover.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pantry-postgres-local-read
+  namespace: pantry-bot
+spec:
+  type: ClusterIP
+  selector: {app.kubernetes.io/name: pantry-postgres-authority-standby-home-canada}
+  ports: [{name: postgres, port: 5432, targetPort: 5432}]

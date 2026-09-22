@@ -1,7 +1,7 @@
 {
   "uid": "homelab-site-service-health",
   "title": "Sites & Failover \u2014 Which Site Is Each Thing At?",
-  "description": "Which site is each service at, and is it up. Every service row carries an explicit Site column. HOME is this k3s cluster and is fully instrumented; Kubernetes objects have no site label of their own, so this dashboard stamps site=\"home\" onto them with label_replace \u2014 a definition, not a measurement. ORACLE runs a separate, non-federated Prometheus and CANADA has no scrape target at all, so both are reported as \"unknown from here\" rather than faked. Both of those panels count targets instead of probing a hard-coded job name, so they start working by themselves once the corresponding scrape job is added. Rebuilt 2026-09-21: the previous Canada panel queried up{job=\"canada-pantry-bot-api\"}, a job present in neither the repo nor the live Prometheus config, so it could only ever render No data.",
+  "description": "Which site is each service at, and is it up. Every service row carries an explicit Site column. HOME is this k3s cluster and is fully instrumented; Kubernetes objects have no site label of their own, so this dashboard stamps site=\"home\" onto them with label_replace \u2014 a definition, not a measurement. ORACLE runs a separate, non-federated Prometheus and CANADA has no scrape target at all, so both are reported as \"unknown from here\" rather than faked. Both of those panels count targets instead of probing a hard-coded job name, so they start working by themselves once the corresponding scrape job is added. Rebuilt 2026-09-21: the previous Canada panel queried up{job=\"canada-pantry-bot-api\"}, a job present in neither the repo nor the live Prometheus config, so it could only ever render No data. Updated 2026-09-22 (#191): Oracle now remote-writes its series here (site=\"oracle\") and Canada's roles are scraped through Home's relay (site=\"canada\"); Home series carry no site label, so Home-only panels filter site=\"\".",
   "tags": [
     "homelab",
     "sites",
@@ -451,7 +451,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "label_replace(sum by (namespace, deployment) (kube_deployment_status_replicas_available), \"site\", \"home\", \"\", \"\")",
+          "expr": "label_replace(sum by (site, namespace, deployment) (kube_deployment_status_replicas_available), \"site\", \"home\", \"site\", \"\")",
           "instant": true,
           "format": "table"
         },
@@ -461,7 +461,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "label_replace(sum by (namespace, deployment) (kube_deployment_spec_replicas), \"site\", \"home\", \"\", \"\")",
+          "expr": "label_replace(sum by (site, namespace, deployment) (kube_deployment_spec_replicas), \"site\", \"home\", \"site\", \"\")",
           "instant": true,
           "format": "table"
         }
@@ -838,7 +838,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(kube_node_status_condition{condition=\"Ready\", status=\"true\"})",
+          "expr": "sum(kube_node_status_condition{condition=\"Ready\", status=\"true\", site=\"\"})",
           "legendFormat": "ready",
           "instant": true
         },
@@ -848,7 +848,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(kube_node_status_condition{condition=\"Ready\"})",
+          "expr": "count(kube_node_status_condition{condition=\"Ready\", site=\"\"})",
           "legendFormat": "total",
           "instant": true
         }
@@ -911,7 +911,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(kube_node_status_condition{condition=\"Ready\", status=\"true\"} == 0) or vector(0)",
+          "expr": "count(kube_node_status_condition{condition=\"Ready\", status=\"true\", site=\"\"} == 0) or vector(0)",
           "instant": true
         }
       ],
@@ -984,7 +984,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(kube_pod_status_ready{namespace=\"pantry-bot\", condition=\"true\"}) or vector(0)",
+          "expr": "sum(kube_pod_status_ready{namespace=\"pantry-bot\", condition=\"true\", site=\"\"}) or vector(0)",
           "instant": true
         }
       ],
@@ -1046,7 +1046,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(kube_pod_container_status_waiting_reason{namespace=\"pantry-bot\", reason=\"CrashLoopBackOff\"}) or vector(0)",
+          "expr": "sum(kube_pod_container_status_waiting_reason{namespace=\"pantry-bot\", reason=\"CrashLoopBackOff\", site=\"\"}) or vector(0)",
           "instant": true
         }
       ],
@@ -1100,7 +1100,7 @@
     {
       "id": 12,
       "type": "table",
-      "title": "PantryBot microservices \u2014 home scrape targets",
+      "title": "PantryBot microservices \u2014 scrape targets, every site",
       "gridPos": {
         "h": 8,
         "w": 24,

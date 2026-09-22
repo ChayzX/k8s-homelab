@@ -31,3 +31,12 @@ or database ports publicly.
 - Prometheus target `canada-pantry-bot-api` is `up` and `pantry_bot_*{site="canada"}` appears in Prometheus.
 - Application `pantry_bot_*` series appear after the active role emits events;
   the current deployed role may have no samples until activity occurs.
+
+## Current state (2026-09-22, #191 / #375)
+
+The relay and its Prometheus targets now exist:
+
+- Home `pantry-bot-canada-metrics-tunnel.service` plus the drop-in `roles.conf` (`failover-witness/home/systemd/pantry-bot-canada-metrics-tunnel-roles.conf`) forward Canada's loopback role ports to Home's LAN IP: api `192.168.40.208:23100`, gateway `:23101`, dispatcher `:23102`, worker `:23103`. The legacy `:13101` forward is also api.
+- Home Prometheus jobs `pantry-bot-{api,gateway,dispatcher,worker}-canada` carry `site="canada"`. They are **down while Canada is a standby**, because its apps are stopped. That's expected; dashboards read the serving site, not "all sites up".
+- The worker health port is published on Canada as `127.0.0.1:13103`, starting with the next Canada app start.
+- Canada logs: `pantrybot-canada-alloy` (`canada/canada-alloy.alloy`, `start-canada-alloy.ps1`) ships container logs to Home Loki with `site="canada"`.

@@ -1668,7 +1668,7 @@ data:
       {
        "type": "stat",
        "title": "Parts running",
-       "description": "Parts of PantryBot running vs how many should be.",
+       "description": "PantryBot roles (api, gateway, worker, dispatcher) answering at whichever site is serving - Home, Oracle or Canada - vs the 4 there should be. Follows failovers (#191).",
        "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1680,7 +1680,7 @@ data:
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
          },
-         "expr": "sum(kube_deployment_status_replicas_available{namespace=\"pantry-bot\"})",
+         "expr": "count(up{job=~\"pantry-bot-(api|gateway|worker|dispatcher)(-oracle|-canada)?\"} == 1) or vector(0)",
          "legendFormat": "running",
          "instant": true,
          "range": false
@@ -1691,7 +1691,7 @@ data:
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
          },
-         "expr": "sum(kube_deployment_spec_replicas{namespace=\"pantry-bot\"})",
+         "expr": "vector(4)",
          "legendFormat": "should be",
          "instant": true,
          "range": false
@@ -1732,7 +1732,7 @@ data:
        "id": 2,
        "gridPos": {
         "h": 5,
-        "w": 6,
+        "w": 5,
         "x": 0,
         "y": 3
        }
@@ -1807,29 +1807,30 @@ data:
        "id": 3,
        "gridPos": {
         "h": 5,
-        "w": 6,
-        "x": 6,
+        "w": 4,
+        "x": 5,
         "y": 3
        }
       },
       {
        "type": "stat",
        "title": "Database reachable?",
-       "description": "Whether any PantryBot database copy is up and accepting connections. Everything else depends on this — if it says NO, fix it first.",
+       "description": "Home's copy of the PantryBot database (primary, or hot standby of Oracle/Canada) - the one every database panel below reads - is up and answering. Follows failovers (#191).",
        "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRES}"
        },
        "targets": [
         {
          "refId": "A",
          "datasource": {
-          "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
+          "type": "grafana-postgresql-datasource",
+          "uid": "${DS_POSTGRES}"
          },
-         "expr": "max(kube_endpoint_address_available{namespace=\"pantry-bot\", endpoint=~\"postgres-authority.*\"}) or vector(0)",
-         "instant": true,
-         "range": false
+         "rawQuery": true,
+         "editorMode": "code",
+         "format": "table",
+         "rawSql": "SELECT 1 AS reachable"
         }
        ],
        "options": {
@@ -1882,8 +1883,8 @@ data:
        "id": 4,
        "gridPos": {
         "h": 5,
-        "w": 6,
-        "x": 12,
+        "w": 5,
+        "x": 9,
         "y": 3
        }
       },
@@ -1961,9 +1962,61 @@ data:
        "id": 5,
        "gridPos": {
         "h": 5,
+        "w": 4,
+        "x": 14,
+        "y": 3
+       }
+      },
+      {
+       "id": 17,
+       "type": "stat",
+       "title": "Serving site",
+       "description": "Which site PantryBot is running from right now (the site whose API answers). Home is the normal site; Oracle and Canada take over automatically during a failover (#191).",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+       },
+       "gridPos": {
+        "h": 5,
         "w": 6,
         "x": 18,
         "y": 3
+       },
+       "targets": [
+        {
+         "refId": "A",
+         "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+         },
+         "expr": "max by (site) (up{job=~\"pantry-bot-api(-oracle|-canada)?\"}) == 1",
+         "legendFormat": "{{site}}",
+         "instant": true
+        }
+       ],
+       "options": {
+        "reduceOptions": {
+         "calcs": [
+          "lastNotNull"
+         ],
+         "fields": "",
+         "values": false
+        },
+        "textMode": "name",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto"
+       },
+       "fieldConfig": {
+        "defaults": {
+         "noValue": "NONE - PantryBot is down",
+         "color": {
+          "mode": "fixed",
+          "fixedColor": "green"
+         }
+        },
+        "overrides": []
        }
       },
       {
@@ -3379,7 +3432,7 @@ data:
     {
       "uid": "homelab-site-service-health",
       "title": "Sites & Failover \u2014 Which Site Is Each Thing At?",
-      "description": "Which site is each service at, and is it up. Every service row carries an explicit Site column. HOME is this k3s cluster and is fully instrumented; Kubernetes objects have no site label of their own, so this dashboard stamps site=\"home\" onto them with label_replace \u2014 a definition, not a measurement. ORACLE runs a separate, non-federated Prometheus and CANADA has no scrape target at all, so both are reported as \"unknown from here\" rather than faked. Both of those panels count targets instead of probing a hard-coded job name, so they start working by themselves once the corresponding scrape job is added. Rebuilt 2026-09-21: the previous Canada panel queried up{job=\"canada-pantry-bot-api\"}, a job present in neither the repo nor the live Prometheus config, so it could only ever render No data.",
+      "description": "Which site is each service at, and is it up. Every service row carries an explicit Site column. HOME is this k3s cluster and is fully instrumented; Kubernetes objects have no site label of their own, so this dashboard stamps site=\"home\" onto them with label_replace \u2014 a definition, not a measurement. ORACLE runs a separate, non-federated Prometheus and CANADA has no scrape target at all, so both are reported as \"unknown from here\" rather than faked. Both of those panels count targets instead of probing a hard-coded job name, so they start working by themselves once the corresponding scrape job is added. Rebuilt 2026-09-21: the previous Canada panel queried up{job=\"canada-pantry-bot-api\"}, a job present in neither the repo nor the live Prometheus config, so it could only ever render No data. Updated 2026-09-22 (#191): Oracle now remote-writes its series here (site=\"oracle\") and Canada's roles are scraped through Home's relay (site=\"canada\"); Home series carry no site label, so Home-only panels filter site=\"\".",
       "tags": [
         "homelab",
         "sites",
@@ -3829,7 +3882,7 @@ data:
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "label_replace(sum by (namespace, deployment) (kube_deployment_status_replicas_available), \"site\", \"home\", \"\", \"\")",
+              "expr": "label_replace(sum by (site, namespace, deployment) (kube_deployment_status_replicas_available), \"site\", \"home\", \"site\", \"\")",
               "instant": true,
               "format": "table"
             },
@@ -3839,7 +3892,7 @@ data:
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "label_replace(sum by (namespace, deployment) (kube_deployment_spec_replicas), \"site\", \"home\", \"\", \"\")",
+              "expr": "label_replace(sum by (site, namespace, deployment) (kube_deployment_spec_replicas), \"site\", \"home\", \"site\", \"\")",
               "instant": true,
               "format": "table"
             }
@@ -4216,7 +4269,7 @@ data:
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "sum(kube_node_status_condition{condition=\"Ready\", status=\"true\"})",
+              "expr": "sum(kube_node_status_condition{condition=\"Ready\", status=\"true\", site=\"\"})",
               "legendFormat": "ready",
               "instant": true
             },
@@ -4226,7 +4279,7 @@ data:
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "count(kube_node_status_condition{condition=\"Ready\"})",
+              "expr": "count(kube_node_status_condition{condition=\"Ready\", site=\"\"})",
               "legendFormat": "total",
               "instant": true
             }
@@ -4289,7 +4342,7 @@ data:
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "count(kube_node_status_condition{condition=\"Ready\", status=\"true\"} == 0) or vector(0)",
+              "expr": "count(kube_node_status_condition{condition=\"Ready\", status=\"true\", site=\"\"} == 0) or vector(0)",
               "instant": true
             }
           ],
@@ -4362,7 +4415,7 @@ data:
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "sum(kube_pod_status_ready{namespace=\"pantry-bot\", condition=\"true\"}) or vector(0)",
+              "expr": "sum(kube_pod_status_ready{namespace=\"pantry-bot\", condition=\"true\", site=\"\"}) or vector(0)",
               "instant": true
             }
           ],
@@ -4424,7 +4477,7 @@ data:
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "sum(kube_pod_container_status_waiting_reason{namespace=\"pantry-bot\", reason=\"CrashLoopBackOff\"}) or vector(0)",
+              "expr": "sum(kube_pod_container_status_waiting_reason{namespace=\"pantry-bot\", reason=\"CrashLoopBackOff\", site=\"\"}) or vector(0)",
               "instant": true
             }
           ],
@@ -4478,7 +4531,7 @@ data:
         {
           "id": 12,
           "type": "table",
-          "title": "PantryBot microservices \u2014 home scrape targets",
+          "title": "PantryBot microservices \u2014 scrape targets, every site",
           "gridPos": {
             "h": 8,
             "w": 24,

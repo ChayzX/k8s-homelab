@@ -56,13 +56,12 @@ data:
         jsonData:
           maxLines: 5000
 
-      # Pantry Bot usage tables, read from whichever home standby replica is
-      # currently running. That StatefulSet is renamed on every failover or
-      # failback (-home, -home-v2, -home-failback, -home-return, and now
-      # -standby-home-canada, which streams from the Canada writer), so this
-      # URL goes stale each time and every PantryBot database panel reads
-      # "database unreachable". A stable read-only Service name owned by the
-      # database/failover work would end that; until then, update it here.
+      # Pantry Bot usage tables, read from Home's database WHATEVER its role
+      # (primary, or hot standby of Oracle/Canada) through the stable,
+      # role-independent Service pantry-postgres-local-read, owned by the
+      # failover work (#191, observability/failover-witness/home/
+      # pantry-postgres-local-read.yaml). It survives StatefulSet renames,
+      # promotions and hand-backs; only a fenced/stopped Home DB blanks it.
       # Read-only dashboard queries; standby lag is seconds. The password
       # is NOT in this repo -- it is injected from the
       # PANTRY_GRAFANA_DB_PASSWORD env var, which grafana.yaml sources from
@@ -75,7 +74,7 @@ data:
         uid: PantryPostgres
         type: postgres
         access: proxy
-        url: postgres-authority-standby-home-canada.pantry-bot.svc.cluster.local:5432
+        url: pantry-postgres-local-read.pantry-bot.svc.cluster.local:5432
         database: pantry
         user: pantry
         jsonData:

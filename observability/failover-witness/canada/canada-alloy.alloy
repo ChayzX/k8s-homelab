@@ -1,0 +1,60 @@
+// Canada PantryBot log shipping (#191): same pipeline as the k3s sites'
+// alloy-logs, reading Docker container logs instead of pods, so Home's Loki
+// keeps receiving PantryBot logs while Canada is the active site.
+// instance = "pantry-bot/<container>" matches the k8s streams, so existing
+// dashboards' {instance=~"pantry-bot/.*"} selectors include Canada as-is.
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+discovery.relabel "pantry" {
+  targets = discovery.docker.containers.targets
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(pantrybot-canada-.*)"
+    action        = "keep"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "instance"
+    replacement   = "pantry-bot/$1"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "service_name"
+    replacement   = "$1"
+  }
+}
+loki.source.docker "pantry" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.relabel.pantry.output
+  relabel_rules = discovery.relabel.pantry.rules
+  forward_to    = [loki.process.pantry.receiver]
+}
+loki.process "pantry" {
+  forward_to = [loki.write.home.receiver]
+  stage.drop {
+    expression = "(?i)(access token|refresh token|authorization: bearer)"
+  }
+  stage.regex {
+    expression = "(?i)(?P<level>debug|info|warn(?:ing)?|error|fatal)"
+  }
+  stage.template {
+    source   = "level"
+    template = "{{ ToLower .Value }}"
+  }
+  stage.labels {
+    values = { level = "" }
+  }
+}
+loki.write "home" {
+  endpoint {
+    url = "http://100.84.89.87:31100/loki/api/v1/push"
+  }
+  external_labels = { site = "canada" }
+}

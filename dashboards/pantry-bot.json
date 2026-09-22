@@ -155,7 +155,7 @@
   {
    "type": "stat",
    "title": "Parts running",
-   "description": "Parts of PantryBot running vs how many should be.",
+   "description": "PantryBot roles (api, gateway, worker, dispatcher) answering at whichever site is serving - Home, Oracle or Canada - vs the 4 there should be. Follows failovers (#191).",
    "datasource": {
     "type": "prometheus",
     "uid": "${DS_PROMETHEUS}"
@@ -167,7 +167,7 @@
       "type": "prometheus",
       "uid": "${DS_PROMETHEUS}"
      },
-     "expr": "sum(kube_deployment_status_replicas_available{namespace=\"pantry-bot\"})",
+     "expr": "count(up{job=~\"pantry-bot-(api|gateway|worker|dispatcher)(-oracle|-canada)?\"} == 1) or vector(0)",
      "legendFormat": "running",
      "instant": true,
      "range": false
@@ -178,7 +178,7 @@
       "type": "prometheus",
       "uid": "${DS_PROMETHEUS}"
      },
-     "expr": "sum(kube_deployment_spec_replicas{namespace=\"pantry-bot\"})",
+     "expr": "vector(4)",
      "legendFormat": "should be",
      "instant": true,
      "range": false
@@ -219,7 +219,7 @@
    "id": 2,
    "gridPos": {
     "h": 5,
-    "w": 6,
+    "w": 5,
     "x": 0,
     "y": 3
    }
@@ -294,29 +294,30 @@
    "id": 3,
    "gridPos": {
     "h": 5,
-    "w": 6,
-    "x": 6,
+    "w": 4,
+    "x": 5,
     "y": 3
    }
   },
   {
    "type": "stat",
    "title": "Database reachable?",
-   "description": "Whether any PantryBot database copy is up and accepting connections. Everything else depends on this — if it says NO, fix it first.",
+   "description": "Home's copy of the PantryBot database (primary, or hot standby of Oracle/Canada) - the one every database panel below reads - is up and answering. Follows failovers (#191).",
    "datasource": {
-    "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "type": "grafana-postgresql-datasource",
+    "uid": "${DS_POSTGRES}"
    },
    "targets": [
     {
      "refId": "A",
      "datasource": {
-      "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "type": "grafana-postgresql-datasource",
+      "uid": "${DS_POSTGRES}"
      },
-     "expr": "max(kube_endpoint_address_available{namespace=\"pantry-bot\", endpoint=~\"postgres-authority.*\"}) or vector(0)",
-     "instant": true,
-     "range": false
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT 1 AS reachable"
     }
    ],
    "options": {
@@ -369,8 +370,8 @@
    "id": 4,
    "gridPos": {
     "h": 5,
-    "w": 6,
-    "x": 12,
+    "w": 5,
+    "x": 9,
     "y": 3
    }
   },
@@ -448,9 +449,61 @@
    "id": 5,
    "gridPos": {
     "h": 5,
+    "w": 4,
+    "x": 14,
+    "y": 3
+   }
+  },
+  {
+   "id": 17,
+   "type": "stat",
+   "title": "Serving site",
+   "description": "Which site PantryBot is running from right now (the site whose API answers). Home is the normal site; Oracle and Canada take over automatically during a failover (#191).",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
     "w": 6,
     "x": 18,
     "y": 3
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "max by (site) (up{job=~\"pantry-bot-api(-oracle|-canada)?\"}) == 1",
+     "legendFormat": "{{site}}",
+     "instant": true
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "name",
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "NONE - PantryBot is down",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "green"
+     }
+    },
+    "overrides": []
    }
   },
   {

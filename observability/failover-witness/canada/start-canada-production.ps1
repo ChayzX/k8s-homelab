@@ -7,7 +7,7 @@ foreach($n in @('api','gateway','worker','dispatcher','overlay','private','publi
 $common=@('--network',$net,'--env-file','C:\ProgramData\PantryBotCanadaPrep\canada-production.env','--label','pantrybot.production-authority=false','--restart','unless-stopped')
 docker run -d --name pantrybot-canada-prod-api @common -e DB_PATH=/tmp/pantry.db -e HTTP_PORT=3000 -e WS_PORT=8080 -e PANTRY_RUNTIME_ROLE=api -e PANTRY_INSTANCE_ID=canada-api -p 127.0.0.1:13100:3000 $img.api
 docker run -d --name pantrybot-canada-prod-gateway @common -e DB_PATH=/tmp/pantry.db -e PANTRY_RUNTIME_ROLE=gateway -e PANTRY_INSTANCE_ID=canada-gateway -e HTTP_PORT=3000 -e WS_PORT=8080 -e HEALTH_PORT=3001 -p 127.0.0.1:13101:3001 $img.gateway
-docker run -d --name pantrybot-canada-prod-worker @common -e DB_PATH=/tmp/pantry.db -e PANTRY_RUNTIME_ROLE=worker -e PANTRY_INSTANCE_ID=canada-worker -e HEALTH_PORT=3001 $img.worker
+docker run -d --name pantrybot-canada-prod-worker @common -e DB_PATH=/tmp/pantry.db -e PANTRY_RUNTIME_ROLE=worker -e PANTRY_INSTANCE_ID=canada-worker -e HEALTH_PORT=3001 -p 127.0.0.1:13103:3001 $img.worker
 docker run -d --name pantrybot-canada-prod-dispatcher @common -e DB_PATH=/tmp/pantry.db -e PANTRY_RUNTIME_ROLE=dispatcher -e PANTRY_INSTANCE_ID=canada-dispatcher -e HTTP_PORT=3000 -e WS_PORT=8080 -e HEALTH_PORT=3001 -p 127.0.0.1:13102:3001 $img.dispatcher
 docker run -d --name pantrybot-canada-prod-overlay @common -e DB_PATH=/tmp/pantry.db -e PANTRY_RUNTIME_ROLE=overlay -e PANTRY_INSTANCE_ID=canada-overlay -e HTTP_PORT=8080 -p 127.0.0.1:18082:8080 $img.overlay
 docker run -d --name pantrybot-canada-prod-private @common -e PANTRY_SITE_ID=canada -e PRIVATE_SITE_PORT=3001 -e PRIVATE_API_ORIGIN=http://pantrybot-canada-prod-api:3000 -p 127.0.0.1:18081:3001 $img.private

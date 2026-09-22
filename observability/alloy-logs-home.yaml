@@ -74,6 +74,9 @@ data:
       endpoint {
         url = "http://loki.observability.svc.cluster.local:3100/loki/api/v1/push"
       }
+      // Which site produced the line (#191): Home and Oracle both ship
+      // pantry-bot pods here; without this their streams are indistinguishable.
+      external_labels = { site = "home" }
     }
 ---
 apiVersion: apps/v1

@@ -203,6 +203,26 @@ data:
       # ---------------------------------------------------------------
       # The observability stack scraping itself
       # ---------------------------------------------------------------
+      # Canada roles (#191), via Home's SSH relay pantry-bot-canada-metrics-tunnel
+      # (Canada binds 127.0.0.1 only). Down while Canada is a standby (apps
+      # stopped) - dashboards read "active site", not "all sites up".
+      - job_name: pantry-bot-api-canada
+        static_configs:
+          - targets: ["192.168.40.208:23100"]
+            labels: {site: canada, role: api}
+      - job_name: pantry-bot-gateway-canada
+        static_configs:
+          - targets: ["192.168.40.208:23101"]
+            labels: {site: canada, role: gateway}
+      - job_name: pantry-bot-dispatcher-canada
+        static_configs:
+          - targets: ["192.168.40.208:23102"]
+            labels: {site: canada, role: dispatcher}
+      - job_name: pantry-bot-worker-canada
+        static_configs:
+          - targets: ["192.168.40.208:23103"]
+            labels: {site: canada, role: worker}
+
       - job_name: loki
         static_configs:
           - targets: ["loki.observability.svc.cluster.local:3100"]
