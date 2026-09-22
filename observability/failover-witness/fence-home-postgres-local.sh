@@ -9,10 +9,15 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 HOME_PANTRY_STATEFULSETS="postgres-authority-standby-home-canada postgres-authority-home-v2 postgres-authority-home-failback postgres-authority-home postgres-authority-home-return postgres-authority"
 PANTRY_WRITER_DEPLOYMENTS="pantry-private-api pantry-overlay-delivery pantry-twitch-gateway pantry-twitch-dispatcher pantry-chat-worker pantry-private-site app-cloudflared pantry-bot"
 
+# PANTRY_FENCE_APPS_ONLY=1: apps + connector only (DB positively a standby).
+statefulsets="$HOME_PANTRY_STATEFULSETS"
+[[ "${PANTRY_FENCE_APPS_ONLY:-0}" == 1 ]] && statefulsets=""
+
 FENCE_SCOPE=home-local \
 FENCE_KUBECTL="${HOME_LOCAL_KUBECTL:-kubectl}" \
 FENCE_NAMESPACE="${PANTRY_NAMESPACE:-pantry-bot}" \
-FENCE_STATEFULSETS="$HOME_PANTRY_STATEFULSETS" \
+FENCE_STATEFULSETS="$statefulsets" \
+FENCE_APPS_ONLY="${PANTRY_FENCE_APPS_ONLY:-0}" \
 FENCE_DEPLOYMENTS="$PANTRY_WRITER_DEPLOYMENTS" \
 FENCE_TIMEOUT_SECONDS="${PANTRY_POSTGRES_FENCE_TIMEOUT_SECONDS:-45}" \
 FENCE_ALLOW_UNREACHABLE=0 \

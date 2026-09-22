@@ -13,6 +13,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 ORACLE = ROOT / "fence-oracle-postgres-local.sh"
 HOME = ROOT / "fence-home-direct-from-oracle.sh"
+HOME_LOCAL = ROOT / "fence-home-postgres-local.sh"
+LIB = ROOT / "pantry-writer-fence.sh"
 WRITERS = [
     "pantry-private-api", "pantry-overlay-delivery", "pantry-twitch-gateway",
     "pantry-twitch-dispatcher", "pantry-chat-worker", "pantry-private-site", "app-cloudflared",
@@ -88,7 +90,7 @@ def run_fence(script: Path, initial: dict, extra_env: dict | None = None, args=(
         state_path = Path(tmp) / "state.json"
         state_path.write_text(json.dumps(initial))
         env = {k: v for k, v in os.environ.items() if k not in OVERRIDES}
-        env.update(FAKE_STATE=str(state_path), ORACLE_KUBECTL=str(kubectl), HOME_KUBECTL=str(kubectl),
+        env.update(FAKE_STATE=str(state_path), ORACLE_KUBECTL=str(kubectl), HOME_KUBECTL=str(kubectl), HOME_LOCAL_KUBECTL=str(kubectl), FENCE_KUBECTL=str(kubectl),
                    HOME_FENCER_KUBECONFIG="/dev/null", PANTRY_POSTGRES_FENCE_TIMEOUT_SECONDS="3")
         env.update(extra_env or {})
         result = subprocess.run(["bash", str(script), *args], capture_output=True, text=True, env=env)
@@ -237,3 +239,33 @@ def test_dry_run_checks_reachability_and_rbac_without_writes() -> None:
                                       forbidden=["postgres-authority-home-v2"]), args=("--dry-run",))
     assert denied.returncode == 1
     assert "lookup_failed" in denied.stderr
+
+
+def test_apps_only_mode_leaves_the_standby_database_running() -> None:
+    """Catch the standby path (DB proven in recovery) touching the database."""
+    for script in (ORACLE, HOME_LOCAL):
+        sts = "postgres-authority-standby-oracle-v2" if script == ORACLE else "postgres-authority-standby-home-canada"
+        initial = state(statefulsets={sts: 1}, pods={f"{sts}-0": "n1"},
+                        deployments={"app-cloudflared": [1, 1], "pantry-chat-worker": [1, 1]})
+        result, final = run_fence(script, initial, {"PANTRY_FENCE_APPS_ONLY": "1"})
+        assert result.returncode == 0, result.stderr
+        assert final["statefulsets"][sts] == 1 and f"{sts}-0" in final["pods"]
+        assert final["deployments"]["app-cloudflared"] == [0, 0]
+        assert not any(c[:2] in (["patch", "statefulset"], ["delete", "pod"]) for c in final["calls"])
+
+
+def test_apps_only_cannot_be_combined_with_a_statefulset_list() -> None:
+    """Catch a misconfiguration that silently skips a database the caller named."""
+    result, final = run_fence(LIB, live_oracle(), {
+        "FENCE_SCOPE": "t", "FENCE_APPS_ONLY": "1",
+        "FENCE_STATEFULSETS": "postgres-authority-standby-oracle-v2", "FENCE_DEPLOYMENTS": "app-cloudflared",
+    })
+    assert result.returncode == 1
+    assert "apps_only_with_statefulsets" in result.stderr
+    assert final["calls"] == []
+
+
+def test_remote_fences_have_no_apps_only_mode() -> None:
+    """Catch apps-only leaking into a REMOTE fence, where the caller cannot prove recovery."""
+    for script in (HOME, ROOT / "fence-oracle-direct.sh"):
+        assert "APPS_ONLY" not in script.read_text()

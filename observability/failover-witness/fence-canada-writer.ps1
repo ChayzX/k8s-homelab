@@ -54,32 +54,48 @@ if ($postgresStatus -ne 'running') {
   exit 0
 }
 
-# Prevent Docker restart policies from bringing writers back after the fence.
-foreach ($name in ($mutating + $PostgresContainer)) {
-  docker update --restart=no $name | Out-Null
+# Native commands never trip $ErrorActionPreference in Windows PowerShell 5,
+# so every docker/psql exit code is checked explicitly (#191: a failed
+# ALTER SYSTEM was silently ignored for as long as this script existed).
+function Invoke-Native([string]$What, [scriptblock]$Command) {
+  $out = & $Command
+  if ($LASTEXITCODE -ne 0) { throw "Canada fence step failed ($What): exit $LASTEXITCODE" }
+  return $out
 }
-docker stop $mutating 2>$null | Out-Null
+function Invoke-Sql([string]$Sql) {
+  Invoke-Native "psql: $Sql" { docker exec $PostgresContainer psql -U pantry -d pantry -AtX -v ON_ERROR_STOP=1 -c $Sql }
+}
 
-# Revoke new writes and terminate existing client sessions before stopping
-# the container - a SQL-level fence that takes effect even if the container
-# stop is briefly delayed, scoped to this database only (never touches
-# Docker or Windows itself).
-$sql = @"
-ALTER SYSTEM SET default_transaction_read_only = 'on';
-SELECT pg_reload_conf();
-SELECT pg_terminate_backend(pid)
-FROM pg_stat_activity
-WHERE pid <> pg_backend_pid() AND datname = current_database();
-"@
-docker exec $PostgresContainer psql -U pantry -d pantry -v ON_ERROR_STOP=1 -c $sql | Out-Null
-$mode = (docker exec $PostgresContainer psql -U pantry -d pantry -AtX -c 'show default_transaction_read_only').Trim()
+# Prevent Docker restart policies from bringing writers back after the fence.
+# A container that no longer exists is already not writing; skip it.
+$existing = @(Invoke-Native 'docker ps -a' { docker ps -a --format '{{.Names}}' })
+$presentApps = @($mutating | Where-Object { $_ -in $existing })
+foreach ($name in ($presentApps + $PostgresContainer)) {
+  Invoke-Native "docker update $name" { docker update --restart=no $name } | Out-Null
+}
+if ($presentApps.Count -gt 0) { Invoke-Native 'docker stop apps' { docker stop $presentApps } | Out-Null }
+
+# Revoke new writes and terminate existing sessions before stopping the
+# container. One statement per psql call: ALTER SYSTEM cannot run inside the
+# implicit transaction a multi-statement -c string creates. pg_reload_conf()
+# only signals the postmaster, so wait (bounded) for new sessions to see it.
+Invoke-Sql "ALTER SYSTEM SET default_transaction_read_only = 'on'" | Out-Null
+Invoke-Sql 'SELECT pg_reload_conf()' | Out-Null
+$mode = ''
+$deadline = (Get-Date).AddSeconds(15)
+do {
+  $mode = ([string](Invoke-Sql 'show default_transaction_read_only')).Trim()
+  if ($mode -eq 'on') { break }
+  Start-Sleep -Milliseconds 500
+} while ((Get-Date) -lt $deadline)
 if ($mode -ne 'on') { throw "Canada PostgreSQL fence verification failed: read_only=$mode" }
+Invoke-Sql 'SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity WHERE pid <> pg_backend_pid() AND datname = current_database()' | Out-Null
 
 # Stop the database after disabling restart policy and enforcing read-only.
 # Stopping the writer is the actual fence; the container must be down
 # before promotion, not merely read-only, since a superuser could reverse
 # the SQL-level setting while the process is still alive.
-docker stop $PostgresContainer 2>$null | Out-Null
+Invoke-Native 'docker stop postgres' { docker stop $PostgresContainer } | Out-Null
 
 $remaining = @(docker ps --format '{{.Names}}' | Where-Object { $_ -in $mutating })
 if ($remaining.Count -ne 0) { throw "Canada application fence verification failed: $($remaining -join ', ')" }

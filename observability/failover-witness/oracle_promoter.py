@@ -312,6 +312,20 @@ def _postgres_promote_command(data_directory: str) -> tuple[str, ...]:
     return ("gosu", "postgres", "pg_ctl", "-D", data_directory, "promote")
 
 
+def select_local_fence(recovery_answer: str | None, writer_fence: str, standby_fence: str | None) -> str:
+    """Pick the local fence after a failure or lease loss (#191).
+
+    A database that positively answers pg_is_in_recovery() = 't' is a standby
+    and cannot accept writes, so only its apps and connector need fencing:
+    keeping the standby streaming lets the promoter retry and keeps the site a
+    replica. Anything else - 'f', an error, no answer, or no standby fence
+    configured - gets the full writer fence, database included.
+    """
+    if standby_fence and recovery_answer == "t":
+        return standby_fence
+    return writer_fence
+
+
 def _postgres_query_command(port: int, user: str, database: str, query: str) -> tuple[str, ...]:
     """Build a deterministic in-pod psql command for the live Oracle topology."""
     return ("sh", "-ec", f"psql -h 127.0.0.1 -p {port} -U {shlex.quote(user)} -d {shlex.quote(database)} -Atc {shlex.quote(query)}")
@@ -354,6 +368,8 @@ def run() -> None:
     parser.add_argument("--manual-endpoint", action="store_true", help="retain a manually managed Endpoints object instead of changing Service selectors")
     parser.add_argument("--old-writer-fence-command", default=os.environ.get("OLD_WRITER_FENCE_COMMAND"))
     parser.add_argument("--local-writer-fence-command", default=os.environ.get("LOCAL_WRITER_FENCE_COMMAND"))
+    parser.add_argument("--local-standby-fence-command", default=os.environ.get("LOCAL_STANDBY_FENCE_COMMAND"),
+                        help="apps/connector-only fence used when the local database is positively still in recovery")
     parser.add_argument("--replication-check-command", default=os.environ.get("REPLICATION_CHECK_COMMAND"))
     parser.add_argument("--publish-routes-command", default=os.environ.get("PUBLISH_ROUTES_COMMAND"))
     parser.add_argument("--service-check-command", default=os.environ.get("SERVICE_CHECK_COMMAND"))
@@ -478,9 +494,16 @@ def run() -> None:
             _kubectl("-n", service_namespace, "rollout", "status", f"deployment/{deployment}", "--timeout=180s")
 
     def fence() -> None:
+        recovery = None
+        if args.local_standby_fence_command:
+            try:
+                recovery = _kubectl("-n", pod_namespace, "exec", args.pod, "--", *_postgres_query_command(args.postgres_port, args.postgres_user, args.postgres_database, "select pg_is_in_recovery();"))
+            except Exception:
+                recovery = None
+        command = select_local_fence(recovery, args.local_writer_fence_command, args.local_standby_fence_command)
         # Above pantry-writer-fence.sh's whole-run budget (45s default), so a
         # slow-but-succeeding fence is never killed and misread as unfenced.
-        run_hook(args.local_writer_fence_command, timeout=int(os.environ.get('LOCAL_WRITER_FENCE_TIMEOUT_SECONDS', '75')))
+        run_hook(command, timeout=int(os.environ.get('LOCAL_WRITER_FENCE_TIMEOUT_SECONDS', '75')))
         if generation:
             journal.record(generation["epoch"], generation["system_identifier"], "fenced")
 

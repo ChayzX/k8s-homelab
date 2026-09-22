@@ -33,6 +33,8 @@ set -Eeuo pipefail
 #   FENCE_TIMEOUT_SECONDS    total fence budget, start to verdict (default 45)
 #   FENCE_POD_GRACE_SECONDS  pod termination grace (default 5)
 #   FENCE_ALLOW_UNREACHABLE  1 = network silence at first probe exits 75
+#   FENCE_APPS_ONLY          1 = no StatefulSets (the promoter uses this only
+#                            when the local DB is positively still a standby)
 
 SCOPE="${FENCE_SCOPE:?FENCE_SCOPE required}"
 KUBECTL_BIN="${FENCE_KUBECTL:-kubectl}"
@@ -67,7 +69,12 @@ MODE="${1:-}"
 [[ ( "$MODE" == "--confirm" || "$MODE" == "--dry-run" ) && "$#" == 1 ]] || fail "explicit_confirmation_required"
 [[ "$TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] || fail "invalid_timeout"
 [[ "$GRACE_SECONDS" =~ ^[1-9][0-9]*$ ]] || fail "invalid_grace"
-(( ${#STATEFULSETS[@]} > 0 )) || fail "no_statefulsets_configured"
+if [[ "${FENCE_APPS_ONLY:-0}" == 1 ]]; then
+  (( ${#STATEFULSETS[@]} == 0 )) || fail "apps_only_with_statefulsets"
+  (( ${#DEPLOYMENTS[@]} > 0 )) || fail "no_deployments_configured"
+else
+  (( ${#STATEFULSETS[@]} > 0 )) || fail "no_statefulsets_configured"
+fi
 [[ -z "${FENCE_KUBECONFIG:-}" || -r "$FENCE_KUBECONFIG" ]] || fail "kubeconfig_unreadable"
 for d in "${DEPLOYMENTS[@]}"; do
   for p in "${PROTECTED_DEPLOYMENTS[@]}"; do

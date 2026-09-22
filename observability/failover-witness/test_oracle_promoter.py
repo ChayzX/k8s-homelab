@@ -562,3 +562,19 @@ if __name__ == "__main__":
     for test in tests:
         test()
     print(f"test_oracle_promoter: {len(tests)} tests passed")
+
+
+def test_local_fence_keeps_a_positively_proven_standby_streaming() -> None:
+    """Catch a failed pre-promotion attempt scaling its own standby to 0 (seen live
+    2026-09-22: it blocked every retry and dropped the site out of the replica set)."""
+    from oracle_promoter import select_local_fence
+    assert select_local_fence("t", "writer", "standby") == "standby"
+
+
+def test_local_fence_takes_the_database_unless_recovery_is_proven() -> None:
+    """Catch an ambiguous/failed recovery probe being treated as 'safe standby'."""
+    from oracle_promoter import select_local_fence
+    for answer in ("f", None, "", "error", "t\n", "T"):
+        assert select_local_fence(answer, "writer", "standby") == "writer", answer
+    assert select_local_fence("t", "writer", None) == "writer"
+    assert select_local_fence("t", "writer", "") == "writer"
