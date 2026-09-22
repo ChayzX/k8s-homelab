@@ -1,0 +1,1301 @@
+{
+ "uid": "home",
+ "title": "Start Here — Is Anything Broken?",
+ "description": "The one page to open first. Four boxes say whether anything is wrong; the tables under them name what, in plain words; the graphs show whether the server itself is under strain.",
+ "tags": [
+  "homelab",
+  "start-here"
+ ],
+ "timezone": "browser",
+ "editable": true,
+ "schemaVersion": 39,
+ "version": 1,
+ "refresh": "30s",
+ "graphTooltip": 1,
+ "time": {
+  "from": "now-12h",
+  "to": "now"
+ },
+ "links": [
+  {
+   "title": "Start Here",
+   "url": "/d/home",
+   "type": "link",
+   "icon": "dashboard",
+   "asDropdown": false,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "tags": [],
+   "tooltip": ""
+  },
+  {
+   "title": "Services",
+   "url": "/d/services",
+   "type": "link",
+   "icon": "apps",
+   "asDropdown": false,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "tags": [],
+   "tooltip": ""
+  },
+  {
+   "title": "Machines",
+   "url": "/d/machines",
+   "type": "link",
+   "icon": "monitor",
+   "asDropdown": false,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "tags": [],
+   "tooltip": ""
+  },
+  {
+   "title": "PantryBot",
+   "url": "/d/homelab-pantry-bot",
+   "type": "link",
+   "icon": "bolt",
+   "asDropdown": false,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "tags": [],
+   "tooltip": ""
+  },
+  {
+   "title": "Minecraft",
+   "url": "/d/homelab-minecraft",
+   "type": "link",
+   "icon": "cube",
+   "asDropdown": false,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "tags": [],
+   "tooltip": ""
+  },
+  {
+   "title": "Logs",
+   "url": "/d/homelab-logs",
+   "type": "link",
+   "icon": "doc",
+   "asDropdown": false,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "tags": [],
+   "tooltip": ""
+  },
+  {
+   "title": "Sites & Failover",
+   "url": "/d/homelab-site-service-health",
+   "type": "link",
+   "icon": "sitemap",
+   "asDropdown": false,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "tags": [],
+   "tooltip": ""
+  }
+ ],
+ "templating": {
+  "list": [
+   {
+    "name": "DS_PROMETHEUS",
+    "label": "Prometheus",
+    "type": "datasource",
+    "query": "prometheus",
+    "current": {},
+    "hide": 2,
+    "refresh": 1,
+    "regex": ""
+   },
+   {
+    "name": "DS_LOKI",
+    "label": "Loki",
+    "type": "datasource",
+    "query": "loki",
+    "current": {},
+    "hide": 2,
+    "refresh": 1,
+    "regex": ""
+   }
+  ]
+ },
+ "panels": [
+  {
+   "id": 1,
+   "type": "text",
+   "title": "",
+   "gridPos": {
+    "h": 3,
+    "w": 24,
+    "x": 0,
+    "y": 0
+   },
+   "options": {
+    "mode": "markdown",
+    "content": "## Is anything broken?\nRead the four boxes below. **All green means everything is fine and you can close this page.** Anything red is listed underneath in plain words, with where to look next. The graphs at the bottom show whether the server itself is struggling."
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Overall",
+   "description": "How many things need attention right now, added up from the three boxes to the right.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "(sum(kube_pod_container_status_waiting_reason{reason=\"CrashLoopBackOff\"}) or vector(0)) + (sum(kube_deployment_status_replicas_unavailable) or vector(0)) + (count(kube_node_status_condition{condition=\"Ready\", status=\"true\"} == 0) or vector(0))",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center",
+    "orientation": "auto"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "ALL GOOD",
+         "color": "green",
+         "index": 0
+        }
+       }
+      }
+     ],
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 2,
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 0,
+    "y": 3
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Apps not fully running",
+   "description": "Copies of an app that should be running but are not. 0 is good.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "sum(kube_deployment_status_replicas_unavailable) or vector(0)",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto",
+    "justifyMode": "center",
+    "orientation": "auto"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "NONE",
+         "color": "green",
+         "index": 0
+        }
+       }
+      }
+     ],
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 3,
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 6,
+    "y": 3
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Apps crashing over and over",
+   "description": "Containers stuck in a crash-restart loop (CrashLoopBackOff). These start, fail, and get restarted endlessly — nearly always a config problem or a dependency (like a database) being unreachable.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "sum(kube_pod_container_status_waiting_reason{reason=\"CrashLoopBackOff\"}) or vector(0)",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto",
+    "justifyMode": "center",
+    "orientation": "auto"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "NONE",
+         "color": "green",
+         "index": 0
+        }
+       }
+      }
+     ],
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 4,
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 12,
+    "y": 3
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Machines offline",
+   "description": "Kubernetes machines that have stopped reporting in. Anything scheduled on an offline machine stops working too.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "count(kube_node_status_condition{condition=\"Ready\", status=\"true\"} == 0) or vector(0)",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto",
+    "justifyMode": "center",
+    "orientation": "auto"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "NONE",
+         "color": "green",
+         "index": 0
+        }
+       }
+      }
+     ],
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 5,
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 18,
+    "y": 3
+   }
+  },
+  {
+   "type": "row",
+   "title": "What is broken, in plain words",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 8
+   },
+   "panels": [],
+   "id": 6
+  },
+  {
+   "type": "table",
+   "title": "Apps crashing over and over",
+   "description": "Open Services, pick this app, and read its logs at the bottom — the reason for the crash is almost always the last few lines before each restart.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "kube_pod_container_status_waiting_reason{reason=\"CrashLoopBackOff\"} == 1",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "kube_pod_container_status_restarts_total and on (namespace, pod, container) (kube_pod_container_status_waiting_reason{reason=\"CrashLoopBackOff\"} == 1)",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "merge",
+     "options": {}
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true,
+       "__name__": true,
+       "job": true,
+       "instance": true,
+       "uid": true,
+       "endpoint": true,
+       "service": true,
+       "reason": true,
+       "Value #A": true
+      },
+      "renameByName": {
+       "namespace": "Area",
+       "pod": "App (pod)",
+       "container": "Part",
+       "Value #B": "Times restarted"
+      },
+      "indexByName": {
+       "namespace": 0,
+       "pod": 1,
+       "container": 2,
+       "Value #B": 3
+      }
+     }
+    },
+    {
+     "id": "sortBy",
+     "options": {
+      "fields": {},
+      "sort": [
+       {
+        "field": "Times restarted"
+       }
+      ]
+     }
+    }
+   ],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false,
+     "reducer": [
+      "sum"
+     ],
+     "fields": ""
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      }
+     },
+     "noValue": "Nothing here — good."
+    },
+    "overrides": []
+   },
+   "id": 7,
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 9
+   }
+  },
+  {
+   "type": "table",
+   "title": "Apps that are not fully running",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "kube_deployment_status_replicas_unavailable > 0",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "kube_deployment_spec_replicas and on (namespace, deployment) (kube_deployment_status_replicas_unavailable > 0)",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "merge",
+     "options": {}
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true,
+       "__name__": true,
+       "job": true,
+       "instance": true,
+       "uid": true,
+       "endpoint": true,
+       "service": true
+      },
+      "renameByName": {
+       "namespace": "Area",
+       "deployment": "App",
+       "Value #B": "Should have",
+       "Value #A": "Missing"
+      },
+      "indexByName": {
+       "namespace": 0,
+       "deployment": 1,
+       "Value #B": 2,
+       "Value #A": 3
+      }
+     }
+    }
+   ],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false,
+     "reducer": [
+      "sum"
+     ],
+     "fields": ""
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      }
+     },
+     "noValue": "Nothing here — good."
+    },
+    "overrides": []
+   },
+   "id": 8,
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 9
+   }
+  },
+  {
+   "type": "table",
+   "title": "Things the monitoring cannot reach",
+   "description": "The monitoring system tried to collect numbers from these and got no answer. Usually means the thing itself is down.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "label_replace(up == 0, \"site\", \"home\", \"site\", \"\")",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "merge",
+     "options": {}
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true,
+       "__name__": true,
+       "job": true,
+       "instance": true,
+       "uid": true,
+       "endpoint": true,
+       "service": true,
+       "Value": true,
+       "role": true
+      },
+      "renameByName": {
+       "site": "Site",
+       "job": "What",
+       "instance": "Address"
+      },
+      "indexByName": {
+       "site": 0,
+       "job": 1,
+       "instance": 2
+      }
+     }
+    }
+   ],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false,
+     "reducer": [
+      "sum"
+     ],
+     "fields": ""
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      }
+     },
+     "noValue": "Nothing here — good."
+    },
+    "overrides": []
+   },
+   "id": 9,
+   "gridPos": {
+    "h": 6,
+    "w": 12,
+    "x": 0,
+    "y": 17
+   }
+  },
+  {
+   "type": "table",
+   "title": "Machines offline",
+   "description": "A machine here has stopped reporting in. Everything scheduled on it is stuck until it comes back.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "kube_node_status_condition{condition=\"Ready\", status=\"true\"} == 0",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "merge",
+     "options": {}
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true,
+       "__name__": true,
+       "job": true,
+       "instance": true,
+       "uid": true,
+       "endpoint": true,
+       "service": true,
+       "condition": true,
+       "status": true,
+       "Value": true
+      },
+      "renameByName": {
+       "node": "Machine"
+      },
+      "indexByName": {
+       "node": 0
+      }
+     }
+    }
+   ],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false,
+     "reducer": [
+      "sum"
+     ],
+     "fields": ""
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      }
+     },
+     "noValue": "Nothing here — good."
+    },
+    "overrides": []
+   },
+   "id": 10,
+   "gridPos": {
+    "h": 6,
+    "w": 12,
+    "x": 12,
+    "y": 17
+   }
+  },
+  {
+   "type": "row",
+   "title": "Is the server struggling?  (MinecraftMachine — runs almost everything)",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 23
+   },
+   "panels": [],
+   "id": 11
+  },
+  {
+   "type": "gauge",
+   "title": "CPU busy",
+   "description": "How hard the processor is working. Brief spikes are normal; sitting above 90% makes everything slow.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{instance=\"192.168.40.208:9100\", mode=\"idle\"}[5m])))",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showThresholdMarkers": true,
+    "showThresholdLabels": false
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "min": 0,
+     "max": 100,
+     "decimals": 0,
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 70
+       },
+       {
+        "color": "red",
+        "value": 90
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 12,
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 0,
+    "y": 24
+   }
+  },
+  {
+   "type": "gauge",
+   "title": "Memory used",
+   "description": "Above ~90% the system starts killing apps to free memory.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "100 * (1 - node_memory_MemAvailable_bytes{instance=\"192.168.40.208:9100\"} / node_memory_MemTotal_bytes{instance=\"192.168.40.208:9100\"})",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showThresholdMarkers": true,
+    "showThresholdLabels": false
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "min": 0,
+     "max": 100,
+     "decimals": 0,
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 80
+       },
+       {
+        "color": "red",
+        "value": 92
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 13,
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 6,
+    "y": 24
+   }
+  },
+  {
+   "type": "gauge",
+   "title": "Main disk full",
+   "description": "When this reaches 100% most things stop working. Clean up above 85%.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "100 * (1 - node_filesystem_avail_bytes{instance=\"192.168.40.208:9100\", mountpoint=\"/\", fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{instance=\"192.168.40.208:9100\", mountpoint=\"/\", fstype!~\"tmpfs|overlay|squashfs\"})",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showThresholdMarkers": true,
+    "showThresholdLabels": false
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "min": 0,
+     "max": 100,
+     "decimals": 0,
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 80
+       },
+       {
+        "color": "red",
+        "value": 90
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 14,
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 12,
+    "y": 24
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Up for",
+   "description": "Time since the server last rebooted.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "time() - node_boot_time_seconds{instance=\"192.168.40.208:9100\"}",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "auto",
+    "justifyMode": "center",
+    "orientation": "auto"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "decimals": 0,
+     "mappings": [],
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 15,
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 18,
+    "y": 24
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "CPU and memory over time",
+   "description": "The shaded band is the danger zone.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{instance=\"192.168.40.208:9100\", mode=\"idle\"}[5m])))",
+     "legendFormat": "CPU %"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "100 * (1 - node_memory_MemAvailable_bytes{instance=\"192.168.40.208:9100\"} / node_memory_MemTotal_bytes{instance=\"192.168.40.208:9100\"})",
+     "legendFormat": "Memory %"
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 12,
+      "showPoints": "never",
+      "spanNulls": true,
+      "gradientMode": "opacity",
+      "thresholdsStyle": {
+       "mode": "line+area"
+      }
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "noValue": "nothing to show",
+     "min": 0,
+     "max": 100,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "rgba(242,73,92,0.15)",
+        "value": 90
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 16,
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 29
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "App restarts (per hour, by area)",
+   "description": "Any bar here means an app restarted. A tall or growing stack is the earliest sign something is going wrong.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "sum by (namespace) (increase(kube_pod_container_status_restarts_total[1h])) > 0",
+     "legendFormat": "{{namespace}}"
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "drawStyle": "bars",
+      "lineWidth": 1,
+      "fillOpacity": 60,
+      "showPoints": "never",
+      "spanNulls": true,
+      "gradientMode": "opacity",
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      }
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "noValue": "nothing to show"
+    },
+    "overrides": []
+   },
+   "id": 17,
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 29
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Errors in the logs (per 5 min, by area)",
+   "description": "Error lines written by apps. A sudden jump usually lines up with the problem. Open Logs to read them.",
+   "datasource": {
+    "type": "loki",
+    "uid": "${DS_LOKI}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "loki",
+      "uid": "${DS_LOKI}"
+     },
+     "expr": "sum by (ns) (label_replace(count_over_time({level=\"error\"}[5m]), \"ns\", \"$1\", \"instance\", \"([^/]+)/.*\"))",
+     "legendFormat": "{{ns}}"
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "drawStyle": "bars",
+      "lineWidth": 1,
+      "fillOpacity": 60,
+      "showPoints": "never",
+      "spanNulls": true,
+      "gradientMode": "opacity",
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      }
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "noValue": "nothing to show"
+    },
+    "overrides": []
+   },
+   "id": 18,
+   "gridPos": {
+    "h": 8,
+    "w": 24,
+    "x": 0,
+    "y": 37
+   }
+  }
+ ]
+}

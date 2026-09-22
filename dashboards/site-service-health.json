@@ -1,6 +1,6 @@
 {
   "uid": "homelab-site-service-health",
-  "title": "Site & Service Health \u2014 Home / Oracle / Canada",
+  "title": "Sites & Failover \u2014 Which Site Is Each Thing At?",
   "description": "Which site is each service at, and is it up. Every service row carries an explicit Site column. HOME is this k3s cluster and is fully instrumented; Kubernetes objects have no site label of their own, so this dashboard stamps site=\"home\" onto them with label_replace \u2014 a definition, not a measurement. ORACLE runs a separate, non-federated Prometheus and CANADA has no scrape target at all, so both are reported as \"unknown from here\" rather than faked. Both of those panels count targets instead of probing a hard-coded job name, so they start working by themselves once the corresponding scrape job is added. Rebuilt 2026-09-21: the previous Canada panel queried up{job=\"canada-pantry-bot-api\"}, a job present in neither the repo nor the live Prometheus config, so it could only ever render No data.",
   "tags": [
     "homelab",
@@ -21,18 +21,88 @@
   },
   "links": [
     {
-      "title": "Per-service dashboards",
-      "type": "dashboards",
-      "tags": [
-        "service"
-      ],
-      "asDropdown": true,
-      "icon": "external link",
+      "title": "Start Here",
+      "url": "/d/home",
+      "type": "link",
+      "icon": "dashboard",
+      "asDropdown": false,
       "includeVars": false,
       "keepTime": true,
       "targetBlank": false,
-      "tooltip": "",
-      "url": ""
+      "tags": [],
+      "tooltip": ""
+    },
+    {
+      "title": "Services",
+      "url": "/d/services",
+      "type": "link",
+      "icon": "apps",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "tags": [],
+      "tooltip": ""
+    },
+    {
+      "title": "Machines",
+      "url": "/d/machines",
+      "type": "link",
+      "icon": "monitor",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "tags": [],
+      "tooltip": ""
+    },
+    {
+      "title": "PantryBot",
+      "url": "/d/homelab-pantry-bot",
+      "type": "link",
+      "icon": "bolt",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "tags": [],
+      "tooltip": ""
+    },
+    {
+      "title": "Minecraft",
+      "url": "/d/homelab-minecraft",
+      "type": "link",
+      "icon": "cube",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "tags": [],
+      "tooltip": ""
+    },
+    {
+      "title": "Logs",
+      "url": "/d/homelab-logs",
+      "type": "link",
+      "icon": "doc",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "tags": [],
+      "tooltip": ""
+    },
+    {
+      "title": "Sites & Failover",
+      "url": "/d/homelab-site-service-health",
+      "type": "link",
+      "icon": "sitemap",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "tags": [],
+      "tooltip": ""
     }
   ],
   "templating": {
@@ -43,7 +113,7 @@
         "type": "datasource",
         "query": "prometheus",
         "current": {},
-        "hide": 0,
+        "hide": 2,
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false

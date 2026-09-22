@@ -75,13 +75,11 @@ jobs:
           # Server-side apply is REQUIRED, not a preference. Client-side
           # apply stores the whole manifest in the
           # kubectl.kubernetes.io/last-applied-configuration annotation,
-          # and annotations are capped at 262144 bytes -- both dashboard
-          # ConfigMaps are larger than that, so a plain `kubectl apply`
-          # fails with "metadata.annotations: Too long".
+          # and annotations are capped at 262144 bytes. The dashboard
+          # ConfigMap has been larger than that, and a plain `kubectl apply`
+          # then fails with "metadata.annotations: Too long".
           kubectl apply --server-side --force-conflicts \
             -f dashboards/dashboards-configmap.yaml -n observability
-          kubectl apply --server-side --force-conflicts \
-            -f dashboards/services-configmap.yaml -n observability
           # Provisioning (datasources + dashboard providers), so this repo
           # is the source of truth rather than drifting behind the cluster.
           kubectl apply -f observability/grafana-provisioning.yaml -n observability
@@ -98,7 +96,6 @@ jobs:
           kubectl apply -f "$RUNNER_TEMP/grafana-deployment.yaml" -n observability
           echo '### Grafana manifests: ✅ applied' >> "$GITHUB_STEP_SUMMARY"
           echo '- `dashboards/dashboards-configmap.yaml`' >> "$GITHUB_STEP_SUMMARY"
-          echo '- `dashboards/services-configmap.yaml`' >> "$GITHUB_STEP_SUMMARY"
           echo '- `observability/grafana-provisioning.yaml`' >> "$GITHUB_STEP_SUMMARY"
           echo '- `observability/grafana.yaml`' >> "$GITHUB_STEP_SUMMARY"
 

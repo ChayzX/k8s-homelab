@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
-"""Regenerate the Grafana dashboard ConfigMaps from the JSON sources.
+"""Regenerate the Grafana dashboard ConfigMap from the JSON sources.
 
-Two ConfigMaps, because one would approach the 1 MiB ConfigMap ceiling and
-because the per-service dashboards belong in their own Grafana folder:
-
-  dashboards/*.json          -> grafana-dashboards          (folder: General)
-  dashboards/services/*.json -> grafana-dashboards-services (folder: Services)
+  dashboards/*.json -> grafana-dashboards
 
 scripts/validate-grafana-dashboards.sh compares each embedded copy against
 its source byte for byte, so the embedding here is verbatim: each line of
@@ -20,9 +16,6 @@ TARGETS = [
     dict(src=os.path.join(REPO, 'dashboards', '*.json'),
          out=os.path.join(REPO, 'dashboards', 'dashboards-configmap.yaml'),
          name='grafana-dashboards'),
-    dict(src=os.path.join(REPO, 'dashboards', 'services', '*.json'),
-         out=os.path.join(REPO, 'dashboards', 'services-configmap.yaml'),
-         name='grafana-dashboards-services'),
 ]
 
 LIMIT = 900000

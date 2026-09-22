@@ -1,10 +1,10 @@
 {
- "uid": "homelab-pantry-bot",
- "title": "PantryBot — Health & Usage",
- "description": "Is PantryBot working, and is anyone using it. Replaces the three separate PantryBot dashboards (health, usage, usage-from-Postgres).",
+ "uid": "services",
+ "title": "Services — How Is One Service Doing?",
+ "description": "Pick an area and a service; every panel is about that one service. The service list is read live from Kubernetes, so new services appear on their own. Only services that are supposed to be running (1+ copies) are listed.",
  "tags": [
   "homelab",
-  "pantry-bot"
+  "services"
  ],
  "timezone": "browser",
  "editable": true,
@@ -125,14 +125,49 @@
     "regex": ""
    },
    {
-    "name": "DS_POSTGRES",
-    "label": "Postgres",
-    "type": "datasource",
-    "query": "grafana-postgresql-datasource",
-    "current": {},
-    "hide": 2,
+    "name": "namespace",
+    "label": "Area",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "${DS_PROMETHEUS}"
+    },
+    "definition": "label_values(kube_deployment_spec_replicas, namespace)",
+    "query": {
+     "query": "label_values(kube_deployment_spec_replicas, namespace)",
+     "refId": "ns"
+    },
     "refresh": 1,
+    "sort": 1,
+    "includeAll": false,
+    "multi": false,
+    "hide": 0,
+    "current": {
+     "text": "pantry-bot",
+     "value": "pantry-bot"
+    },
     "regex": ""
+   },
+   {
+    "name": "workload",
+    "label": "Service",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "${DS_PROMETHEUS}"
+    },
+    "definition": "query_result(label_replace(kube_deployment_spec_replicas{namespace=\"$namespace\"} > 0, \"workload\", \"$1\", \"deployment\", \"(.*)\") or label_replace(kube_statefulset_replicas{namespace=\"$namespace\"} > 0, \"workload\", \"$1\", \"statefulset\", \"(.*)\") or label_replace(kube_daemonset_status_desired_number_scheduled{namespace=\"$namespace\"} > 0, \"workload\", \"$1\", \"daemonset\", \"(.*)\"))",
+    "query": {
+     "query": "query_result(label_replace(kube_deployment_spec_replicas{namespace=\"$namespace\"} > 0, \"workload\", \"$1\", \"deployment\", \"(.*)\") or label_replace(kube_statefulset_replicas{namespace=\"$namespace\"} > 0, \"workload\", \"$1\", \"statefulset\", \"(.*)\") or label_replace(kube_daemonset_status_desired_number_scheduled{namespace=\"$namespace\"} > 0, \"workload\", \"$1\", \"daemonset\", \"(.*)\"))",
+     "refId": "wl"
+    },
+    "regex": "/workload=\"([^\"]+)\"/",
+    "refresh": 2,
+    "sort": 1,
+    "includeAll": false,
+    "multi": false,
+    "hide": 0,
+    "current": {}
    }
   ]
  },
@@ -149,13 +184,13 @@
    },
    "options": {
     "mode": "markdown",
-    "content": "## PantryBot\nTop half: **is it working?** Bottom half: **is anyone using it?** If the top is red, the bottom will be empty — fix the top first. For one part in detail, open Services and pick Area `pantry-bot`."
+    "content": "## How is one service doing?\nPick an **Area** and a **Service** at the top. Everything below is about just that service. Red boxes mean trouble; the logs at the bottom usually say why."
    }
   },
   {
    "type": "stat",
-   "title": "Parts running",
-   "description": "Parts of PantryBot running vs how many should be.",
+   "title": "Is it running?",
+   "description": "How many copies are running right now.",
    "datasource": {
     "type": "prometheus",
     "uid": "${DS_PROMETHEUS}"
@@ -167,79 +202,7 @@
       "type": "prometheus",
       "uid": "${DS_PROMETHEUS}"
      },
-     "expr": "sum(kube_deployment_status_replicas_available{namespace=\"pantry-bot\"})",
-     "legendFormat": "running",
-     "instant": true,
-     "range": false
-    },
-    {
-     "refId": "B",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
-     },
-     "expr": "sum(kube_deployment_spec_replicas{namespace=\"pantry-bot\"})",
-     "legendFormat": "should be",
-     "instant": true,
-     "range": false
-    }
-   ],
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "value",
-    "graphMode": "none",
-    "textMode": "value_and_name",
-    "justifyMode": "center",
-    "orientation": "auto"
-   },
-   "fieldConfig": {
-    "defaults": {
-     "unit": "short",
-     "decimals": 0,
-     "mappings": [],
-     "noValue": "no data",
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "blue",
-        "value": null
-       }
-      ]
-     }
-    },
-    "overrides": []
-   },
-   "id": 2,
-   "gridPos": {
-    "h": 5,
-    "w": 6,
-    "x": 0,
-    "y": 3
-   }
-  },
-  {
-   "type": "stat",
-   "title": "Parts crashing",
-   "description": "Parts stuck in a crash-restart loop.",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
-     },
-     "expr": "sum(kube_pod_container_status_waiting_reason{namespace=\"pantry-bot\", reason=\"CrashLoopBackOff\"}) or vector(0)",
+     "expr": "sum(kube_pod_status_phase{namespace=\"$namespace\", pod=~\"${workload}-([a-z0-9]+-)?[a-z0-9]+\", phase=\"Running\"}) or vector(0)",
      "instant": true,
      "range": false
     }
@@ -267,82 +230,7 @@
        "type": "value",
        "options": {
         "0": {
-         "text": "NONE",
-         "color": "green",
-         "index": 0
-        }
-       }
-      }
-     ],
-     "noValue": "no data",
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "green",
-        "value": null
-       },
-       {
-        "color": "red",
-        "value": 1
-       }
-      ]
-     }
-    },
-    "overrides": []
-   },
-   "id": 3,
-   "gridPos": {
-    "h": 5,
-    "w": 6,
-    "x": 6,
-    "y": 3
-   }
-  },
-  {
-   "type": "stat",
-   "title": "Database reachable?",
-   "description": "Whether any PantryBot database copy is up and accepting connections. Everything else depends on this — if it says NO, fix it first.",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
-     },
-     "expr": "max(kube_endpoint_address_available{namespace=\"pantry-bot\", endpoint=~\"postgres-authority.*\"}) or vector(0)",
-     "instant": true,
-     "range": false
-    }
-   ],
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "background",
-    "graphMode": "none",
-    "textMode": "auto",
-    "justifyMode": "center",
-    "orientation": "auto"
-   },
-   "fieldConfig": {
-    "defaults": {
-     "unit": "short",
-     "decimals": 0,
-     "mappings": [
-      {
-       "type": "value",
-       "options": {
-        "0": {
-         "text": "NO",
+         "text": "NOT RUNNING",
          "color": "red",
          "index": 0
         }
@@ -366,18 +254,18 @@
     },
     "overrides": []
    },
-   "id": 4,
+   "id": 2,
    "gridPos": {
     "h": 5,
     "w": 6,
-    "x": 12,
+    "x": 0,
     "y": 3
    }
   },
   {
    "type": "stat",
-   "title": "Restarts today",
-   "description": "",
+   "title": "Ready to serve?",
+   "description": "Running is not the same as working. Ready means it passed its own health check and is accepting work.",
    "datasource": {
     "type": "prometheus",
     "uid": "${DS_PROMETHEUS}"
@@ -389,7 +277,87 @@
       "type": "prometheus",
       "uid": "${DS_PROMETHEUS}"
      },
-     "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"pantry-bot\"}[24h])) or vector(0)",
+     "expr": "min(kube_pod_container_status_ready{namespace=\"$namespace\", pod=~\"${workload}-([a-z0-9]+-)?[a-z0-9]+\"}) or vector(0)",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto",
+    "justifyMode": "center",
+    "orientation": "auto"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "NOT READY",
+         "color": "red",
+         "index": 0
+        },
+        "1": {
+         "text": "READY",
+         "color": "green",
+         "index": 1
+        }
+       }
+      }
+     ],
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 3,
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 6,
+    "y": 3
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Restarts today",
+   "description": "0 is normal. A few can be a one-off. Dozens means it is crash-looping.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\", pod=~\"${workload}-([a-z0-9]+-)?[a-z0-9]+\"}[24h])) or vector(0)",
      "instant": true,
      "range": false
     }
@@ -438,7 +406,68 @@
        },
        {
         "color": "red",
-        "value": 10
+        "value": 5
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 4,
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 12,
+    "y": 3
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Why it last stopped",
+   "description": "OOMKilled = ran out of memory. Error = the app exited with a fault. Completed = a normal stop. \"no data\" = it has never stopped.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "max by (reason) (kube_pod_container_status_last_terminated_reason{namespace=\"$namespace\", pod=~\"${workload}-([a-z0-9]+-)?[a-z0-9]+\"})",
+     "legendFormat": "{{reason}}",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "name",
+    "justifyMode": "center",
+    "orientation": "auto"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "mappings": [],
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
        }
       ]
      }
@@ -454,9 +483,22 @@
    }
   },
   {
-   "type": "table",
-   "title": "Every PantryBot part",
-   "description": "Parts deliberately switched off (0 copies) are not listed.",
+   "type": "row",
+   "title": "Is it short of resources?",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 8
+   },
+   "panels": [],
+   "id": 6
+  },
+  {
+   "type": "timeseries",
+   "title": "Memory — used vs its limit",
+   "description": "If \"used\" reaches \"limit\", Kubernetes kills the app (OOMKilled). No limit line means none is set.",
    "datasource": {
     "type": "prometheus",
     "uid": "${DS_PROMETHEUS}"
@@ -468,10 +510,8 @@
       "type": "prometheus",
       "uid": "${DS_PROMETHEUS}"
      },
-     "expr": "sum by (deployment) (kube_deployment_spec_replicas{namespace=\"pantry-bot\"}) > 0",
-     "instant": true,
-     "range": false,
-     "format": "table"
+     "expr": "sum(container_memory_working_set_bytes{namespace=\"$namespace\", pod=~\"${workload}-([a-z0-9]+-)?[a-z0-9]+\", container!=\"\"})",
+     "legendFormat": "used"
     },
     {
      "refId": "B",
@@ -479,135 +519,8 @@
       "type": "prometheus",
       "uid": "${DS_PROMETHEUS}"
      },
-     "expr": "sum by (deployment) (kube_deployment_status_replicas_available{namespace=\"pantry-bot\"}) and on (deployment) (kube_deployment_spec_replicas{namespace=\"pantry-bot\"} > 0)",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    }
-   ],
-   "transformations": [
-    {
-     "id": "merge",
-     "options": {}
-    },
-    {
-     "id": "organize",
-     "options": {
-      "excludeByName": {
-       "Time": true,
-       "__name__": true,
-       "job": true,
-       "instance": true,
-       "uid": true,
-       "endpoint": true,
-       "service": true
-      },
-      "renameByName": {
-       "deployment": "Part",
-       "Value #A": "Should have",
-       "Value #B": "Running"
-      },
-      "indexByName": {
-       "deployment": 0,
-       "Value #A": 1,
-       "Value #B": 2
-      }
-     }
-    }
-   ],
-   "options": {
-    "showHeader": true,
-    "cellHeight": "sm",
-    "footer": {
-     "show": false,
-     "reducer": [
-      "sum"
-     ],
-     "fields": ""
-    }
-   },
-   "fieldConfig": {
-    "defaults": {
-     "custom": {
-      "align": "auto",
-      "cellOptions": {
-       "type": "auto"
-      }
-     },
-     "noValue": "Nothing here — good."
-    },
-    "overrides": [
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "Running"
-      },
-      "properties": [
-       {
-        "id": "custom.cellOptions",
-        "value": {
-         "type": "color-background",
-         "mode": "basic"
-        }
-       },
-       {
-        "id": "thresholds",
-        "value": {
-         "mode": "absolute",
-         "steps": [
-          {
-           "color": "red",
-           "value": null
-          },
-          {
-           "color": "green",
-           "value": 1
-          }
-         ]
-        }
-       }
-      ]
-     }
-    ]
-   },
-   "id": 6,
-   "gridPos": {
-    "h": 8,
-    "w": 24,
-    "x": 0,
-    "y": 8
-   }
-  },
-  {
-   "type": "row",
-   "title": "Is anyone using it?",
-   "collapsed": false,
-   "gridPos": {
-    "h": 1,
-    "w": 24,
-    "x": 0,
-    "y": 16
-   },
-   "panels": [],
-   "id": 7
-  },
-  {
-   "type": "timeseries",
-   "title": "Commands used (per 15 min)",
-   "description": "Chat commands people ran. Empty while the bot is down.",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
-     },
-     "expr": "sum by (command) (increase(pantry_bot_commands_total[15m]))",
-     "legendFormat": "{{command}}"
+     "expr": "sum(kube_pod_container_resource_limits{namespace=\"$namespace\", pod=~\"${workload}-([a-z0-9]+-)?[a-z0-9]+\", resource=\"memory\"})",
+     "legendFormat": "limit"
     }
    ],
    "options": {
@@ -623,18 +536,14 @@
    },
    "fieldConfig": {
     "defaults": {
-     "unit": "short",
+     "unit": "bytes",
      "custom": {
-      "drawStyle": "bars",
-      "lineWidth": 1,
-      "fillOpacity": 60,
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 12,
       "showPoints": "never",
       "spanNulls": true,
-      "gradientMode": "opacity",
-      "stacking": {
-       "mode": "normal",
-       "group": "A"
-      }
+      "gradientMode": "opacity"
      },
      "color": {
       "mode": "palette-classic"
@@ -644,18 +553,18 @@
     },
     "overrides": []
    },
-   "id": 8,
+   "id": 7,
    "gridPos": {
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 17
+    "y": 9
    }
   },
   {
    "type": "timeseries",
-   "title": "Work picked up vs finished (per 15 min)",
-   "description": "The two lines should track each other. \"Picked up\" pulling away from \"finished\" means work is getting stuck.",
+   "title": "CPU — used vs its limit (cores)",
+   "description": "Hitting the limit does not crash the app, it just makes it slow.",
    "datasource": {
     "type": "prometheus",
     "uid": "${DS_PROMETHEUS}"
@@ -667,8 +576,8 @@
       "type": "prometheus",
       "uid": "${DS_PROMETHEUS}"
      },
-     "expr": "sum(increase(pantry_bot_runtime_claims_total[15m]))",
-     "legendFormat": "picked up"
+     "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", pod=~\"${workload}-([a-z0-9]+-)?[a-z0-9]+\", container!=\"\"}[5m]))",
+     "legendFormat": "used"
     },
     {
      "refId": "B",
@@ -676,8 +585,8 @@
       "type": "prometheus",
       "uid": "${DS_PROMETHEUS}"
      },
-     "expr": "sum(increase(pantry_bot_runtime_completions_total[15m]))",
-     "legendFormat": "finished"
+     "expr": "sum(kube_pod_container_resource_limits{namespace=\"$namespace\", pod=~\"${workload}-([a-z0-9]+-)?[a-z0-9]+\", resource=\"cpu\"})",
+     "legendFormat": "limit"
     }
    ],
    "options": {
@@ -710,239 +619,135 @@
     },
     "overrides": []
    },
-   "id": 9,
+   "id": 8,
    "gridPos": {
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 17
-   }
-  },
-  {
-   "type": "row",
-   "title": "From the database  (keeps working even when the bot is down, as long as the database is up)",
-   "collapsed": false,
-   "gridPos": {
-    "h": 1,
-    "w": 24,
-    "x": 0,
-    "y": 25
-   },
-   "panels": [],
-   "id": 10
-  },
-  {
-   "type": "stat",
-   "title": "Events received (last hour)",
-   "datasource": {
-    "type": "grafana-postgresql-datasource",
-    "uid": "${DS_POSTGRES}"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "grafana-postgresql-datasource",
-      "uid": "${DS_POSTGRES}"
-     },
-     "format": "table",
-     "rawSql": "SELECT count(*) AS events FROM pantry_events WHERE created_at > now() - interval '1 hour'"
-    }
-   ],
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "value",
-    "graphMode": "none",
-    "textMode": "auto"
-   },
-   "fieldConfig": {
-    "defaults": {
-     "noValue": "database unreachable",
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "blue",
-        "value": null
-       }
-      ]
-     }
-    },
-    "overrides": []
-   },
-   "id": 11,
-   "gridPos": {
-    "h": 5,
-    "w": 8,
-    "x": 0,
-    "y": 26
-   }
-  },
-  {
-   "type": "stat",
-   "title": "Messages stuck undelivered",
-   "datasource": {
-    "type": "grafana-postgresql-datasource",
-    "uid": "${DS_POSTGRES}"
-   },
-   "description": "Outgoing messages that failed and were set aside. Should be 0.",
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "grafana-postgresql-datasource",
-      "uid": "${DS_POSTGRES}"
-     },
-     "format": "table",
-     "rawSql": "SELECT count(*) AS dead_letter FROM pantry_outbox WHERE status = 'dead_letter'"
-    }
-   ],
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "background",
-    "graphMode": "none",
-    "textMode": "auto"
-   },
-   "fieldConfig": {
-    "defaults": {
-     "noValue": "database unreachable",
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "green",
-        "value": null
-       },
-       {
-        "color": "red",
-        "value": 1
-       }
-      ]
-     }
-    },
-    "overrides": []
-   },
-   "id": 12,
-   "gridPos": {
-    "h": 5,
-    "w": 8,
-    "x": 8,
-    "y": 26
-   }
-  },
-  {
-   "type": "stat",
-   "title": "Different people who have taken part",
-   "datasource": {
-    "type": "grafana-postgresql-datasource",
-    "uid": "${DS_POSTGRES}"
-   },
-   "description": "Everyone who has ever joined in, all time.",
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "grafana-postgresql-datasource",
-      "uid": "${DS_POSTGRES}"
-     },
-     "format": "table",
-     "rawSql": "SELECT count(DISTINCT user_id) AS participants FROM community_participants"
-    }
-   ],
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "value",
-    "graphMode": "none",
-    "textMode": "auto"
-   },
-   "fieldConfig": {
-    "defaults": {
-     "noValue": "database unreachable",
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "blue",
-        "value": null
-       }
-      ]
-     }
-    },
-    "overrides": []
-   },
-   "id": 13,
-   "gridPos": {
-    "h": 5,
-    "w": 8,
-    "x": 16,
-    "y": 26
+    "y": 9
    }
   },
   {
    "type": "timeseries",
-   "title": "Events received over time",
+   "title": "Network traffic",
+   "description": "Flat at zero for a service that should be busy is suspicious.",
    "datasource": {
-    "type": "grafana-postgresql-datasource",
-    "uid": "${DS_POSTGRES}"
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
    },
    "targets": [
     {
      "refId": "A",
      "datasource": {
-      "type": "grafana-postgresql-datasource",
-      "uid": "${DS_POSTGRES}"
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
      },
-     "format": "time_series",
-     "rawSql": "SELECT $__timeGroup(created_at, $__interval) AS \"time\", source AS metric, count(*) AS events FROM pantry_events WHERE $__timeFilter(created_at) GROUP BY 1, 2 ORDER BY 1"
+     "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"$namespace\", pod=~\"${workload}-([a-z0-9]+-)?[a-z0-9]+\"}[5m]))",
+     "legendFormat": "in"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"$namespace\", pod=~\"${workload}-([a-z0-9]+-)?[a-z0-9]+\"}[5m]))",
+     "legendFormat": "out"
     }
    ],
    "options": {
     "legend": {
      "displayMode": "list",
-     "placement": "bottom"
+     "placement": "bottom",
+     "showLegend": true
     },
     "tooltip": {
-     "mode": "multi"
+     "mode": "multi",
+     "sort": "desc"
     }
    },
    "fieldConfig": {
     "defaults": {
+     "unit": "Bps",
      "custom": {
-      "drawStyle": "bars",
-      "fillOpacity": 60,
-      "stacking": {
-       "mode": "normal",
-       "group": "A"
-      }
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 12,
+      "showPoints": "never",
+      "spanNulls": true,
+      "gradientMode": "opacity"
      },
-     "noValue": "database unreachable"
+     "color": {
+      "mode": "palette-classic"
+     },
+     "noValue": "nothing to show",
+     "min": 0
     },
     "overrides": []
    },
-   "id": 14,
+   "id": 9,
    "gridPos": {
-    "h": 8,
-    "w": 24,
+    "h": 7,
+    "w": 12,
     "x": 0,
-    "y": 31
+    "y": 17
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Restarts over time",
+   "description": "When the restarts started is often the best clue to what changed.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\", pod=~\"${workload}-([a-z0-9]+-)?[a-z0-9]+\"}[1h]))",
+     "legendFormat": "restarts / hour"
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "drawStyle": "bars",
+      "lineWidth": 1,
+      "fillOpacity": 60,
+      "showPoints": "never",
+      "spanNulls": true,
+      "gradientMode": "opacity"
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "noValue": "nothing to show",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "id": 10,
+   "gridPos": {
+    "h": 7,
+    "w": 12,
+    "x": 12,
+    "y": 17
    }
   },
   {
@@ -953,15 +758,15 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 39
+    "y": 24
    },
    "panels": [],
-   "id": 15
+   "id": 11
   },
   {
-   "type": "logs",
-   "title": "PantryBot errors and warnings",
-   "description": "Only errors and warnings, newest first.",
+   "type": "timeseries",
+   "title": "Log lines by severity",
+   "description": "Red is errors. A burst of red right before a restart points at the cause.",
    "datasource": {
     "type": "loki",
     "uid": "${DS_LOKI}"
@@ -973,7 +778,67 @@
       "type": "loki",
       "uid": "${DS_LOKI}"
      },
-     "expr": "{instance=~\"pantry-bot/.*\", level=~\"error|warn\"}",
+     "expr": "sum by (level) (count_over_time({instance=~\"$namespace/${workload}-.*\"} [$__auto]))",
+     "legendFormat": "{{level}}"
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "drawStyle": "bars",
+      "lineWidth": 1,
+      "fillOpacity": 60,
+      "showPoints": "never",
+      "spanNulls": true,
+      "gradientMode": "opacity",
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      }
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "noValue": "nothing to show"
+    },
+    "overrides": []
+   },
+   "id": 12,
+   "gridPos": {
+    "h": 6,
+    "w": 24,
+    "x": 0,
+    "y": 25
+   }
+  },
+  {
+   "type": "logs",
+   "title": "Latest log lines",
+   "description": "Newest first. Look for the lines just before the app stopped.",
+   "datasource": {
+    "type": "loki",
+    "uid": "${DS_LOKI}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "loki",
+      "uid": "${DS_LOKI}"
+     },
+     "expr": "{instance=~\"$namespace/${workload}-.*\"}",
      "maxLines": 500
     }
    ],
@@ -987,12 +852,12 @@
     "showLabels": false,
     "showCommonLabels": false
    },
-   "id": 16,
+   "id": 13,
    "gridPos": {
-    "h": 12,
+    "h": 14,
     "w": 24,
     "x": 0,
-    "y": 40
+    "y": 31
    }
   }
  ]

@@ -6,12 +6,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DASHBOARD_DIR="$REPO_ROOT/dashboards"
 
-# Each entry is "<source glob depth>|<configmap path>". The top-level
-# dashboards and the generated per-service dashboards ship as two separate
-# ConfigMaps; see scripts/gen-dashboards-configmap.py.
+# Each entry is "<source dir>|<configmap path>". One set today; the loop
+# stays so a second ConfigMap can be added without restructuring this file.
 SETS=(
   "$DASHBOARD_DIR|$DASHBOARD_DIR/dashboards-configmap.yaml"
-  "$DASHBOARD_DIR/services|$DASHBOARD_DIR/services-configmap.yaml"
 )
 
 for required in jq kubectl; do

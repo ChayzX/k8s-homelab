@@ -9,6 +9,7 @@
   "version": 1,
   "refresh": "30s",
   "graphTooltip": 1,
+  "links": [{"title": "Start Here", "url": "/d/home", "type": "link", "icon": "dashboard", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Services", "url": "/d/services", "type": "link", "icon": "apps", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Machines", "url": "/d/machines", "type": "link", "icon": "monitor", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "PantryBot", "url": "/d/homelab-pantry-bot", "type": "link", "icon": "bolt", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Minecraft", "url": "/d/homelab-minecraft", "type": "link", "icon": "cube", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Logs", "url": "/d/homelab-logs", "type": "link", "icon": "doc", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Sites & Failover", "url": "/d/homelab-site-service-health", "type": "link", "icon": "sitemap", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}],
   "time": { "from": "now-1h", "to": "now" },
   "templating": {
     "list": [

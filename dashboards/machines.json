@@ -1,0 +1,951 @@
+{
+ "uid": "machines",
+ "title": "Machines — How Is One Machine Doing?",
+ "description": "Hardware health for one machine at a time. Each panel carries a Linux query (node_exporter) and a Windows query (windows_exporter); only the one matching the chosen machine returns data, so one dashboard covers both kinds.",
+ "tags": [
+  "homelab",
+  "machines"
+ ],
+ "timezone": "browser",
+ "editable": true,
+ "schemaVersion": 39,
+ "version": 1,
+ "refresh": "1m",
+ "graphTooltip": 1,
+ "time": {
+  "from": "now-6h",
+  "to": "now"
+ },
+ "links": [
+  {
+   "title": "Start Here",
+   "url": "/d/home",
+   "type": "link",
+   "icon": "dashboard",
+   "asDropdown": false,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "tags": [],
+   "tooltip": ""
+  },
+  {
+   "title": "Services",
+   "url": "/d/services",
+   "type": "link",
+   "icon": "apps",
+   "asDropdown": false,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "tags": [],
+   "tooltip": ""
+  },
+  {
+   "title": "Machines",
+   "url": "/d/machines",
+   "type": "link",
+   "icon": "monitor",
+   "asDropdown": false,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "tags": [],
+   "tooltip": ""
+  },
+  {
+   "title": "PantryBot",
+   "url": "/d/homelab-pantry-bot",
+   "type": "link",
+   "icon": "bolt",
+   "asDropdown": false,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "tags": [],
+   "tooltip": ""
+  },
+  {
+   "title": "Minecraft",
+   "url": "/d/homelab-minecraft",
+   "type": "link",
+   "icon": "cube",
+   "asDropdown": false,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "tags": [],
+   "tooltip": ""
+  },
+  {
+   "title": "Logs",
+   "url": "/d/homelab-logs",
+   "type": "link",
+   "icon": "doc",
+   "asDropdown": false,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "tags": [],
+   "tooltip": ""
+  },
+  {
+   "title": "Sites & Failover",
+   "url": "/d/homelab-site-service-health",
+   "type": "link",
+   "icon": "sitemap",
+   "asDropdown": false,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "tags": [],
+   "tooltip": ""
+  }
+ ],
+ "templating": {
+  "list": [
+   {
+    "name": "DS_PROMETHEUS",
+    "label": "Prometheus",
+    "type": "datasource",
+    "query": "prometheus",
+    "current": {},
+    "hide": 2,
+    "refresh": 1,
+    "regex": ""
+   },
+   {
+    "name": "machine",
+    "label": "Machine",
+    "type": "custom",
+    "query": "MinecraftMachine (the server) : 192.168.40.208:9100, Greenie's PC : ThePantry",
+    "options": [
+     {
+      "text": "MinecraftMachine (the server)",
+      "value": "192.168.40.208:9100",
+      "selected": true
+     },
+     {
+      "text": "Greenie's PC",
+      "value": "ThePantry",
+      "selected": false
+     }
+    ],
+    "current": {
+     "text": "MinecraftMachine (the server)",
+     "value": "192.168.40.208:9100"
+    },
+    "includeAll": false,
+    "multi": false,
+    "hide": 0
+   }
+  ]
+ },
+ "panels": [
+  {
+   "id": 1,
+   "type": "text",
+   "title": "",
+   "gridPos": {
+    "h": 3,
+    "w": 24,
+    "x": 0,
+    "y": 0
+   },
+   "options": {
+    "mode": "markdown",
+    "content": "## How is one machine doing?\nPick a **Machine** at the top. Big dials: green is fine, orange is getting tight, red needs attention. **chasebot is not listed** because nothing collects its hardware numbers yet (see issue #372)."
+   }
+  },
+  {
+   "type": "gauge",
+   "title": "CPU busy",
+   "description": "Sustained above 90% makes everything slow.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{instance=\"$machine\", mode=\"idle\"}[5m])))",
+     "legendFormat": "CPU %",
+     "instant": true,
+     "range": false
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "100 * (1 - avg(rate(windows_cpu_time_total{instance=\"$machine\", mode=\"idle\"}[5m])))",
+     "legendFormat": "CPU %",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showThresholdMarkers": true,
+    "showThresholdLabels": false
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "min": 0,
+     "max": 100,
+     "decimals": 0,
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 70
+       },
+       {
+        "color": "red",
+        "value": 90
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 2,
+   "gridPos": {
+    "h": 6,
+    "w": 6,
+    "x": 0,
+    "y": 3
+   }
+  },
+  {
+   "type": "gauge",
+   "title": "Memory used",
+   "description": "Above ~90% the system starts killing programs to free memory.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "100 * (1 - node_memory_MemAvailable_bytes{instance=\"$machine\"} / node_memory_MemTotal_bytes{instance=\"$machine\"})",
+     "instant": true,
+     "range": false
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "100 * (1 - windows_memory_available_bytes{instance=\"$machine\"} / windows_memory_physical_total_bytes{instance=\"$machine\"})",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showThresholdMarkers": true,
+    "showThresholdLabels": false
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "min": 0,
+     "max": 100,
+     "decimals": 0,
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 80
+       },
+       {
+        "color": "red",
+        "value": 92
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 3,
+   "gridPos": {
+    "h": 6,
+    "w": 6,
+    "x": 6,
+    "y": 3
+   }
+  },
+  {
+   "type": "gauge",
+   "title": "Fullest disk",
+   "description": "The fullest drive on this machine. At 100% things stop working.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "max(100 * (1 - node_filesystem_avail_bytes{instance=\"$machine\", mountpoint=\"/\", fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{instance=\"$machine\", mountpoint=\"/\", fstype!~\"tmpfs|overlay|squashfs\"}))",
+     "instant": true,
+     "range": false
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "max(100 * (1 - windows_logical_disk_free_bytes{instance=\"$machine\"} / windows_logical_disk_size_bytes{instance=\"$machine\"}))",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showThresholdMarkers": true,
+    "showThresholdLabels": false
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "min": 0,
+     "max": 100,
+     "decimals": 0,
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 80
+       },
+       {
+        "color": "red",
+        "value": 90
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 4,
+   "gridPos": {
+    "h": 6,
+    "w": 6,
+    "x": 12,
+    "y": 3
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Up for",
+   "description": "Time since the last reboot. A surprisingly small number means it restarted on its own.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "time() - node_boot_time_seconds{instance=\"$machine\"}",
+     "instant": true,
+     "range": false
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "time() - windows_system_boot_time_timestamp{instance=\"$machine\"}",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "auto",
+    "justifyMode": "center",
+    "orientation": "auto"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "decimals": 0,
+     "mappings": [],
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 5,
+   "gridPos": {
+    "h": 6,
+    "w": 6,
+    "x": 18,
+    "y": 3
+   }
+  },
+  {
+   "type": "row",
+   "title": "Over time",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 9
+   },
+   "panels": [],
+   "id": 6
+  },
+  {
+   "type": "timeseries",
+   "title": "CPU and memory",
+   "description": "The shaded band is the danger zone.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{instance=\"$machine\", mode=\"idle\"}[5m])))",
+     "legendFormat": "CPU %"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "100 * (1 - node_memory_MemAvailable_bytes{instance=\"$machine\"} / node_memory_MemTotal_bytes{instance=\"$machine\"})",
+     "legendFormat": "Memory %"
+    },
+    {
+     "refId": "C",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "100 * (1 - avg(rate(windows_cpu_time_total{instance=\"$machine\", mode=\"idle\"}[5m])))",
+     "legendFormat": "CPU %"
+    },
+    {
+     "refId": "D",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "100 * (1 - windows_memory_available_bytes{instance=\"$machine\"} / windows_memory_physical_total_bytes{instance=\"$machine\"})",
+     "legendFormat": "Memory %"
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 12,
+      "showPoints": "never",
+      "spanNulls": true,
+      "gradientMode": "opacity",
+      "thresholdsStyle": {
+       "mode": "line+area"
+      }
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "noValue": "nothing to show",
+     "min": 0,
+     "max": 100,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "rgba(242,73,92,0.15)",
+        "value": 90
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 7,
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 10
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Disk space used, per drive",
+   "description": "A line climbing steadily towards the top will eventually fill up.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "100 * (1 - node_filesystem_avail_bytes{instance=\"$machine\", fstype!~\"tmpfs|overlay|squashfs|iso9660\"} / node_filesystem_size_bytes{instance=\"$machine\", fstype!~\"tmpfs|overlay|squashfs|iso9660\"})",
+     "legendFormat": "{{mountpoint}}"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "100 * (1 - windows_logical_disk_free_bytes{instance=\"$machine\"} / windows_logical_disk_size_bytes{instance=\"$machine\"})",
+     "legendFormat": "{{volume}}"
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 12,
+      "showPoints": "never",
+      "spanNulls": true,
+      "gradientMode": "opacity",
+      "thresholdsStyle": {
+       "mode": "line+area"
+      }
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "noValue": "nothing to show",
+     "min": 0,
+     "max": 100,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "rgba(255,152,48,0.15)",
+        "value": 85
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 8,
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 10
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Network traffic",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "sum(rate(node_network_receive_bytes_total{instance=\"$machine\", device!~\"lo|veth.*|docker.*|br-.*|cni.*|flannel.*|cali.*|virbr.*\"}[5m]))",
+     "legendFormat": "download"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "sum(rate(node_network_transmit_bytes_total{instance=\"$machine\", device!~\"lo|veth.*|docker.*|br-.*|cni.*|flannel.*|cali.*|virbr.*\"}[5m]))",
+     "legendFormat": "upload"
+    },
+    {
+     "refId": "C",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "sum(rate(windows_net_bytes_received_total{instance=\"$machine\"}[5m]))",
+     "legendFormat": "download"
+    },
+    {
+     "refId": "D",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "sum(rate(windows_net_bytes_sent_total{instance=\"$machine\"}[5m]))",
+     "legendFormat": "upload"
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "Bps",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 12,
+      "showPoints": "never",
+      "spanNulls": true,
+      "gradientMode": "opacity"
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "noValue": "nothing to show",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "id": 9,
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 18
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Temperature (hottest sensor)",
+   "description": "Server only — the Windows PC does not report temperatures. Sustained above 80°C means a fan or airflow problem.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "max(node_hwmon_temp_celsius{instance=\"$machine\"})",
+     "legendFormat": "hottest"
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "celsius",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 12,
+      "showPoints": "never",
+      "spanNulls": true,
+      "gradientMode": "opacity",
+      "thresholdsStyle": {
+       "mode": "line+area"
+      }
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "noValue": "nothing to show",
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "rgba(242,73,92,0.15)",
+        "value": 80
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "id": 10,
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 18
+   }
+  },
+  {
+   "type": "row",
+   "title": "Graphics card  (Greenie's PC only)",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 26
+   },
+   "panels": [],
+   "id": 11
+  },
+  {
+   "type": "timeseries",
+   "title": "GPU busy, by engine",
+   "description": "Empty on the server, which has no monitored GPU.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "sum by (engtype) (rate(windows_gpu_engine_time_seconds{instance=\"$machine\"}[5m])) * 100",
+     "legendFormat": "{{engtype}}"
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 12,
+      "showPoints": "never",
+      "spanNulls": true,
+      "gradientMode": "opacity"
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "noValue": "nothing to show",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "id": 12,
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 27
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "GPU memory",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "sum(windows_gpu_adapter_memory_dedicated_bytes{instance=\"$machine\"})",
+     "legendFormat": "dedicated"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "sum(windows_gpu_adapter_memory_shared_bytes{instance=\"$machine\"})",
+     "legendFormat": "shared"
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 12,
+      "showPoints": "never",
+      "spanNulls": true,
+      "gradientMode": "opacity"
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "noValue": "nothing to show",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "id": 13,
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 27
+   }
+  }
+ ]
+}
