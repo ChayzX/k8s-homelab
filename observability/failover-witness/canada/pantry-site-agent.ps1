@@ -137,11 +137,23 @@ function Promote-Canada($lease) {
   Start-Guard $lease
   try {
     $unreachable = $false
+    Assert-Authority
+    # Both remote fences run concurrently (~35s each over tailscale); every
+    # result is still checked: 0 fenced, 75 unreachable, anything else blocks.
+    $procs = @{}
     foreach ($site in @('home', 'oracle')) {
-      Assert-Authority
-      $rc = Fence-Remote $site
+      $procs[$site] = Start-Process -FilePath 'powershell.exe' -PassThru -NoNewWindow `
+        -ArgumentList @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', "$Dir\pantry-writer-fence.ps1", '-Site', $site, '-Confirm') `
+        -RedirectStandardOutput "$StateDir\fence-$site.out" -RedirectStandardError "$StateDir\fence-$site.err"
+    }
+    foreach ($site in @('home', 'oracle')) {
+      $p = $procs[$site]
+      if (-not $p.WaitForExit(120000)) { try { $p.Kill() } catch {}; throw "old_writer_fence_timeout:$site" }
+      $rc = $p.ExitCode
+      Get-Content "$StateDir\fence-$site.out", "$StateDir\fence-$site.err" -ErrorAction SilentlyContinue | ForEach-Object { Log $_ }
       if ($rc -eq 75) { $unreachable = $true; Log "old_writer=$site lease_expiry" } elseif ($rc -ne 0) { throw "old_writer_fence_failed:$site rc=$rc" }
     }
+    Assert-Authority
     if ($unreachable) { Start-Sleep -Seconds 20 }
     Assert-Authority
     if ((Sql 'select pg_is_in_recovery()') -ne 't') { throw 'not_standby' }
@@ -293,8 +305,23 @@ function Tick {
   Promote-Canada $lease
 }
 
+# Docker Desktop can quit on its own (seen 2026-09-22 after a background
+# self-update): restart it through the boot task, at most every 5 minutes.
+$script:DockerDownSince = $null; $script:DockerKickedAt = [DateTime]::MinValue
+function Ensure-Docker {
+  docker version --format '{{.Server.Version}}' *> $null
+  if ($LASTEXITCODE -eq 0) { $script:DockerDownSince = $null; return $true }
+  if (-not $script:DockerDownSince) { $script:DockerDownSince = Get-Date }
+  if (((Get-Date) - $script:DockerDownSince).TotalSeconds -ge 60 -and ((Get-Date) - $script:DockerKickedAt).TotalMinutes -ge 5) {
+    $script:DockerKickedAt = Get-Date
+    schtasks /run /tn '\PantryBot Docker Desktop' | Out-Null
+    Log 'docker=down action=restarted_docker_desktop'
+  }
+  return $false
+}
+
 Log "started witness=$($WitnessUrls -join ',')"
 do {
-  try { Tick } catch { Log "tick_error $($_.Exception.Message)" }
+  try { if (Ensure-Docker) { Tick } } catch { Log "tick_error $($_.Exception.Message)" }
   if (-not $Once) { Start-Sleep -Seconds 5 }
 } while (-not $Once)
