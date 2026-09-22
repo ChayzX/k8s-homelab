@@ -30,7 +30,7 @@ set -Eeuo pipefail
 #   FENCE_NAMESPACE          namespace (default pantry-bot)
 #   FENCE_STATEFULSETS       space-separated StatefulSet names (required)
 #   FENCE_DEPLOYMENTS        space-separated Deployment names (may be empty)
-#   FENCE_TIMEOUT_SECONDS    total verification budget (default 45)
+#   FENCE_TIMEOUT_SECONDS    total fence budget, start to verdict (default 45)
 #   FENCE_POD_GRACE_SECONDS  pod termination grace (default 5)
 #   FENCE_ALLOW_UNREACHABLE  1 = network silence at first probe exits 75
 
@@ -63,7 +63,8 @@ k() {
 
 oneline() { tr '\n' ' ' <<<"$1"; }
 
-[[ "${1:-}" == "--confirm" && "$#" == 1 ]] || fail "explicit_confirmation_required"
+MODE="${1:-}"
+[[ ( "$MODE" == "--confirm" || "$MODE" == "--dry-run" ) && "$#" == 1 ]] || fail "explicit_confirmation_required"
 [[ "$TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] || fail "invalid_timeout"
 [[ "$GRACE_SECONDS" =~ ^[1-9][0-9]*$ ]] || fail "invalid_grace"
 (( ${#STATEFULSETS[@]} > 0 )) || fail "no_statefulsets_configured"
@@ -73,6 +74,10 @@ for d in "${DEPLOYMENTS[@]}"; do
     [[ "$d" != "$p" ]] || fail "protected_deployment_in_fence_list:$d"
   done
 done
+
+# The budget covers the WHOLE fence (probe, scale calls and verification),
+# so callers can set their hook timeout above it with a known margin.
+deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
 
 if ! probe_err="$(k version 2>&1 >/dev/null)"; then
   if [[ "$ALLOW_UNREACHABLE" == 1 ]] \
@@ -99,6 +104,21 @@ lookup() {
 
 present_sts=() present_deploy=() absent=()
 
+# --dry-run: probe + every lookup (proves reachability and RBAC), no writes.
+if [[ "$MODE" == "--dry-run" ]]; then
+  for s in "${STATEFULSETS[@]}"; do
+    rc=0; lookup statefulset "$s" '{.metadata.name}' || rc=$?
+    (( rc == 3 )) && absent+=("statefulset/$s") || present_sts+=("$s")
+  done
+  for d in "${DEPLOYMENTS[@]}"; do
+    rc=0; lookup deployment "$d" '{.metadata.name}' || rc=$?
+    (( rc == 3 )) && absent+=("deployment/$d") || present_deploy+=("$d")
+  done
+  join() { local IFS=,; echo "$*"; }
+  echo "fence_status=dry_run_ok scope=$SCOPE statefulsets=$(join "${present_sts[@]}") deployments=$(join "${present_deploy[@]}") absent=$(join "${absent[@]}")"
+  exit 0
+fi
+
 # Phase 1: issue every scale-down first (DB first: the hard guarantee lands
 # soonest; writers still up merely fail to connect), then the pod deletes.
 for s in "${STATEFULSETS[@]}"; do
@@ -121,20 +141,25 @@ for s in "${present_sts[@]}"; do
   grep -q '(NotFound)' <<<"$out" || fail "pod_delete_failed:$pod:$(oneline "$out")"
 done
 
-# Phase 2: one bounded verification loop over everything.
-deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
+# Phase 2: one bounded verification loop over everything, within the budget.
+# Items proven fenced are dropped from later passes (the lease holder is the
+# only one allowed to scale them back up, and it is this caller).
+todo_sts=("${present_sts[@]}") todo_deploy=("${present_deploy[@]}")
 while :; do
-  pending=()
-  for s in "${present_sts[@]}"; do
+  pending=() next_sts=() next_deploy=()
+  for s in "${todo_sts[@]}"; do
     rc=0; lookup statefulset "$s" '{.spec.replicas}' || rc=$?
-    (( rc == 3 )) || [[ "$VALUE" == 0 ]] || pending+=("statefulset/$s:replicas=$VALUE")
+    ok=1
+    (( rc == 3 )) || [[ "$VALUE" == 0 ]] || { ok=0; pending+=("statefulset/$s:replicas=$VALUE"); }
     rc=0; lookup pod "$s-0" '{.spec.nodeName}' || rc=$?
-    (( rc == 3 )) || pending+=("pod/$s-0:node=${VALUE:-unscheduled}")
+    (( rc == 3 )) || { ok=0; pending+=("pod/$s-0:node=${VALUE:-unscheduled}"); }
+    (( ok )) || next_sts+=("$s")
   done
-  for d in "${present_deploy[@]}"; do
+  for d in "${todo_deploy[@]}"; do
     rc=0; lookup deployment "$d" '{.spec.replicas}/{.status.replicas}' || rc=$?
-    (( rc == 3 )) || [[ "$VALUE" == "0/" || "$VALUE" == "0/0" ]] || pending+=("deployment/$d:$VALUE")
+    (( rc == 3 )) || [[ "$VALUE" == "0/" || "$VALUE" == "0/0" ]] || { pending+=("deployment/$d:$VALUE"); next_deploy+=("$d"); }
   done
+  todo_sts=("${next_sts[@]}") todo_deploy=("${next_deploy[@]}")
   (( ${#pending[@]} == 0 )) && break
   (( $(date +%s) < deadline )) || fail "not_fenced_within_${TIMEOUT_SECONDS}s:${pending[*]}"
   sleep 1

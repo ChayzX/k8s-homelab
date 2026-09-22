@@ -478,7 +478,9 @@ def run() -> None:
             _kubectl("-n", service_namespace, "rollout", "status", f"deployment/{deployment}", "--timeout=180s")
 
     def fence() -> None:
-        run_hook(args.local_writer_fence_command)
+        # Above pantry-writer-fence.sh's whole-run budget (45s default), so a
+        # slow-but-succeeding fence is never killed and misread as unfenced.
+        run_hook(args.local_writer_fence_command, timeout=int(os.environ.get('LOCAL_WRITER_FENCE_TIMEOUT_SECONDS', '75')))
         if generation:
             journal.record(generation["epoch"], generation["system_identifier"], "fenced")
 
@@ -514,7 +516,7 @@ def run() -> None:
         except ValueError as error:
             raise RuntimeError(str(error)) from error
         # oculum-ignore-next-line [dangerous_function]: explicit operator fence argv parsed without shell interpolation and timeout-bounded
-        subprocess.run(command, check=True, timeout=int(os.environ.get('OLD_WRITER_FENCE_TIMEOUT_SECONDS', '90')))
+        subprocess.run(command, check=True, timeout=int(os.environ.get('OLD_WRITER_FENCE_TIMEOUT_SECONDS', '150')))
 
     adapters = PromotionAdapters(
         acquire, is_primary, promote, switch_endpoint, enable_roles, fence,

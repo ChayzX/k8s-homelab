@@ -223,3 +223,17 @@ def test_fence_list_is_the_complement_of_what_promotion_starts() -> None:
     )
 
     assert set(promotion) - {"pantry-commands-site"} == set(fence)
+
+
+def test_dry_run_checks_reachability_and_rbac_without_writes() -> None:
+    """Catch a preflight that mutates, or that hides an RBAC gap until the real fence."""
+    ok, final = run_fence(HOME, state(statefulsets={"postgres-authority-home-v2": 1}), args=("--dry-run",))
+    assert ok.returncode == 0, ok.stderr
+    assert "fence_status=dry_run_ok" in ok.stdout
+    assert final["statefulsets"]["postgres-authority-home-v2"] == 1
+    assert not any(call[0] in ("patch", "delete") for call in final["calls"])
+
+    denied, _ = run_fence(HOME, state(statefulsets={"postgres-authority-home-v2": 1},
+                                      forbidden=["postgres-authority-home-v2"]), args=("--dry-run",))
+    assert denied.returncode == 1
+    assert "lookup_failed" in denied.stderr
