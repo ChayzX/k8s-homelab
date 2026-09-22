@@ -1,0 +1,74 @@
+# Reseed Oracle as a streaming standby of HOME (#191). PVC already exists.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: oracle-reseed-from-home
+  namespace: pantry-bot
+spec:
+  restartPolicy: Never
+  hostNetwork: true
+  dnsPolicy: ClusterFirstWithHostNet
+  nodeSelector:
+    kubernetes.io/hostname: pantry-bot-oracle
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  initContainers:
+  - name: prep-perms
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    command:
+    - sh
+    - -ec
+    - chown 70:70 /var/lib/postgresql/data && chmod 700 /var/lib/postgresql/data
+    volumeMounts:
+    - name: data
+      mountPath: /var/lib/postgresql/data
+  containers:
+  - name: reseed
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    securityContext:
+      runAsUser: 70
+      runAsGroup: 70
+      allowPrivilegeEscalation: false
+    env:
+    - name: REPL_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: canada-replication-source
+          key: password
+    - name: PRIMARY_HOST
+      value: 100.84.89.87
+    - name: PRIMARY_PORT
+      value: '5432'
+    - name: REPLICATION_USER
+      value: pantry_replicator
+    - name: PRIMARY_SLOT_NAME
+      value: pantry_oracle_standby
+    - name: APP_NAME
+      value: pantry-oracle-standby
+    command:
+    - sh
+    - -ec
+    args:
+    - "D=/var/lib/postgresql/data\npg_isready -h \"$PRIMARY_HOST\" -p \"$PRIMARY_PORT\"\
+      \ -U \"$REPLICATION_USER\"\nfind \"$D\" -mindepth 1 -delete\numask 077\nprintf\
+      \ '%s:%s:*:%s:%s\\n' \"$PRIMARY_HOST\" \"$PRIMARY_PORT\" \"$REPLICATION_USER\"\
+      \ \"$(printf %s \"$REPL_PASSWORD\" | tr -d '\\r\\n')\" > /tmp/pgpass\nPGPASSFILE=/tmp/pgpass\
+      \ pg_basebackup -h \"$PRIMARY_HOST\" -p \"$PRIMARY_PORT\" -U \"$REPLICATION_USER\"\
+      \ \\\n  -D \"$D\" -Fp -X stream --slot=\"$PRIMARY_SLOT_NAME\" --checkpoint=fast\
+      \ -P\ncp /tmp/pgpass \"$D/.pgpass\"; chmod 600 \"$D/.pgpass\"\ntouch \"$D/standby.signal\"\
+      \n# no -R: keep the password out of postgresql.auto.conf; passfile-based conninfo\
+      \ only\nsed -i '/^primary_conninfo[[:space:]]*=/d; /^primary_slot_name[[:space:]]*=/d'\
+      \ \"$D/postgresql.auto.conf\"\nprintf \"primary_conninfo = 'user=%s passfile=%s/.pgpass\
+      \ host=%s port=%s application_name=%s'\\n\" \\\n  \"$REPLICATION_USER\" \"$D\"\
+      \ \"$PRIMARY_HOST\" \"$PRIMARY_PORT\" \"$APP_NAME\" >> \"$D/postgresql.auto.conf\"\
+      \nprintf \"primary_slot_name = '%s'\\n\" \"$PRIMARY_SLOT_NAME\" >> \"$D/postgresql.auto.conf\"\
+      \ntest -f \"$D/standby.signal\" && test -f \"$D/PG_VERSION\" && echo RESEED_COMPLETE\n"
+    volumeMounts:
+    - name: data
+      mountPath: /var/lib/postgresql/data
+  volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: data-postgres-authority-standby-oracle-v2-0
+

@@ -71,3 +71,16 @@ def test_canada_fence_gate_executes_only_fixed_paths() -> None:
     assert "Invoke-Expression" not in text and "iex " not in text
     assert "& powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $fence -ConfirmFence" in text
     assert "canada_fence_gate=denied" in text
+
+
+def test_env_files_quote_every_value_containing_spaces() -> None:
+    """Catch an unquoted multi-word value: harmless to systemd, but sourcing the
+    file in a shell EXECUTES it (2026-09-22: this ran a fence on the live primary)."""
+    import glob
+    offenders = []
+    for path in glob.glob(str(ROOT / "**" / "*.env*"), recursive=True):
+        for n, line in enumerate(Path(path).read_text().splitlines(), 1):
+            m = re.match(r"^([A-Z_][A-Z0-9_]*)=(.*)$", line)
+            if m and " " in m.group(2) and not re.fullmatch(r'"[^"]*"|\'[^\']*\'', m.group(2)):
+                offenders.append(f"{path}:{n}")
+    assert not offenders, offenders

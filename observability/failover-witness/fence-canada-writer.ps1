@@ -43,6 +43,18 @@ function Stop-Connector {
   return 'stopped'
 }
 
+# Native commands never trip $ErrorActionPreference in Windows PowerShell 5,
+# so every docker/psql exit code is checked explicitly (#191: a failed
+# ALTER SYSTEM was silently ignored for as long as this script existed).
+function Invoke-Native([string]$What, [scriptblock]$Command) {
+  $out = & $Command
+  if ($LASTEXITCODE -ne 0) { throw "Canada fence step failed ($What): exit $LASTEXITCODE" }
+  return $out
+}
+function Invoke-Sql([string]$Sql) {
+  Invoke-Native "psql: $Sql" { docker exec $PostgresContainer psql -U pantry -d pantry -AtX -v ON_ERROR_STOP=1 -c $Sql }
+}
+
 # Fencing is idempotent: a previously stopped PostgreSQL writer is already
 # fenced, but application writers must still be verified stopped.
 $postgresStatus = (docker inspect --format '{{.State.Status}}' $PostgresContainer 2>$null).Trim()
@@ -54,16 +66,22 @@ if ($postgresStatus -ne 'running') {
   exit 0
 }
 
-# Native commands never trip $ErrorActionPreference in Windows PowerShell 5,
-# so every docker/psql exit code is checked explicitly (#191: a failed
-# ALTER SYSTEM was silently ignored for as long as this script existed).
-function Invoke-Native([string]$What, [scriptblock]$Command) {
-  $out = & $Command
-  if ($LASTEXITCODE -ne 0) { throw "Canada fence step failed ($What): exit $LASTEXITCODE" }
-  return $out
-}
-function Invoke-Sql([string]$Sql) {
-  Invoke-Native "psql: $Sql" { docker exec $PostgresContainer psql -U pantry -d pantry -AtX -v ON_ERROR_STOP=1 -c $Sql }
+# A positively-proven standby cannot write, and cannot promote without the
+# lease the fencing site holds: fence only the writers and the connector and
+# leave it streaming (#191), so a Canada standby survives other sites'
+# failovers. Anything but an explicit 't' falls through to the full fence.
+$recovery = ''
+try { $recovery = ([string](Invoke-Sql 'select pg_is_in_recovery()')).Trim() } catch { $recovery = '' }
+if ($recovery -eq 't') {
+  $existingApps = @(Invoke-Native 'docker ps -a' { docker ps -a --format '{{.Names}}' })
+  $standbyApps = @($mutating | Where-Object { $_ -in $existingApps })
+  foreach ($name in $standbyApps) { Invoke-Native "docker update $name" { docker update --restart=no $name } | Out-Null }
+  if ($standbyApps.Count -gt 0) { Invoke-Native 'docker stop apps' { docker stop $standbyApps } | Out-Null }
+  $still = @(docker ps --format '{{.Names}}' | Where-Object { $_ -in $mutating })
+  if ($still.Count -ne 0) { throw "Canada application fence verification failed: $($still -join ', ')" }
+  $connector = Stop-Connector
+  Write-Output "fence_status=passed site=canada database=standby applications=stopped connector=$connector postgres_container=$PostgresContainer"
+  exit 0
 }
 
 # Prevent Docker restart policies from bringing writers back after the fence.

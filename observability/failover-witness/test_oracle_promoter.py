@@ -578,3 +578,54 @@ def test_local_fence_takes_the_database_unless_recovery_is_proven() -> None:
         assert select_local_fence(answer, "writer", "standby") == "writer", answer
     assert select_local_fence("t", "writer", None) == "writer"
     assert select_local_fence("t", "writer", "") == "writer"
+
+
+def _gate_promoter(gate_open: bool, primary: bool, calls: list):
+    from oracle_promoter import OraclePromoter, PromotionAdapters
+    return OraclePromoter(PromotionAdapters(
+        acquire=lambda: calls.append("acquire") or None,
+        is_primary=lambda: primary,
+        promote=lambda _t: calls.append("promote"),
+        switch_endpoint=lambda: None, enable_roles=lambda: None,
+        fence=lambda: calls.append("fence"),
+        may_acquire=lambda: gate_open,
+    ))
+
+
+def test_closed_gate_never_asks_the_witness() -> None:
+    """Catch a lower-priority site racing a higher-priority one for the lease."""
+    calls = []
+    assert _gate_promoter(False, False, calls).run_once() is False
+    assert calls == []
+
+
+def test_primary_skips_the_gate_and_asks_the_witness() -> None:
+    """Catch a dead follower (gate closed) making a healthy primary fence itself."""
+    calls = []
+    try:
+        _gate_promoter(False, True, calls).run_once()
+    except Exception:
+        pass
+    assert calls[0] == "acquire"
+
+
+def test_open_gate_proceeds_to_acquire() -> None:
+    calls = []
+    _gate_promoter(True, False, calls).run_once()
+    assert calls == ["acquire"]
+
+
+def test_resume_after_lapsed_lease_only_at_exactly_the_next_epoch(tmp_path) -> None:
+    """Catch a promoter restart >TTL fencing the healthy sole primary (needless
+    failover), without letting a primary resume after ANOTHER site held authority."""
+    from oracle_promoter import ActivationJournal
+    j = ActivationJournal(tmp_path / "a.json", site="home")
+    j.record(87, "S", "active")
+    assert j.may_resume(87, "S")
+    assert j.may_resume(88, "S")            # nobody else was granted 88
+    assert not j.may_resume(89, "S")        # someone held 88 in between
+    assert not j.may_resume(88, "OTHER")
+    j.record(87, "S", "promoted")           # incomplete activation: exact epoch only
+    assert j.may_resume(87, "S") and not j.may_resume(88, "S")
+    ActivationJournal(tmp_path / "a.json", site="oracle")
+    assert not ActivationJournal(tmp_path / "a.json", site="oracle").may_resume(87, "S")

@@ -54,6 +54,8 @@ class PromotionAdapters:
     publish_routes: Callable[[], None] | None = None
     verify_service: Callable[[], None] | None = None
     validate_generation: Callable[[dict[str, Any]], bool] | None = None
+    # Priority + freshness gate (#191): consulted before every acquire.
+    may_acquire: Callable[[], bool] | None = None
     record_progress: Callable[[dict[str, Any], str], None] | None = None
 
 
@@ -75,11 +77,17 @@ class ActivationJournal:
 
     def may_resume(self, epoch: int, system_identifier: str) -> bool:
         prior = self.load()
-        return bool(prior and prior.get('site') == self.site
-                    and prior.get('resource') == 'pantry:postgres'
-                    and prior.get('epoch') == epoch
-                    and prior.get('system_identifier') == system_identifier
-                    and prior.get('phase') in {'promoting', 'promoted', 'active'})
+        if not (prior and prior.get('site') == self.site
+                and prior.get('resource') == 'pantry:postgres'
+                and prior.get('system_identifier') == system_identifier):
+            return False
+        if prior.get('epoch') == epoch:
+            return prior.get('phase') in {'promoting', 'promoted', 'active'}
+        # The witness bumps the epoch on every grant, so being handed exactly
+        # prior+1 after a completed activation proves no other site held
+        # authority in between: a controller that restarted after its lease
+        # lapsed may keep serving instead of fencing the only primary (#191).
+        return prior.get('phase') == 'active' and epoch == prior.get('epoch', -2) + 1
 
     def record(self, epoch: int, system_identifier: str, phase: str) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -182,6 +190,13 @@ class OraclePromoter:
             raise AuthorityLost("fenced controller requires restart and recovery checks")
         if self.adapters.ready and not self.adapters.ready():
             return False
+        if self.adapters.may_acquire:
+            # The gate orders competing STANDBYS (priority delay + freshness).
+            # A primary skips it and goes straight to the witness, where the
+            # resume/fence rules apply - a dead helper must never fence it.
+            local_primary = bool(self.adapters.is_primary and self.adapters.is_primary())
+            if not local_primary and not self.adapters.may_acquire():
+                return False
         try:
             token = self.adapters.acquire()
         except Exception:
@@ -373,6 +388,8 @@ def run() -> None:
     parser.add_argument("--replication-check-command", default=os.environ.get("REPLICATION_CHECK_COMMAND"))
     parser.add_argument("--publish-routes-command", default=os.environ.get("PUBLISH_ROUTES_COMMAND"))
     parser.add_argument("--service-check-command", default=os.environ.get("SERVICE_CHECK_COMMAND"))
+    parser.add_argument("--acquire-gate-command", default=os.environ.get("ACQUIRE_GATE_COMMAND"),
+                        help="exit 0 = this site may try to acquire (priority delay + freshness)")
     parser.add_argument("--state-path", type=Path, default=Path("/var/lib/pantry-postgres-promoter/activation.json"))
     parser.add_argument("--site", choices=['home', 'oracle', 'canada'], default=os.environ.get('PANTRY_PROMOTION_SITE_NAME', 'oracle'))
     args = parser.parse_args()
@@ -488,10 +505,21 @@ def run() -> None:
         return is_primary()
 
     def enable_roles() -> None:
+        # Start every role first (authority rechecked before each mutation),
+        # then wait for all rollouts: waits overlap instead of summing (a
+        # serial wait cost ~2 min of the 2026-09-22 Canada->Home RTO).
         for deployment in ORACLE_PROMOTION_DEPLOYMENTS:
             activation_kubectl("-n", service_namespace, "scale", f"deployment/{deployment}", "--replicas=1")
             activation_kubectl("-n", service_namespace, "rollout", "restart", f"deployment/{deployment}")
+        for deployment in ORACLE_PROMOTION_DEPLOYMENTS:
             _kubectl("-n", service_namespace, "rollout", "status", f"deployment/{deployment}", "--timeout=180s")
+
+    def may_acquire_hook() -> bool:
+        try:
+            run_hook(args.acquire_gate_command, timeout=20)
+            return True
+        except Exception:
+            return False
 
     def fence() -> None:
         recovery = None
@@ -546,6 +574,7 @@ def run() -> None:
         renew, ready, fence_old_writer, verify_promoted,
         check_replication=lambda: run_hook(args.replication_check_command),
         publish_routes=lambda: run_hook(args.publish_routes_command),
+        may_acquire=(lambda: may_acquire_hook()) if args.acquire_gate_command else None,
         verify_service=lambda: run_hook(args.service_check_command),
         validate_generation=validate_generation,
         record_progress=record_progress,

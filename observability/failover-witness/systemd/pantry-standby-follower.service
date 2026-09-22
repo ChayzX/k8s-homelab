@@ -1,0 +1,17 @@
+[Unit]
+Description=PantryBot standby follower (re-point standby to the unique primary; freshness heartbeat) (#191)
+After=network-online.target k3s.service
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/failover-witness/pantry-standby-follower.env
+ExecStart=/usr/local/lib/failover-witness/pantry-standby-follower-loop.sh
+Restart=always
+RestartSec=5
+User=root
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target
