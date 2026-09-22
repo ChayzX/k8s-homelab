@@ -48,6 +48,11 @@ Every site's `pg_hba` allows `pantry_replicator` from all three sites plus `172.
 | Home + Oracle loss → Canada last resort (automatic) | promoted at epoch 90 over the direct witness path; parallel fences; DNS moved to Canada | ~10m (exit-code bug looped the attempt; fixed ac257d5 — expected ~3.5m) |
 | Home + Oracle return | Home reseeded from Canada, Oracle restarted as standby (automatic) | 0 |
 | Canada → Home voluntary hand-back (automatic after 10 min) | Canada yielded; Home epoch 91; Canada rejoined as standby | 3m54s |
+| Home loss (2nd run) → **Canada** won instead of Oracle | priority bug: stale hand-back journal let Canada reclaim; fixed 97fd871 (safe: single fenced writer) | 1m54s |
+| Canada → Oracle voluntary hand-back (Home down) | Oracle epoch 93; Canada rejoined as standby | 2m57s |
+| **Oracle primary fails → Home** (R5) | Home epoch 94 on priority 0; Canada correctly stayed out | 1m50s |
+| Home + Oracle loss → Canada, clean timed run (R6), Home-aligned images | Canada epoch 95; all 4 roles visible in Grafana | 3m35s |
+| Canada → Home hand-back (Oracle auto re-pointed off a standby cascade) | Home epoch 96 | 2m58s |
 
 All directions rehearsed. Canada also self-heals Docker Desktop (it quit on its own after a background self-update on 2026-09-22; auto-updates are now disabled).
 
