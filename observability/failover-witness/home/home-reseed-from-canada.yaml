@@ -1,0 +1,63 @@
+# Apply on Home k3s AFTER: tunnel up (127.0.0.1:25442 on minecraftmachine), secret
+# canada-replication-source (key: password) exists, slot pantry_home_standby exists on Canada,
+# and StatefulSet postgres-authority-standby-home-canada is applied with replicas: 0.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data-postgres-authority-standby-home-canada-0   # name the StatefulSet will adopt
+  namespace: pantry-bot
+  labels: {app.kubernetes.io/name: pantry-postgres-authority-standby-home-canada}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources: {requests: {storage: 8Gi}}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: home-reseed-from-canada
+  namespace: pantry-bot
+spec:
+  restartPolicy: Never
+  hostNetwork: true
+  dnsPolicy: ClusterFirstWithHostNet
+  nodeSelector: {kubernetes.io/hostname: minecraftmachine}   # not nodeName: local-path is WaitForFirstConsumer
+  securityContext: {seccompProfile: {type: RuntimeDefault}}
+  initContainers:
+  - name: prep-perms
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    command: ["sh", "-ec", "chown 70:70 /var/lib/postgresql/data && chmod 700 /var/lib/postgresql/data"]
+    volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+  containers:
+  - name: reseed
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    securityContext: {runAsUser: 70, runAsGroup: 70, allowPrivilegeEscalation: false}
+    env:
+    - name: REPL_PASSWORD
+      valueFrom: {secretKeyRef: {name: canada-replication-source, key: password}}
+    - {name: PRIMARY_HOST, value: "127.0.0.1"}
+    - {name: PRIMARY_PORT, value: "25442"}
+    - {name: REPLICATION_USER, value: pantry_replicator}
+    - {name: PRIMARY_SLOT_NAME, value: pantry_home_standby}
+    - {name: APP_NAME, value: pantry-home-standby}
+    command: ["sh", "-ec"]
+    args:
+    - |
+      D=/var/lib/postgresql/data
+      pg_isready -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER"
+      find "$D" -mindepth 1 -delete
+      umask 077
+      printf '%s:%s:*:%s:%s\n' "$PRIMARY_HOST" "$PRIMARY_PORT" "$REPLICATION_USER" "$(printf %s "$REPL_PASSWORD" | tr -d '\r\n')" > /tmp/pgpass
+      PGPASSFILE=/tmp/pgpass pg_basebackup -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -U "$REPLICATION_USER" \
+        -D "$D" -Fp -X stream --slot="$PRIMARY_SLOT_NAME" --checkpoint=fast -P
+      cp /tmp/pgpass "$D/.pgpass"; chmod 600 "$D/.pgpass"
+      touch "$D/standby.signal"
+      # no -R: keep the password out of postgresql.auto.conf; passfile-based conninfo only
+      sed -i '/^primary_conninfo[[:space:]]*=/d; /^primary_slot_name[[:space:]]*=/d' "$D/postgresql.auto.conf"
+      printf "primary_conninfo = 'user=%s passfile=%s/.pgpass host=%s port=%s application_name=%s'\n" \
+        "$REPLICATION_USER" "$D" "$PRIMARY_HOST" "$PRIMARY_PORT" "$APP_NAME" >> "$D/postgresql.auto.conf"
+      printf "primary_slot_name = '%s'\n" "$PRIMARY_SLOT_NAME" >> "$D/postgresql.auto.conf"
+      test -f "$D/standby.signal" && test -f "$D/PG_VERSION" && echo RESEED_COMPLETE
+    volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+  volumes:
+  - {name: data, persistentVolumeClaim: {claimName: data-postgres-authority-standby-home-canada-0}}
