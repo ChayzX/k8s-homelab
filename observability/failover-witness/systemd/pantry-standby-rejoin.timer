@@ -1,0 +1,9 @@
+[Unit]
+Description=Run PantryBot standby rejoin every minute (#191)
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=60s
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=PantryBot standby rejoin (restart fenced standby / reseed fenced old primary) (#191)
+After=network-online.target k3s.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/failover-witness/pantry-standby-rejoin.env
+ExecStart=/usr/local/lib/failover-witness/standby-rejoin.sh
+TimeoutStartSec=900
+User=root
+PrivateTmp=true
+ProtectHome=read-only
