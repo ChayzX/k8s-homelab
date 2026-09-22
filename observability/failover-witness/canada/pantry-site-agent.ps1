@@ -18,7 +18,7 @@ $Pg = 'pantrybot-canada-postgres'
 $Volume = 'pantrybot-canada-postgres-data'
 $Image = 'postgres:rehearsal'
 $Sysid = '7687975437720940591'
-$WitnessUrls = @('http://100.84.89.87:31421', 'http://100.78.181.15:31421')
+$WitnessUrls = @('http://127.0.0.1:18765', 'http://100.84.89.87:31421', 'http://100.78.181.15:31421')   # direct GCP tunnel first (when installed), then Home and Oracle relays
 $Peers = [ordered]@{ home = '100.84.89.87:5432'; oracle = '100.78.181.15:5432' }   # priority order
 $PriorityDelay = 120; $MaxStaleness = 600; $MaxSampleAge = 30
 $HandbackStable = 600; $HandbackMaxLagBytes = 1048576; $ReclaimAfter = 180

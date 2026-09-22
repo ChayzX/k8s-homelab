@@ -90,6 +90,13 @@ def test_follows_the_unique_same_sysid_primary_after_the_delay() -> None:
     assert not any("password" in s for s in a)
 
 
+def test_repoint_time_is_persisted_for_the_throttle() -> None:
+    """Catch the 60s re-point throttle being lost across one-shot iterations."""
+    peers = {"127.0.0.1:25442": {"recovery": "f", "sysid": SYSID}}
+    _, _, st = run_follower(STANDBY_DOWN, peers, OLD)
+    assert st["repointed_at"].isdigit()
+
+
 def test_does_not_repoint_before_the_delay() -> None:
     peers = {"127.0.0.1:25442": {"recovery": "f", "sysid": SYSID}}
     _, calls, st = run_follower(STANDBY_DOWN, peers)  # first disconnected sample

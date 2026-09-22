@@ -115,6 +115,8 @@ while :; do
     target=$(find_primary "$sysid")
     if [ -n "$target" ]; then
       repoint "${target%:*}" "${target##*:}"
+      # persist repointed_at now: ONESHOT runs exit before the next sample
+      write_state standby 0 "$upstream" "$sysid" "$tli" "$recv" "$replay"
     fi
   fi
   pause
