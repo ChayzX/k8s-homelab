@@ -286,6 +286,30 @@ class OraclePromoter:
         return False
 
 
+class PrimaryWatchdog:
+    """Release authority when the local primary is gone (#191).
+
+    A promoter that keeps renewing while its database is dead holds the lease
+    forever and blocks every failover. After `grace` seconds of the local DB
+    not being a writable primary (brief restarts tolerated), the caller fences
+    and stops renewing so the next site in priority order can take over.
+    """
+
+    def __init__(self, grace: float, clock: Callable[[], float] = time.monotonic) -> None:
+        self.grace = grace
+        self.clock = clock
+        self.unhealthy_since: float | None = None
+
+    def should_release(self, healthy: bool) -> bool:
+        if healthy:
+            self.unhealthy_since = None
+            return False
+        now = self.clock()
+        if self.unhealthy_since is None:
+            self.unhealthy_since = now
+        return now - self.unhealthy_since >= self.grace
+
+
 def attempt_hand_back(promoter: "OraclePromoter", check: Callable[[], bool], execute: Callable[[], int],
                       on_yielded: Callable[[], None]) -> bool:
     """Voluntary hand-back to a healthy caught-up higher-priority standby (#191).
@@ -620,7 +644,11 @@ def run() -> None:
             return 1
 
     last_handback_check = 0.0
+    watchdog = PrimaryWatchdog(float(os.environ.get("PRIMARY_UNHEALTHY_RELEASE_SECONDS", "60")))
     while promoter.renew_or_fence():
+        if watchdog.should_release(is_primary()):
+            promoter._fence()
+            raise SystemExit(f"{args.site} local primary unhealthy for {watchdog.grace:.0f}s; authority released")
         if args.handback_command and time.monotonic() - last_handback_check >= 30:
             last_handback_check = time.monotonic()
             if attempt_hand_back(

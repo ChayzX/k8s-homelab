@@ -686,3 +686,17 @@ def test_lease_is_renewed_during_a_slow_drain_and_loss_fences() -> None:
     except AuthorityLost:
         raised = True
     assert raised and "fence" in calls2
+
+
+def test_watchdog_releases_only_after_sustained_primary_loss() -> None:
+    """Catch a promoter renewing forever over a dead primary (no failover), and
+    a brief pod restart causing a needless failover."""
+    from oracle_promoter import PrimaryWatchdog
+    now = {"t": 0.0}
+    w = PrimaryWatchdog(60, clock=lambda: now["t"])
+    assert not w.should_release(False)
+    now["t"] = 30; assert not w.should_release(False)
+    now["t"] = 40; assert not w.should_release(True)      # recovered: clock resets
+    now["t"] = 50; assert not w.should_release(False)
+    now["t"] = 109; assert not w.should_release(False)
+    now["t"] = 110; assert w.should_release(False)
