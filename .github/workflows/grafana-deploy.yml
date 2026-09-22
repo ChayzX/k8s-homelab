@@ -82,11 +82,20 @@ jobs:
             -f dashboards/dashboards-configmap.yaml -n observability
           kubectl apply --server-side --force-conflicts \
             -f dashboards/services-configmap.yaml -n observability
-          # Provisioning (datasources + dashboard providers) and the
-          # Deployment itself, so this repo is the source of truth for the
-          # retained Grafana rather than drifting behind it.
+          # Provisioning (datasources + dashboard providers), so this repo
+          # is the source of truth rather than drifting behind the cluster.
           kubectl apply -f observability/grafana-provisioning.yaml -n observability
-          kubectl apply -f observability/grafana.yaml -n observability
+          # Only the Deployment document out of grafana.yaml. The ci-deploy
+          # ServiceAccount is deliberately scoped to ConfigMaps and
+          # Deployments; it cannot get/patch the ServiceAccount, PVC or
+          # Service that file also defines, and applying the whole file
+          # fails on those even though they are unchanged. Extracting the
+          # one document keeps CI least-privilege instead of widening its
+          # RBAC for an image bump. SA/PVC/Service changes are rare and are
+          # applied by hand from the host.
+          python3 scripts/extract-k8s-doc.py observability/grafana.yaml Deployment grafana \
+            > "$RUNNER_TEMP/grafana-deployment.yaml"
+          kubectl apply -f "$RUNNER_TEMP/grafana-deployment.yaml" -n observability
           echo '### Grafana manifests: ✅ applied' >> "$GITHUB_STEP_SUMMARY"
           echo '- `dashboards/dashboards-configmap.yaml`' >> "$GITHUB_STEP_SUMMARY"
           echo '- `dashboards/services-configmap.yaml`' >> "$GITHUB_STEP_SUMMARY"
