@@ -160,6 +160,12 @@ jobs:
     needs: restart-grafana
     runs-on: ubuntu-latest
     steps:
+      # This job runs scripts/assert-kube-target.sh, so it needs the repo.
+      # Without this step it failed with "No such file or directory" -- the
+      # other two jobs check out and this one did not.
+      - name: Checkout
+        uses: actions/checkout@v5
+
       - name: Install cloudflared
         env:
           CLOUDFLARED_VERSION: "2026.7.3"
