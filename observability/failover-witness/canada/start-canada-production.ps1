@@ -2,8 +2,20 @@ $ErrorActionPreference='Continue'
 $net='pantrybot-canada-production'
 docker network create $net 2>$null | Out-Null
 docker network connect $net pantrybot-canada-postgres 2>$null
-# Image tags track Home's Deployments (#379: CI deploys Home only; keep sites aligned)
+# Image tags: CI (pantry-bot deploy workflow) writes canada-images.json on every
+# component deploy so Canada never drifts from Home (#379). The map below is the
+# fallback if that file is missing or unreadable.
+$imagesFile = 'C:\ProgramData\PantryBotCanadaPrep\canada-images.json'
 $img=@{ api='ghcr.io/chayzx/pantry-bot-api:514998193de5a4dcd2daa1a96b8c5bc30d8b83f2'; gateway='ghcr.io/chayzx/pantry-bot-gateway:9130e5dfd53f1d3fe19316272847df4256c82787'; worker='ghcr.io/chayzx/pantry-bot-worker:5761ed428fa58ed0d7d685fc456d2245d040754f'; dispatcher='ghcr.io/chayzx/pantry-bot-dispatcher:9130e5dfd53f1d3fe19316272847df4256c82787'; overlay='ghcr.io/chayzx/pantry-bot-overlay:9ac195e05dc21f4a18ccb1ef6a4f85db580dffc9'; private='ghcr.io/chayzx/pantry-bot-private-site:514998193de5a4dcd2daa1a96b8c5bc30d8b83f2'; public='ghcr.io/chayzx/pantry-bot-public-site:735df1ecfe73f57771617977436dc0804c7784f6' }
+if (Test-Path -LiteralPath $imagesFile) {
+  try {
+    $fromFile = Get-Content -Raw -LiteralPath $imagesFile | ConvertFrom-Json
+    foreach ($role in @($img.Keys)) {
+      $v = $fromFile.$role
+      if ($v -and $v -is [string] -and $v.StartsWith('ghcr.io/chayzx/pantry-bot')) { $img[$role] = $v }
+    }
+  } catch { Write-Output "canada-images.json unreadable; using built-in tags: $($_.Exception.Message)" }
+}
 foreach($n in @('api','gateway','worker','dispatcher','overlay','private','public')) { docker rm -f "pantrybot-canada-prod-$n" 2>$null | Out-Null }
 $common=@('--network',$net,'--env-file','C:\ProgramData\PantryBotCanadaPrep\canada-production.env','--label','pantrybot.production-authority=false','--restart','unless-stopped')
 docker run -d --name pantrybot-canada-prod-api @common -e DB_PATH=/tmp/pantry.db -e HTTP_PORT=3000 -e WS_PORT=8080 -e PANTRY_RUNTIME_ROLE=api -e PANTRY_INSTANCE_ID=canada-api -p 127.0.0.1:13100:3000 $img.api
