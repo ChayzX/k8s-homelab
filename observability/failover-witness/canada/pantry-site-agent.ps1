@@ -253,7 +253,11 @@ function Rejoin {
   $hasSignal = ($LASTEXITCODE -eq 0)
   $primary = Peer-Primary
   if ($hasSignal) {
-    if ($primary) { docker update --restart unless-stopped $Pg | Out-Null; docker start $Pg | Out-Null; Log "rejoin=started_standby primary=$primary"; return }
+    if ($primary) {
+      docker update --restart unless-stopped $Pg | Out-Null; docker start $Pg | Out-Null
+      $jj = Journal-Load; if ($jj -and $jj.phase -in @('yielded', 'reclaiming')) { Journal-Record ([int]$jj.epoch) 'standby' }
+      Log "rejoin=started_standby primary=$primary"; return
+    }
     $j = Journal-Load
     if ($j -and $j.phase -eq 'yielded' -and $j.yielded_at -and ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - [long]$j.yielded_at) -ge $ReclaimAfter) {
       docker update --restart unless-stopped $Pg | Out-Null; docker start $Pg | Out-Null; Start-Sleep 8
@@ -297,6 +301,14 @@ function Tick {
   # standby
   Stop-Guard
   $j = Journal-Load
+  # A hand-back is over once we stream from a real primary again: clear the
+  # reclaim eligibility, otherwise a later, unrelated outage would bypass the
+  # priority gate (seen 2026-09-22 16:15Z: Canada beat Oracle via a stale
+  # 'yielded' journal).
+  if ($j -and $j.phase -in @('yielded', 'reclaiming')) {
+    $fs = Follower-State
+    if ($fs -and $fs.streaming -eq '1') { Journal-Record ([int]$j.epoch) 'standby'; $j = Journal-Load; Log 'handback=complete streaming_from_new_primary' }
+  }
   $reclaim = $false
   if ($j -and $j.phase -eq 'reclaiming') { $reclaim = $true }
   elseif ($j -and $j.phase -eq 'yielded' -and $j.yielded_at) {
