@@ -38,6 +38,7 @@ state_get() { [ -f "$STATE" ] && sed -n "s/^$1=//p" "$STATE" | head -1 || true; 
 disconnected_since=$(state_get disconnected_since)
 last_streaming=$(state_get last_streaming)
 repointed_at=$(state_get repointed_at)
+topology_checked_at=$(state_get topology_checked_at)
 pause() { [ "${ONESHOT:-0}" = 1 ] && exit 0; sleep "$INTERVAL"; }
 
 write_state() { # role streaming upstream sysid timeline receive replay
@@ -56,6 +57,7 @@ write_state() { # role streaming upstream sysid timeline receive replay
     echo "last_streaming=$last_streaming"
     echo "disconnected_since=$disconnected_since"
     echo "repointed_at=$repointed_at"
+    echo "topology_checked_at=$topology_checked_at"
   } > "$tmp" && mv "$tmp" "$STATE"
 }
 
@@ -106,6 +108,19 @@ while :; do
   now=$(date +%s)
   if [ "$status" = streaming ]; then
     last_streaming=$now; disconnected_since=""
+    # Every 60s: streaming from a standby (cascade) while a unique primary
+    # exists elsewhere -> follow the primary directly (e.g. after a hand-back).
+    if [ -z "$topology_checked_at" ] || [ $((now - topology_checked_at)) -ge "${TOPOLOGY_CHECK_EVERY:-60}" ]; then
+      topology_checked_at=$now
+      target=$(find_primary "$sysid")
+      if [ -n "$target" ] && [ "$target" != "$upstream" ]; then
+        up_rec=$(peer_q "${upstream%:*}" "${upstream##*:}" "select pg_is_in_recovery()" || true)
+        if [ "${up_rec%%|*}" = t ]; then
+          log "cascade upstream=$upstream is a standby; primary=$target"
+          repoint "${target%:*}" "${target##*:}"
+        fi
+      fi
+    fi
     write_state standby 1 "$upstream" "$sysid" "$tli" "$recv" "$replay"
     pause; continue
   fi

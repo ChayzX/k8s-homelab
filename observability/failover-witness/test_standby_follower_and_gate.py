@@ -73,6 +73,20 @@ def test_streaming_standby_records_heartbeat_and_changes_nothing() -> None:
     assert alters(calls) == []
 
 
+def test_cascading_from_a_standby_repoints_to_the_primary() -> None:
+    """Catch a site left streaming through another standby after a hand-back."""
+    peers = {"127.0.0.1:25442": {"recovery": "t", "sysid": SYSID},      # upstream: a standby
+             "100.84.89.87:5432": {"recovery": "f", "sysid": SYSID}}    # the real primary
+    _, calls, _ = run_follower({"recovery": "t", "sysid": SYSID, "wal": "streaming|127.0.0.1:25442"}, peers)
+    assert any("host=100.84.89.87 port=5432" in s for s in alters(calls))
+
+
+def test_streaming_from_the_primary_is_left_alone() -> None:
+    peers = {"100.84.89.87:5432": {"recovery": "f", "sysid": SYSID}}
+    _, calls, _ = run_follower({"recovery": "t", "sysid": SYSID, "wal": "streaming|100.84.89.87:5432"}, peers)
+    assert alters(calls) == []
+
+
 def test_primary_is_never_touched() -> None:
     _, calls, st = run_follower({"recovery": "f", "sysid": SYSID, "wal": "none|"}, {})
     assert st["role"] == "primary"

@@ -59,8 +59,8 @@ Every site's `pg_hba` allows `pantry_replicator` from all three sites plus `172.
 
 ## Owner actions outstanding
 
-1. **Canada direct witness path.** Authorize `C:\ProgramData\PantryBotCanadaPrep\witness-ssh\id_ed25519.pub` (comment `pantry-canada-witness-20260922`) for OS Login on the witness VM, either for the same service account Oracle uses or a dedicated one. Then run `install-nssm-witness-tunnel.ps1 [-OsLoginUser <user>]`.
-2. **Canada Cloudflare token.** Create a token with Account › Cloudflare Tunnel › Edit and Zone greeniespantry.uk › DNS › Edit. Install it at `C:\ProgramData\PantryBotCanadaPrep\fence\cloudflare-token` (the directory is ACL'd to SYSTEM and Administrators).
+1. ~~Canada direct witness path~~ done 2026-09-22: local user `pantry-witness-canada` on the witness VM (`gcp/witness-canada-user.sh`), NSSM `PantryBot Canada witness tunnel`.
+2. ~~Canada Cloudflare token~~ done: installed from Home's token (owner's call) at `C:\ProgramData\PantryBotCanadaPrep\fence\cloudflare-token`.
 3. **Cleanup that deletes data** (left for the owner):
    - `canada-production.env.bak-rotate` on Canada (holds old secrets);
    - the `canada-reseed*` temp files;

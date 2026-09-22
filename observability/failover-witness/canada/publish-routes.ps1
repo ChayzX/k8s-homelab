@@ -39,9 +39,11 @@ function Routes($site, [string]$kind) {
   if ($null -eq $routes) {
     $hk = if ($kind -eq 'application') { 'application_hostnames' } else { 'commands_hostnames' }
     $ok = if ($kind -eq 'application') { 'application_origin' } else { 'commands_origin' }
-    $routes = @($site.$hk | ForEach-Object { [pscustomobject]@{ hostname = $_; service = $site.$ok } })
+    # $null piped to ForEach-Object still runs once in PS5; no hostnames = no routes.
+    $routes = @(@($site.$hk) | Where-Object { $_ } | ForEach-Object { [pscustomobject]@{ hostname = $_; service = $site.$ok } })
   }
-  foreach ($r in @($routes)) { if (-not $r.hostname -or -not $r.service) { throw "missing $kind route data" } }
+  $routes = @(@($routes) | Where-Object { $null -ne $_ })
+  foreach ($r in $routes) { if (-not $r.hostname -or -not $r.service) { throw "missing $kind route data" } }
   return @($routes | ForEach-Object { [ordered]@{ hostname = [string]$_.hostname; service = [string]$_.service } })
 }
 function Config([object[]]$Ingress) {
