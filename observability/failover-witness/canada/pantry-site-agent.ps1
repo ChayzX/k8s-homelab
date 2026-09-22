@@ -145,11 +145,14 @@ function Promote-Canada($lease) {
       $procs[$site] = Start-Process -FilePath 'powershell.exe' -PassThru -NoNewWindow `
         -ArgumentList @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', "$Dir\pantry-writer-fence.ps1", '-Site', $site, '-Confirm') `
         -RedirectStandardOutput "$StateDir\fence-$site.out" -RedirectStandardError "$StateDir\fence-$site.err"
+      $null = $procs[$site].Handle   # PS5: ExitCode stays empty unless the handle is read before exit
     }
     foreach ($site in @('home', 'oracle')) {
       $p = $procs[$site]
       if (-not $p.WaitForExit(120000)) { try { $p.Kill() } catch {}; throw "old_writer_fence_timeout:$site" }
+      $p.WaitForExit()
       $rc = $p.ExitCode
+      if ($null -eq $rc -or "$rc" -eq '') { throw "old_writer_fence_rc_unknown:$site" }
       Get-Content "$StateDir\fence-$site.out", "$StateDir\fence-$site.err" -ErrorAction SilentlyContinue | ForEach-Object { Log $_ }
       if ($rc -eq 75) { $unreachable = $true; Log "old_writer=$site lease_expiry" } elseif ($rc -ne 0) { throw "old_writer_fence_failed:$site rc=$rc" }
     }
