@@ -39,7 +39,7 @@ function Sql([string]$q) {
   $o = Native "psql" { docker exec $Pg psql -U pantry -d pantry -AtX -v ON_ERROR_STOP=1 -c $q }
   return ((@($o) | ForEach-Object { "$_" }) -join "`n").Trim()   # rows stay newline-separated
 }
-function PgRunning { (docker inspect --format '{{.State.Running}}' $Pg 2>$null) -eq 'true' }
+function PgRunning { $ErrorActionPreference = 'Continue'; (docker inspect --format '{{.State.Running}}' $Pg 2>$null) -eq 'true' }
 
 # ---------- witness ----------
 $Secret = EnvValue 'PANTRY_WITNESS_SECRET'
@@ -114,6 +114,7 @@ function Stop-AppsAndConnector {
 
 # ---------- follower state + gate (same rules as promotion-gate.sh) ----------
 function Follower-State {
+  $ErrorActionPreference = 'Continue'   # PS5: native stderr must not become a terminating error
   $t = docker exec $Pg cat /var/lib/postgresql/data/pantry-follower.state 2>$null
   if ($LASTEXITCODE -ne 0) { return $null }
   $h = @{}; foreach ($l in $t) { $i = $l.IndexOf('='); if ($i -gt 0) { $h[$l.Substring(0, $i)] = $l.Substring($i + 1) } }; return $h
@@ -222,7 +223,7 @@ function Hand-Back([string]$target) {
   Journal-Record $Sync.Epoch 'yielding' @{ final_lsn = $final; target = $target }
   $hp = $Peers[$target]; $h = $hp.Split(':')[0]; $p = $hp.Split(':')[1]
   # Slots are not replicated: make sure ours exists on the target (exists = fine).
-  docker exec $Pg psql -X -d "host=$h port=$p user=pantry_replicator replication=true passfile=/var/lib/postgresql/data/.pgpass connect_timeout=5" -c 'CREATE_REPLICATION_SLOT pantry_canada_standby PHYSICAL RESERVE_WAL' 2>$null | Out-Null
+  try { docker exec $Pg psql -X -d "host=$h port=$p user=pantry_replicator replication=true passfile=/var/lib/postgresql/data/.pgpass connect_timeout=5" -c 'CREATE_REPLICATION_SLOT pantry_canada_standby PHYSICAL RESERVE_WAL' 2>$null | Out-Null } catch {}
   [void](Sql "ALTER SYSTEM SET primary_conninfo = 'user=pantry_replicator passfile=/var/lib/postgresql/data/.pgpass host=$h port=$p application_name=pantry-canada-standby'")
   [void](Sql "ALTER SYSTEM SET primary_slot_name = 'pantry_canada_standby'")
   [void](Sql 'ALTER SYSTEM RESET default_transaction_read_only')
@@ -237,6 +238,7 @@ function Hand-Back([string]$target) {
 
 # ---------- rejoin (DB container stopped) ----------
 function Peer-Primary {
+  $ErrorActionPreference = 'Continue'   # unreachable peers are expected here
   $found = @()
   foreach ($site in $Peers.Keys) {
     $hp = $Peers[$site]; $h = $hp.Split(':')[0]; $p = $hp.Split(':')[1]
@@ -246,6 +248,7 @@ function Peer-Primary {
   if ($found.Count -eq 1) { return $found[0] }; return $null
 }
 function Rejoin {
+  $ErrorActionPreference = 'Continue'   # probes of stopped DBs/peers are expected to fail; throws still propagate
   docker run --rm -v "${Volume}:/d:ro" --entrypoint test $Image -f /d/standby.signal 2>$null
   $hasSignal = ($LASTEXITCODE -eq 0)
   $primary = Peer-Primary
