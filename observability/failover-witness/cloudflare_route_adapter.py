@@ -113,6 +113,21 @@ def apply_routes(data, active, client, apply=False):
     return changes
 
 
+DEFAULT_TOKEN_FILE = "/etc/failover-witness/cloudflare-token"
+
+
+def resolve_token(env=None):
+    token = (os.environ if env is None else env).get("CLOUDFLARE_API_TOKEN")
+    if token:
+        return token
+    path = (os.environ if env is None else env).get("CLOUDFLARE_API_TOKEN_FILE", DEFAULT_TOKEN_FILE)
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError as exc:
+        raise RouteError(f"cloudflare token unavailable: {exc}") from None
+
+
 def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument("--inputs", required=True); p.add_argument("--active", required=True)
@@ -120,7 +135,7 @@ def main(argv=None):
     a = p.parse_args(argv)
     try:
         data = load_inputs(a.inputs)
-        token = os.environ.get("CLOUDFLARE_API_TOKEN")
+        token = resolve_token()
         if not token: raise RouteError("CLOUDFLARE_API_TOKEN is required")
         changes = apply_routes(data, a.active, CloudflareClient(data["account_id"], token), a.apply)
         print(json.dumps({"mode": "apply" if a.apply else "dry-run", "active": a.active,

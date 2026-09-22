@@ -15,6 +15,12 @@ if [[ "$PANTRY_PROMOTION_SITE" == "canada" && -z "${CANADA_LAST_RESORT_CONFIRM:-
   exit 2
 fi
 
-exec /usr/bin/python3 /usr/local/lib/failover-witness/cloudflare_route_adapter.py \
+/usr/bin/python3 /usr/local/lib/failover-witness/cloudflare_route_adapter.py \
+  --inputs /etc/failover-witness/cloudflare-route-inputs.json \
+  --active "$PANTRY_PROMOTION_SITE" --apply
+# The adapter only rewrites tunnel ingress; each proxied CNAME still names
+# one tunnel, so DNS must move too or traffic stays on the old site's tunnel
+# (overlay outage, 2026-09-21).
+/usr/bin/python3 /usr/local/lib/failover-witness/switch-app-dns.py \
   --inputs /etc/failover-witness/cloudflare-route-inputs.json \
   --active "$PANTRY_PROMOTION_SITE" --apply
