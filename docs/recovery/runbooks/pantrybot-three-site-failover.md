@@ -56,6 +56,24 @@ Every site's `pg_hba` allows `pantry_replicator` from all three sites plus `172.
 
 All directions rehearsed. Canada also self-heals Docker Desktop (it quit on its own after a background self-update on 2026-09-22; auto-updates are now disabled).
 
+## App versions (no drift, #379)
+
+CI deploys a component to its target, then propagates the **same immutable tag**
+to the other two sites (`propagate-oracle` / `propagate-home` / `propagate-canada`
+in pantry-bot's `deploy.yml`). Standby sites are never started by a deploy:
+Oracle keeps its replica count (`kubectl set image`, never `apply`), and Canada
+only restarts a role that is already running.
+
+- Canada's tags live in `C:\ProgramData\PantryBotCanadaPrep\canada-images.json`,
+  written by CI and read by `start-canada-production.ps1` (the in-script map is
+  the fallback).
+- `Sync site images` (weekly, report-only; `apply=true` to fix) reconciles Oracle
+  and Canada to whatever Home runs, for anything changed out of band.
+- Canada runner prerequisites: its service account (`NETWORK SERVICE`) is in
+  `docker-users` (restart the runner service after adding it) and has Modify on
+  `canada-images.json`. Service accounts cannot use the Windows credential
+  helper, so the job logs in with `docker/login-action`.
+
 ## Operator notes
 
 - **Current authority:** `/var/lib/pantry-postgres-promoter/activation.json` on Home or Oracle, `C:\ProgramData\PantryBotCanadaPrep\agent\activation.json` on Canada. The phase is `active` on the holder.
