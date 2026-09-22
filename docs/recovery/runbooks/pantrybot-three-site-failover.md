@@ -25,7 +25,7 @@ Tracking: k8s-homelab#191, pantry-bot#147. Code: `observability/failover-witness
 | Rejoin | `pantry-standby-rejoin.timer` | same | inside the agent |
 | Hand-back | never (top priority) | `HANDBACK_COMMAND=handback.sh` → Home | agent → Home, else Oracle |
 | Routes | `publish-cloudflare-routes.sh` | same | `publish-routes.ps1` |
-| Witness path | local tunnel `:18765` | local tunnel `:18765` | direct tunnel (pending GCP grant), then the Home and Oracle relay NodePort `:31421` |
+| Witness path | local tunnel `:18765` | local tunnel `:18765` | direct tunnel (`pantry-witness-canada` on the witness VM, forward-only), then the Home and Oracle relay NodePort `:31421` |
 
 **Replication.** Every standby connects straight to the primary:
 - Home: `100.84.89.87:5432` (tailscale)
@@ -45,8 +45,11 @@ Every site's `pg_hba` allows `pantry_replicator` from all three sites plus `172.
 | Home returns | backed up, reseeded from Oracle, streaming (automatic) | 0 |
 | Oracle → Home voluntary hand-back (automatic after 10 min) | Oracle yielded; Home epoch 89; Oracle rejoined once Home was primary | 2m07s |
 | Canada fence/restore | sandbox-verified end to end | 0 |
+| Home + Oracle loss → Canada last resort (automatic) | promoted at epoch 90 over the direct witness path; parallel fences; DNS moved to Canada | ~10m (exit-code bug looped the attempt; fixed ac257d5 — expected ~3.5m) |
+| Home + Oracle return | Home reseeded from Canada, Oracle restarted as standby (automatic) | 0 |
+| Canada → Home voluntary hand-back (automatic after 10 min) | Canada yielded; Home epoch 91; Canada rejoined as standby | 3m54s |
 
-**Not yet rehearsed:** Canada last resort (Home and Oracle both down) and Canada → Home hand-back. These need Canada's direct witness path (GCP OS Login grant) and a Canada-scoped Cloudflare token. See *Owner actions*.
+All directions rehearsed. Canada also self-heals Docker Desktop (it quit on its own after a background self-update on 2026-09-22; auto-updates are now disabled).
 
 ## Operator notes
 
