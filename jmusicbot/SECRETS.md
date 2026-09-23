@@ -112,6 +112,36 @@ Secrets are namespaced — the `ghcr-pull-secret` created in `pantry-bot` does
 
 ---
 
+## 3b. `gitlab-registry-pull` — image pull secret for the GitLab CI pilot
+
+The GitLab CI pilot (`chayzx/jmusicbot-deploy`, [ChayzX/jmusicbot-deploy#3](https://github.com/ChayzX/jmusicbot-deploy/issues/3))
+builds and hosts `jmusicbot` images on GitLab's private container registry
+(`registry.gitlab.com`). Since the GitLab group is private, k3s needs a pull
+credential to fetch from it. This is separate from and in addition to
+section 3 above (the GHCR fallback), and is attached to `jmusicbot-sa` via
+`imagePullSecrets` in `10-serviceaccounts.yaml`.
+
+```bash
+kubectl -n jmusicbot create secret docker-registry gitlab-registry-pull \
+  --docker-server=registry.gitlab.com \
+  --docker-username=k3s-jmusicbot-pull \
+  --docker-password='<DEPLOY_TOKEN>' \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+`<DEPLOY_TOKEN>` is a GitLab Deploy Token scoped to `read_registry` only on
+`chayzx/jmusicbot-deploy` — it cannot push, cannot read other projects, and
+cannot authenticate to the GitLab API generally. It is revoked at GitLab
+**chayzx/jmusicbot-deploy → Settings → Repository → Deploy tokens →
+`k3s-jmusicbot-pull`**.
+
+If the `chayzx` GitLab group ever becomes public, this Secret and the
+`imagePullSecrets` reference on `jmusicbot-sa` should be deleted — a pull
+credential is no longer needed once anonymous pulls work, and an unused
+credential left in place is just standing risk.
+
+---
+
 ## Checklist before applying the Deployments
 
 ```bash
