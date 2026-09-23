@@ -537,9 +537,32 @@ def run() -> None:
             return False
 
     def switch_endpoint() -> None:
+        # The StatefulSet template labels its pods role=standby and reapplies
+        # that on every pod recreation. promote() sets role=primary as its
+        # last step, but the resume path skips promote() entirely, so a
+        # fenced-and-recreated primary comes back labelled standby: the
+        # Service keeps its role=primary selector, matches nothing, and every
+        # application dies on DNS for the headless Service while the promoter
+        # reports the site ready (#388, the 2026-09-23 outage). Reassert the
+        # label here, which runs on both the promote and the resume path.
+        activation_kubectl("-n", pod_namespace, "label", "pod", args.pod, "pantrybot.postgres/role=primary", "--overwrite")
         if not args.manual_endpoint:
             selector = json.dumps({"app.kubernetes.io/name": f"pantry-{args.statefulset}", "pantrybot.postgres/role": "primary"}, separators=(",", ":"))
             activation_kubectl("-n", service_namespace, "patch", "service", args.service, "--type=merge", "-p", json.dumps({"spec": {"selector": json.loads(selector)}}))
+            # A selector that matches nothing is indistinguishable from a
+            # healthy Service until the applications fail to resolve it, so
+            # prove the endpoint exists before any role is enabled.
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                if _kubectl(
+                    "-n", service_namespace, "get", "endpointslices",
+                    "-l", f"kubernetes.io/service-name={args.service}",
+                    "-o", "jsonpath={.items[*].endpoints[*].addresses[*]}",
+                ):
+                    break
+                time.sleep(1)
+            else:
+                raise RuntimeError(f"Service {args.service} still has no endpoints after labelling {args.pod} as primary")
         encoded = _kubectl("-n", service_namespace, "get", "secret", "pantry-bot-platform", "-o", "jsonpath={.data.PANTRY_DATABASE_URL}")
         current = base64.b64decode(encoded).decode()
         if "@" not in current:
@@ -596,7 +619,15 @@ def run() -> None:
         if not primary:
             return False
         if not journal.may_resume(token["epoch"], identity):
-            raise RuntimeError("already-primary target has no matching durable activation receipt")
+            prior = journal.load() or {}
+            raise RuntimeError(
+                "already-primary target has no matching durable activation receipt: "
+                f"granted epoch {token['epoch']}, receipt epoch {prior.get('epoch')!r} "
+                f"phase {prior.get('phase')!r} site {prior.get('site')!r} "
+                f"identity {prior.get('system_identifier')!r}, live identity {identity}. "
+                "This site will not resume its own primary until the receipt is "
+                "reconciled; see #385."
+            )
         # A legitimate resume: the target is already promoted with a durable
         # receipt matching this exact epoch and database identity. Re-running
         # fence_old_writer/check_replication/promote here would be wrong, not
@@ -604,6 +635,16 @@ def run() -> None:
         # an already-primary target for not being a standby, which previously
         # caused a resumed (successful) promotion to self-fence itself on the
         # very next controller restart.
+        #
+        # Re-anchor the receipt to the epoch we were actually granted (#386).
+        # may_resume tolerates exactly prior+1, which proves no other site held
+        # authority in between — but every controller restart acquires again
+        # and bumps the witness epoch, so a failure later in this activation
+        # used to push the next attempt to prior+2 and foreclose the resume
+        # path permanently. Recording here only ever happens on an epoch that
+        # already satisfied may_resume, so it cannot widen the window: it just
+        # stops our own restarts from consuming it.
+        journal.record(token["epoch"], identity, "active")
         return True
 
     def record_progress(token: dict[str, Any], phase: str) -> None:
