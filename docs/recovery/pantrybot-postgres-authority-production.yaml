@@ -17,8 +17,13 @@ metadata:
     pantrybot.postgres/authority: home
 spec:
   type: ClusterIP
+  # Selects on the role alone, deliberately. Pinning app.kubernetes.io/name
+  # too silently breaks the moment the authority moves to a differently-named
+  # StatefulSet, which is exactly what happened: the live primary is
+  # postgres-authority-standby-home-canada, so a selector naming
+  # pantry-postgres-authority matched nothing. See the note on the
+  # replication Service below.
   selector:
-    app.kubernetes.io/name: pantry-postgres-authority
     pantrybot.postgres/role: primary
   ports:
     - name: postgres
@@ -37,8 +42,21 @@ metadata:
     pantrybot.postgres/transport: replication
 spec:
   type: NodePort
+  # Role-only for the same reason, and here it mattered enormously.
+  #
+  # This Service had zero endpoints and NodePort 30432 was closed, because it
+  # named pantry-postgres-authority while the live primary is labelled
+  # pantry-postgres-authority-standby-home-canada. Replication was still
+  # reporting 0.13s lag -- on a TCP connection opened back when the names did
+  # match. It could not have re-established. One pod restart, node reboot or
+  # eviction and the standby would have been lost silently, with every
+  # dashboard still green. It was found only by trying to rebuild a standby
+  # during the 2026-09-25 cutover attempt.
+  #
+  # A Service that has to be edited whenever the authority is renamed is a
+  # Service that will be forgotten. The role label already moves with
+  # promotion, so follow that and nothing else.
   selector:
-    app.kubernetes.io/name: pantry-postgres-authority
     pantrybot.postgres/role: primary
   ports:
     - name: postgres
@@ -64,6 +82,15 @@ data:
     host replication all 127.0.0.1/32 trust
     host replication pantry_replicator 192.168.40.200/32 scram-sha-256
     host replication pantry_replicator 10.42.0.0/16 scram-sha-256
+    # A standby reaching us through the replication NodePort arrives SNATed to
+    # the node's own LAN address, not its Tailscale one -- so the Tailscale
+    # entries below are not sufficient on their own. pg_basebackup failed with
+    # "no pg_hba.conf entry for replication connection from host
+    # 192.168.40.208" until this was added (2026-09-25).
+    host replication pantry_replicator 192.168.40.208/32 scram-sha-256
+    # The standby and the primary node, reached directly over Tailscale.
+    host replication pantry_replicator 100.84.89.87/32 scram-sha-256
+    host replication pantry_replicator 100.78.181.15/32 scram-sha-256
     host all all 0.0.0.0/0 scram-sha-256
 ---
 apiVersion: apps/v1
