@@ -56,25 +56,37 @@ data:
         jsonData:
           maxLines: 5000
 
-      # Pantry Bot usage tables, read from Home's database WHATEVER its role
-      # (primary, or hot standby of Oracle/Canada) through the stable,
-      # role-independent Service pantry-postgres-local-read, owned by the
-      # failover work (#191, observability/failover-witness/home/
-      # pantry-postgres-local-read.yaml). It survives StatefulSet renames,
-      # promotions and hand-backs; only a fenced/stopped Home DB blanks it.
-      # Read-only dashboard queries; standby lag is seconds. The password
-      # is NOT in this repo -- it is injected from the
+      # Pantry Bot usage tables. Now read from ORACLE over Tailscale, because
+      # PantryBot moved there on 2026-09-25 and Home runs no PantryBot
+      # workload any more (ChayzX/pantry-bot#316).
+      #
+      # This used to point at pantry-postgres-local-read in Home's own
+      # cluster -- a deliberately role-independent Service that survived
+      # StatefulSet renames and promotions. That was the right design while
+      # the database was local. It is simply no longer local: the Service
+      # still exists on Home but has no backing pod, so every panel on the
+      # Pantry Bot -- Usage (Postgres) dashboard would render empty with no
+      # error that names the cause.
+      #
+      # Grafana stays on Home because it is reached through Authentik, which
+      # stays on Home. So this is now a cross-site read. Two consequences
+      # worth knowing before debugging a blank chart at 3am:
+      #   - a panel here can fail for reasons unrelated to PantryBot's health
+      #   - it is a dashboard dependency only; nothing PantryBot serves
+      #     depends on this link
+      #
+      # 100.78.181.15 is Oracle's Tailscale address, and its PostgreSQL runs
+      # with hostNetwork, so 5432 there is the database itself rather than a
+      # Service. Verified reachable from Home before this change.
+      #
+      # The password is NOT in this repo -- it is injected from the
       # PANTRY_GRAFANA_DB_PASSWORD env var, which grafana.yaml sources from
       # the grafana-postgres-pantry Secret. Never commit it.
-      #
-      # This datasource existed only in the live cluster until 2026-09-21;
-      # applying this file before then would have DELETED it and taken the
-      # Pantry Bot -- Usage (Postgres) dashboard dark.
       - name: PantryPostgres
         uid: PantryPostgres
         type: postgres
         access: proxy
-        url: pantry-postgres-local-read.pantry-bot.svc.cluster.local:5432
+        url: 100.78.181.15:5432
         database: pantry
         user: pantry
         jsonData:
