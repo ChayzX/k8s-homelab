@@ -36,18 +36,16 @@ for config in "${configs[@]}"; do
     }
   done
 
-  witness_job="pantry-postgres-witness${suffix}"
-  witness_block=$(sed -n "/^      - job_name: ${witness_job}$/,/^      - job_name:/p" "$config")
-  grep -q 'metrics_path: /metrics' <<<"$witness_block" || {
-    echo "Missing /metrics path for ${witness_job} in $config" >&2
+  # The failover witness was retired with the three-site design on 2026-09-25
+  # (ChayzX/pantry-bot#315). This assertion is inverted deliberately: it used to
+  # require the witness job to exist, which meant the test failed *because* the
+  # migration succeeded. Now it fails if the witness scrape target comes back.
+  ! grep -q 'pantry-postgres-witness' "$config" || {
+    echo "Retired failover witness scrape job found in $config" >&2
     exit 1
   }
-  grep -q 'failover-witness-relay.observability.svc.cluster.local:18765' <<<"$witness_block" || {
-    echo "Missing failover witness relay target for ${witness_job} in $config" >&2
-    exit 1
-  }
-  grep -q "site: ${site}" <<<"$witness_block" || {
-    echo "Missing site: ${site} label for ${witness_job} in $config" >&2
+  ! grep -q 'failover-witness-relay' "$config" || {
+    echo "Retired failover witness relay target found in $config" >&2
     exit 1
   }
 

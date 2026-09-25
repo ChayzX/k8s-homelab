@@ -1,1052 +1,1052 @@
 {
- "uid": "homelab-pantry-bot",
- "title": "PantryBot — Health & Usage",
- "description": "Is PantryBot working, and is anyone using it. Replaces the three separate PantryBot dashboards (health, usage, usage-from-Postgres).",
- "tags": [
-  "homelab",
-  "pantry-bot"
- ],
- "timezone": "browser",
- "editable": true,
- "schemaVersion": 39,
- "version": 1,
- "refresh": "1m",
- "graphTooltip": 1,
- "time": {
-  "from": "now-6h",
-  "to": "now"
- },
- "links": [
-  {
-   "title": "Start Here",
-   "url": "/d/home",
-   "type": "link",
-   "icon": "dashboard",
-   "asDropdown": false,
-   "includeVars": false,
-   "keepTime": true,
-   "targetBlank": false,
-   "tags": [],
-   "tooltip": ""
+  "uid": "homelab-pantry-bot",
+  "title": "PantryBot \u2014 Health & Usage",
+  "description": "Is PantryBot working, and is anyone using it. Replaces the three separate PantryBot dashboards (health, usage, usage-from-Postgres).",
+  "tags": [
+    "homelab",
+    "pantry-bot"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
   },
-  {
-   "title": "Services",
-   "url": "/d/services",
-   "type": "link",
-   "icon": "apps",
-   "asDropdown": false,
-   "includeVars": false,
-   "keepTime": true,
-   "targetBlank": false,
-   "tags": [],
-   "tooltip": ""
-  },
-  {
-   "title": "Machines",
-   "url": "/d/machines",
-   "type": "link",
-   "icon": "monitor",
-   "asDropdown": false,
-   "includeVars": false,
-   "keepTime": true,
-   "targetBlank": false,
-   "tags": [],
-   "tooltip": ""
-  },
-  {
-   "title": "PantryBot",
-   "url": "/d/homelab-pantry-bot",
-   "type": "link",
-   "icon": "bolt",
-   "asDropdown": false,
-   "includeVars": false,
-   "keepTime": true,
-   "targetBlank": false,
-   "tags": [],
-   "tooltip": ""
-  },
-  {
-   "title": "Minecraft",
-   "url": "/d/homelab-minecraft",
-   "type": "link",
-   "icon": "cube",
-   "asDropdown": false,
-   "includeVars": false,
-   "keepTime": true,
-   "targetBlank": false,
-   "tags": [],
-   "tooltip": ""
-  },
-  {
-   "title": "Logs",
-   "url": "/d/homelab-logs",
-   "type": "link",
-   "icon": "doc",
-   "asDropdown": false,
-   "includeVars": false,
-   "keepTime": true,
-   "targetBlank": false,
-   "tags": [],
-   "tooltip": ""
-  },
-  {
-   "title": "Sites & Failover",
-   "url": "/d/homelab-site-service-health",
-   "type": "link",
-   "icon": "sitemap",
-   "asDropdown": false,
-   "includeVars": false,
-   "keepTime": true,
-   "targetBlank": false,
-   "tags": [],
-   "tooltip": ""
-  }
- ],
- "templating": {
-  "list": [
-   {
-    "name": "DS_PROMETHEUS",
-    "label": "Prometheus",
-    "type": "datasource",
-    "query": "prometheus",
-    "current": {},
-    "hide": 2,
-    "refresh": 1,
-    "regex": ""
-   },
-   {
-    "name": "DS_LOKI",
-    "label": "Loki",
-    "type": "datasource",
-    "query": "loki",
-    "current": {},
-    "hide": 2,
-    "refresh": 1,
-    "regex": ""
-   },
-   {
-    "name": "DS_POSTGRES",
-    "label": "Postgres",
-    "type": "datasource",
-    "query": "grafana-postgresql-datasource",
-    "current": {},
-    "hide": 2,
-    "refresh": 1,
-    "regex": ""
-   }
-  ]
- },
- "panels": [
-  {
-   "id": 1,
-   "type": "text",
-   "title": "",
-   "gridPos": {
-    "h": 3,
-    "w": 24,
-    "x": 0,
-    "y": 0
-   },
-   "options": {
-    "mode": "markdown",
-    "content": "## PantryBot\nTop half: **is it working?** Bottom half: **is anyone using it?** If the top is red, the bottom will be empty — fix the top first. For one part in detail, open Services and pick Area `pantry-bot`."
-   }
-  },
-  {
-   "type": "stat",
-   "title": "Parts running",
-   "description": "PantryBot roles (api, gateway, worker, dispatcher) answering at whichever site is serving - Home, Oracle or Canada - vs the 4 there should be. Follows failovers (#191).",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
-   },
-   "targets": [
+  "links": [
     {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
-     },
-     "expr": "count(up{job=~\"pantry-bot-(api|gateway|worker|dispatcher)(-oracle|-canada)?\"} == 1) or vector(0)",
-     "legendFormat": "running",
-     "instant": true,
-     "range": false
+      "title": "Start Here",
+      "url": "/d/home",
+      "type": "link",
+      "icon": "dashboard",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "tags": [],
+      "tooltip": ""
     },
     {
-     "refId": "B",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
-     },
-     "expr": "vector(4)",
-     "legendFormat": "should be",
-     "instant": true,
-     "range": false
+      "title": "Services",
+      "url": "/d/services",
+      "type": "link",
+      "icon": "apps",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "tags": [],
+      "tooltip": ""
+    },
+    {
+      "title": "Machines",
+      "url": "/d/machines",
+      "type": "link",
+      "icon": "monitor",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "tags": [],
+      "tooltip": ""
+    },
+    {
+      "title": "PantryBot",
+      "url": "/d/homelab-pantry-bot",
+      "type": "link",
+      "icon": "bolt",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "tags": [],
+      "tooltip": ""
+    },
+    {
+      "title": "Minecraft",
+      "url": "/d/homelab-minecraft",
+      "type": "link",
+      "icon": "cube",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "tags": [],
+      "tooltip": ""
+    },
+    {
+      "title": "Logs",
+      "url": "/d/homelab-logs",
+      "type": "link",
+      "icon": "doc",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "tags": [],
+      "tooltip": ""
+    },
+    {
+      "title": "Sites & Failover",
+      "url": "/d/homelab-site-service-health",
+      "type": "link",
+      "icon": "sitemap",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "tags": [],
+      "tooltip": ""
     }
-   ],
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "value",
-    "graphMode": "none",
-    "textMode": "value_and_name",
-    "justifyMode": "center",
-    "orientation": "auto"
-   },
-   "fieldConfig": {
-    "defaults": {
-     "unit": "short",
-     "decimals": 0,
-     "mappings": [],
-     "noValue": "no data",
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "blue",
-        "value": null
-       }
-      ]
-     }
-    },
-    "overrides": []
-   },
-   "id": 2,
-   "gridPos": {
-    "h": 5,
-    "w": 5,
-    "x": 0,
-    "y": 3
-   }
-  },
-  {
-   "type": "stat",
-   "title": "Parts crashing",
-   "description": "Parts stuck in a crash-restart loop.",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
-     },
-     "expr": "sum(kube_pod_container_status_waiting_reason{namespace=\"pantry-bot\", reason=\"CrashLoopBackOff\"}) or vector(0)",
-     "instant": true,
-     "range": false
-    }
-   ],
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "background",
-    "graphMode": "none",
-    "textMode": "auto",
-    "justifyMode": "center",
-    "orientation": "auto"
-   },
-   "fieldConfig": {
-    "defaults": {
-     "unit": "short",
-     "decimals": 0,
-     "mappings": [
+  ],
+  "templating": {
+    "list": [
       {
-       "type": "value",
-       "options": {
-        "0": {
-         "text": "NONE",
-         "color": "green",
-         "index": 0
-        }
-       }
-      }
-     ],
-     "noValue": "no data",
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "green",
-        "value": null
-       },
-       {
-        "color": "red",
-        "value": 1
-       }
-      ]
-     }
-    },
-    "overrides": []
-   },
-   "id": 3,
-   "gridPos": {
-    "h": 5,
-    "w": 4,
-    "x": 5,
-    "y": 3
-   }
-  },
-  {
-   "type": "stat",
-   "title": "Database reachable?",
-   "description": "Home's copy of the PantryBot database (primary, or hot standby of Oracle/Canada) - the one every database panel below reads - is up and answering. Follows failovers (#191).",
-   "datasource": {
-    "type": "grafana-postgresql-datasource",
-    "uid": "${DS_POSTGRES}"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "grafana-postgresql-datasource",
-      "uid": "${DS_POSTGRES}"
-     },
-     "rawQuery": true,
-     "editorMode": "code",
-     "format": "table",
-     "rawSql": "SELECT 1 AS reachable"
-    }
-   ],
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "background",
-    "graphMode": "none",
-    "textMode": "auto",
-    "justifyMode": "center",
-    "orientation": "auto"
-   },
-   "fieldConfig": {
-    "defaults": {
-     "unit": "short",
-     "decimals": 0,
-     "mappings": [
+        "name": "DS_PROMETHEUS",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 2,
+        "refresh": 1,
+        "regex": ""
+      },
       {
-       "type": "value",
-       "options": {
-        "0": {
-         "text": "NO",
-         "color": "red",
-         "index": 0
-        }
-       }
-      }
-     ],
-     "noValue": "no data",
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "red",
-        "value": null
-       },
-       {
-        "color": "green",
-        "value": 1
-       }
-      ]
-     }
-    },
-    "overrides": []
-   },
-   "id": 4,
-   "gridPos": {
-    "h": 5,
-    "w": 5,
-    "x": 9,
-    "y": 3
-   }
-  },
-  {
-   "type": "stat",
-   "title": "Restarts today",
-   "description": "",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
-     },
-     "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"pantry-bot\"}[24h])) or vector(0)",
-     "instant": true,
-     "range": false
-    }
-   ],
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "background",
-    "graphMode": "none",
-    "textMode": "auto",
-    "justifyMode": "center",
-    "orientation": "auto"
-   },
-   "fieldConfig": {
-    "defaults": {
-     "unit": "short",
-     "decimals": 0,
-     "mappings": [
+        "name": "DS_LOKI",
+        "label": "Loki",
+        "type": "datasource",
+        "query": "loki",
+        "current": {},
+        "hide": 2,
+        "refresh": 1,
+        "regex": ""
+      },
       {
-       "type": "value",
-       "options": {
-        "0": {
-         "text": "NONE",
-         "color": "green",
-         "index": 0
-        }
-       }
+        "name": "DS_POSTGRES",
+        "label": "Postgres",
+        "type": "datasource",
+        "query": "grafana-postgresql-datasource",
+        "current": {},
+        "hide": 2,
+        "refresh": 1,
+        "regex": ""
       }
-     ],
-     "noValue": "no data",
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "green",
-        "value": null
-       },
-       {
-        "color": "orange",
-        "value": 1
-       },
-       {
-        "color": "red",
-        "value": 10
-       }
-      ]
-     }
-    },
-    "overrides": []
-   },
-   "id": 5,
-   "gridPos": {
-    "h": 5,
-    "w": 4,
-    "x": 14,
-    "y": 3
-   }
-  },
-  {
-   "id": 17,
-   "type": "stat",
-   "title": "Serving site",
-   "description": "Which site PantryBot is running from right now (the site whose API answers). Home is the normal site; Oracle and Canada take over automatically during a failover (#191).",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
-   },
-   "gridPos": {
-    "h": 5,
-    "w": 6,
-    "x": 18,
-    "y": 3
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
-     },
-     "expr": "max by (site) (up{job=~\"pantry-bot-api(-oracle|-canada)?\"}) == 1",
-     "legendFormat": "{{site}}",
-     "instant": true
-    }
-   ],
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "textMode": "name",
-    "colorMode": "background",
-    "graphMode": "none",
-    "justifyMode": "center",
-    "orientation": "auto"
-   },
-   "fieldConfig": {
-    "defaults": {
-     "noValue": "NONE - PantryBot is down",
-     "color": {
-      "mode": "fixed",
-      "fixedColor": "green"
-     }
-    },
-    "overrides": []
-   }
-  },
-  {
-   "type": "table",
-   "title": "Every PantryBot part",
-   "description": "Parts deliberately switched off (0 copies) are not listed.",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
-     },
-     "expr": "sum by (deployment) (kube_deployment_spec_replicas{namespace=\"pantry-bot\"}) > 0",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "B",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
-     },
-     "expr": "sum by (deployment) (kube_deployment_status_replicas_available{namespace=\"pantry-bot\"}) and on (deployment) (kube_deployment_spec_replicas{namespace=\"pantry-bot\"} > 0)",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    }
-   ],
-   "transformations": [
-    {
-     "id": "merge",
-     "options": {}
-    },
-    {
-     "id": "organize",
-     "options": {
-      "excludeByName": {
-       "Time": true,
-       "__name__": true,
-       "job": true,
-       "instance": true,
-       "uid": true,
-       "endpoint": true,
-       "service": true
-      },
-      "renameByName": {
-       "deployment": "Part",
-       "Value #A": "Should have",
-       "Value #B": "Running"
-      },
-      "indexByName": {
-       "deployment": 0,
-       "Value #A": 1,
-       "Value #B": 2
-      }
-     }
-    }
-   ],
-   "options": {
-    "showHeader": true,
-    "cellHeight": "sm",
-    "footer": {
-     "show": false,
-     "reducer": [
-      "sum"
-     ],
-     "fields": ""
-    }
-   },
-   "fieldConfig": {
-    "defaults": {
-     "custom": {
-      "align": "auto",
-      "cellOptions": {
-       "type": "auto"
-      }
-     },
-     "noValue": "Nothing here — good."
-    },
-    "overrides": [
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "Running"
-      },
-      "properties": [
-       {
-        "id": "custom.cellOptions",
-        "value": {
-         "type": "color-background",
-         "mode": "basic"
-        }
-       },
-       {
-        "id": "thresholds",
-        "value": {
-         "mode": "absolute",
-         "steps": [
-          {
-           "color": "red",
-           "value": null
-          },
-          {
-           "color": "green",
-           "value": 1
-          }
-         ]
-        }
-       }
-      ]
-     }
     ]
-   },
-   "id": 6,
-   "gridPos": {
-    "h": 8,
-    "w": 24,
-    "x": 0,
-    "y": 8
-   }
   },
-  {
-   "type": "row",
-   "title": "Is anyone using it?",
-   "collapsed": false,
-   "gridPos": {
-    "h": 1,
-    "w": 24,
-    "x": 0,
-    "y": 16
-   },
-   "panels": [],
-   "id": 7
-  },
-  {
-   "type": "timeseries",
-   "title": "Commands used (per 15 min)",
-   "description": "Chat commands people ran. Empty while the bot is down.",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
-   },
-   "targets": [
+  "panels": [
     {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
-     },
-     "expr": "sum by (command) (increase(pantry_bot_commands_total[15m]))",
-     "legendFormat": "{{command}}"
-    }
-   ],
-   "options": {
-    "legend": {
-     "displayMode": "list",
-     "placement": "bottom",
-     "showLegend": true
-    },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
-    }
-   },
-   "fieldConfig": {
-    "defaults": {
-     "unit": "short",
-     "custom": {
-      "drawStyle": "bars",
-      "lineWidth": 1,
-      "fillOpacity": 60,
-      "showPoints": "never",
-      "spanNulls": true,
-      "gradientMode": "opacity",
-      "stacking": {
-       "mode": "normal",
-       "group": "A"
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "## PantryBot\nTop half: **is it working?** Bottom half: **is anyone using it?** If the top is red, the bottom will be empty \u2014 fix the top first. For one part in detail, open Services and pick Area `pantry-bot`."
       }
-     },
-     "color": {
-      "mode": "palette-classic"
-     },
-     "noValue": "nothing to show",
-     "min": 0
-    },
-    "overrides": []
-   },
-   "id": 8,
-   "gridPos": {
-    "h": 8,
-    "w": 12,
-    "x": 0,
-    "y": 17
-   }
-  },
-  {
-   "type": "timeseries",
-   "title": "Work picked up vs finished (per 15 min)",
-   "description": "The two lines should track each other. \"Picked up\" pulling away from \"finished\" means work is getting stuck.",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
-     },
-     "expr": "sum(increase(pantry_bot_runtime_claims_total[15m]))",
-     "legendFormat": "picked up"
     },
     {
-     "refId": "B",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
-     },
-     "expr": "sum(increase(pantry_bot_runtime_completions_total[15m]))",
-     "legendFormat": "finished"
-    }
-   ],
-   "options": {
-    "legend": {
-     "displayMode": "list",
-     "placement": "bottom",
-     "showLegend": true
-    },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
-    }
-   },
-   "fieldConfig": {
-    "defaults": {
-     "unit": "short",
-     "custom": {
-      "drawStyle": "line",
-      "lineWidth": 2,
-      "fillOpacity": 12,
-      "showPoints": "never",
-      "spanNulls": true,
-      "gradientMode": "opacity"
-     },
-     "color": {
-      "mode": "palette-classic"
-     },
-     "noValue": "nothing to show",
-     "min": 0
-    },
-    "overrides": []
-   },
-   "id": 9,
-   "gridPos": {
-    "h": 8,
-    "w": 12,
-    "x": 12,
-    "y": 17
-   }
-  },
-  {
-   "type": "row",
-   "title": "From the database  (keeps working even when the bot is down, as long as the database is up)",
-   "collapsed": false,
-   "gridPos": {
-    "h": 1,
-    "w": 24,
-    "x": 0,
-    "y": 25
-   },
-   "panels": [],
-   "id": 10
-  },
-  {
-   "type": "stat",
-   "title": "Events received (last hour)",
-   "datasource": {
-    "type": "grafana-postgresql-datasource",
-    "uid": "${DS_POSTGRES}"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "grafana-postgresql-datasource",
-      "uid": "${DS_POSTGRES}"
-     },
-     "format": "table",
-     "rawSql": "SELECT count(*) AS events FROM pantry_events WHERE created_at > now() - interval '1 hour'"
-    }
-   ],
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "value",
-    "graphMode": "none",
-    "textMode": "auto"
-   },
-   "fieldConfig": {
-    "defaults": {
-     "noValue": "database unreachable",
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "blue",
-        "value": null
-       }
-      ]
-     }
-    },
-    "overrides": []
-   },
-   "id": 11,
-   "gridPos": {
-    "h": 5,
-    "w": 8,
-    "x": 0,
-    "y": 26
-   }
-  },
-  {
-   "type": "stat",
-   "title": "Messages stuck undelivered",
-   "datasource": {
-    "type": "grafana-postgresql-datasource",
-    "uid": "${DS_POSTGRES}"
-   },
-   "description": "Outgoing messages that failed and were set aside. Should be 0.",
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "grafana-postgresql-datasource",
-      "uid": "${DS_POSTGRES}"
-     },
-     "format": "table",
-     "rawSql": "SELECT count(*) AS dead_letter FROM pantry_outbox WHERE status = 'dead_letter'"
-    }
-   ],
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "background",
-    "graphMode": "none",
-    "textMode": "auto"
-   },
-   "fieldConfig": {
-    "defaults": {
-     "noValue": "database unreachable",
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "green",
-        "value": null
-       },
-       {
-        "color": "red",
-        "value": 1
-       }
-      ]
-     }
-    },
-    "overrides": []
-   },
-   "id": 12,
-   "gridPos": {
-    "h": 5,
-    "w": 8,
-    "x": 8,
-    "y": 26
-   }
-  },
-  {
-   "type": "stat",
-   "title": "Different people who have taken part",
-   "datasource": {
-    "type": "grafana-postgresql-datasource",
-    "uid": "${DS_POSTGRES}"
-   },
-   "description": "Everyone who has ever joined in, all time.",
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "grafana-postgresql-datasource",
-      "uid": "${DS_POSTGRES}"
-     },
-     "format": "table",
-     "rawSql": "SELECT count(DISTINCT user_id) AS participants FROM community_participants"
-    }
-   ],
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "value",
-    "graphMode": "none",
-    "textMode": "auto"
-   },
-   "fieldConfig": {
-    "defaults": {
-     "noValue": "database unreachable",
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "blue",
-        "value": null
-       }
-      ]
-     }
-    },
-    "overrides": []
-   },
-   "id": 13,
-   "gridPos": {
-    "h": 5,
-    "w": 8,
-    "x": 16,
-    "y": 26
-   }
-  },
-  {
-   "type": "timeseries",
-   "title": "Events received over time",
-   "datasource": {
-    "type": "grafana-postgresql-datasource",
-    "uid": "${DS_POSTGRES}"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "grafana-postgresql-datasource",
-      "uid": "${DS_POSTGRES}"
-     },
-     "format": "time_series",
-     "rawSql": "SELECT $__timeGroup(created_at, $__interval) AS \"time\", source AS metric, count(*) AS events FROM pantry_events WHERE $__timeFilter(created_at) GROUP BY 1, 2 ORDER BY 1"
-    }
-   ],
-   "options": {
-    "legend": {
-     "displayMode": "list",
-     "placement": "bottom"
-    },
-    "tooltip": {
-     "mode": "multi"
-    }
-   },
-   "fieldConfig": {
-    "defaults": {
-     "custom": {
-      "drawStyle": "bars",
-      "fillOpacity": 60,
-      "stacking": {
-       "mode": "normal",
-       "group": "A"
+      "type": "stat",
+      "title": "Parts running",
+      "description": "PantryBot roles (api, gateway, worker, dispatcher) answering on Oracle, vs the 4 there should be. PantryBot has run single-site on Oracle since 2026-09-25; there is no longer a failover to follow.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "count(up{job=~\"pantry-bot-(api|gateway|worker|dispatcher)(-oracle)?\"} == 1) or vector(0)",
+          "legendFormat": "running",
+          "instant": true,
+          "range": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "vector(4)",
+          "legendFormat": "should be",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "mappings": [],
+          "noValue": "no data",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "id": 2,
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 0,
+        "y": 3
       }
-     },
-     "noValue": "database unreachable"
     },
-    "overrides": []
-   },
-   "id": 14,
-   "gridPos": {
-    "h": 8,
-    "w": 24,
-    "x": 0,
-    "y": 31
-   }
-  },
-  {
-   "type": "row",
-   "title": "What is it saying?  (logs)",
-   "collapsed": false,
-   "gridPos": {
-    "h": 1,
-    "w": 24,
-    "x": 0,
-    "y": 39
-   },
-   "panels": [],
-   "id": 15
-  },
-  {
-   "type": "logs",
-   "title": "PantryBot errors and warnings",
-   "description": "Only errors and warnings, newest first.",
-   "datasource": {
-    "type": "loki",
-    "uid": "${DS_LOKI}"
-   },
-   "targets": [
     {
-     "refId": "A",
-     "datasource": {
-      "type": "loki",
-      "uid": "${DS_LOKI}"
-     },
-     "expr": "{instance=~\"pantry-bot/.*\", level=~\"error|warn\"}",
-     "maxLines": 500
+      "type": "stat",
+      "title": "Parts crashing",
+      "description": "Parts stuck in a crash-restart loop.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(kube_pod_container_status_waiting_reason{namespace=\"pantry-bot\", reason=\"CrashLoopBackOff\"}) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "NONE",
+                  "color": "green",
+                  "index": 0
+                }
+              }
+            }
+          ],
+          "noValue": "no data",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "id": 3,
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 5,
+        "y": 3
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Database reachable?",
+      "description": "The PantryBot database on Oracle is up and answering. This is the database every panel below reads. Note Grafana runs on Home and reaches it over Tailscale, so this panel can go red for a link problem rather than a database one.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRES}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRES}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT 1 AS reachable"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "NO",
+                  "color": "red",
+                  "index": 0
+                }
+              }
+            }
+          ],
+          "noValue": "no data",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "id": 4,
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 9,
+        "y": 3
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Restarts today",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"pantry-bot\"}[24h])) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "NONE",
+                  "color": "green",
+                  "index": 0
+                }
+              }
+            }
+          ],
+          "noValue": "no data",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "id": 5,
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 14,
+        "y": 3
+      }
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Serving site",
+      "description": "Which site PantryBot is serving from. Since 2026-09-25 that is always Oracle; Home keeps Minecraft and Authentik only and is a cold restore target, not an automatic failover.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 3
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (site) (up{job=~\"pantry-bot-api(-oracle)?\"}) == 1",
+          "legendFormat": "{{site}}",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "name",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "NONE - PantryBot is down",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "table",
+      "title": "Every PantryBot part",
+      "description": "Parts deliberately switched off (0 copies) are not listed.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by (deployment) (kube_deployment_spec_replicas{namespace=\"pantry-bot\"}) > 0",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by (deployment) (kube_deployment_status_replicas_available{namespace=\"pantry-bot\"}) and on (deployment) (kube_deployment_spec_replicas{namespace=\"pantry-bot\"} > 0)",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "instance": true,
+              "uid": true,
+              "endpoint": true,
+              "service": true
+            },
+            "renameByName": {
+              "deployment": "Part",
+              "Value #A": "Should have",
+              "Value #B": "Running"
+            },
+            "indexByName": {
+              "deployment": 0,
+              "Value #A": 1,
+              "Value #B": 2
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "noValue": "Nothing here \u2014 good."
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Running"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "id": 6,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      }
+    },
+    {
+      "type": "row",
+      "title": "Is anyone using it?",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "panels": [],
+      "id": 7
+    },
+    {
+      "type": "timeseries",
+      "title": "Commands used (per 15 min)",
+      "description": "Chat commands people ran. Empty while the bot is down.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by (command) (increase(pantry_bot_commands_total[15m]))",
+          "legendFormat": "{{command}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "spanNulls": true,
+            "gradientMode": "opacity",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "nothing to show",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "id": 8,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Work picked up vs finished (per 15 min)",
+      "description": "The two lines should track each other. \"Picked up\" pulling away from \"finished\" means work is getting stuck.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(increase(pantry_bot_runtime_claims_total[15m]))",
+          "legendFormat": "picked up"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(increase(pantry_bot_runtime_completions_total[15m]))",
+          "legendFormat": "finished"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "spanNulls": true,
+            "gradientMode": "opacity"
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "nothing to show",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "id": 9,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 17
+      }
+    },
+    {
+      "type": "row",
+      "title": "From the database  (keeps working even when the bot is down, as long as the database is up)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "panels": [],
+      "id": 10
+    },
+    {
+      "type": "stat",
+      "title": "Events received (last hour)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRES}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRES}"
+          },
+          "format": "table",
+          "rawSql": "SELECT count(*) AS events FROM pantry_events WHERE created_at > now() - interval '1 hour'"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "database unreachable",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "id": 11,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 0,
+        "y": 26
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Messages stuck undelivered",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRES}"
+      },
+      "description": "Outgoing messages that failed and were set aside. Should be 0.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRES}"
+          },
+          "format": "table",
+          "rawSql": "SELECT count(*) AS dead_letter FROM pantry_outbox WHERE status = 'dead_letter'"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "database unreachable",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "id": 12,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 8,
+        "y": 26
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Different people who have taken part",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRES}"
+      },
+      "description": "Everyone who has ever joined in, all time.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRES}"
+          },
+          "format": "table",
+          "rawSql": "SELECT count(DISTINCT user_id) AS participants FROM community_participants"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "database unreachable",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "id": 13,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 16,
+        "y": 26
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Events received over time",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRES}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRES}"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroup(created_at, $__interval) AS \"time\", source AS metric, count(*) AS events FROM pantry_events WHERE $__timeFilter(created_at) GROUP BY 1, 2 ORDER BY 1"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "noValue": "database unreachable"
+        },
+        "overrides": []
+      },
+      "id": 14,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      }
+    },
+    {
+      "type": "row",
+      "title": "What is it saying?  (logs)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 39
+      },
+      "panels": [],
+      "id": 15
+    },
+    {
+      "type": "logs",
+      "title": "PantryBot errors and warnings",
+      "description": "Only errors and warnings, newest first.",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "{instance=~\"pantry-bot/.*\", level=~\"error|warn\"}",
+          "maxLines": 500
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "exact",
+        "prettifyLogMessage": false,
+        "showLabels": false,
+        "showCommonLabels": false
+      },
+      "id": 16,
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      }
     }
-   ],
-   "options": {
-    "showTime": true,
-    "wrapLogMessage": true,
-    "sortOrder": "Descending",
-    "enableLogDetails": true,
-    "dedupStrategy": "exact",
-    "prettifyLogMessage": false,
-    "showLabels": false,
-    "showCommonLabels": false
-   },
-   "id": 16,
-   "gridPos": {
-    "h": 12,
-    "w": 24,
-    "x": 0,
-    "y": 40
-   }
-  }
- ]
+  ]
 }

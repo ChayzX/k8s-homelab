@@ -83,14 +83,6 @@ data:
 
       # Token-free authority telemetry from the neutral GCP witness, reached
       # through the existing private tunnel relay.
-      - job_name: pantry-postgres-witness-oracle
-        metrics_path: /metrics
-        static_configs:
-          - targets: ["failover-witness-relay.observability.svc.cluster.local:18765"]
-            labels:
-              site: oracle
-              role: witness
-
       - job_name: alloy-logs-oracle
         static_configs:
           - targets: ["alloy-logs.observability.svc.cluster.local:12345"]
