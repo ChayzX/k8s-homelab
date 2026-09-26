@@ -65,8 +65,37 @@ data:
         static_configs:
           # Site-local only. Oracle has its own Prometheus collector and a
           # home collector must not turn a remote-site outage into a local
-          # scrape-down storm; ChaseBot is covered when its agent is healthy.
+          # scrape-down storm. ChaseBot is scraped separately by the
+          # node-chasebot job below, not from here.
           - targets: ["192.168.40.208:9100"]
+
+      # ChaseBot's host metrics, via the node-exporter-chasebot DaemonSet.
+      #
+      # Separate job rather than a second target on `node` because the two
+      # collectors are deliberately different mechanisms: minecraftmachine
+      # runs node_exporter as a systemd user unit (see the note above), and
+      # adding a hostNetwork DaemonSet there would collide on :9100 and
+      # never go Ready. chasebot has no such collision, so it uses the
+      # DaemonSet and is scraped as its own job.
+      #
+      # The explicit `node` label is load-bearing. Global external_labels set
+      # node: minecraftmachine, but external_labels only ride along on
+      # remote_write/federation -- they are not attached to locally stored
+      # series. Without a per-target label both machines' node_exporter
+      # series are told apart only by `instance`, so any query that omits
+      # `instance` silently sums two different physical hosts. Labelling
+      # chasebot here keeps them separable, and matches the `node` label the
+      # retired node-oracle job already used for pantry-bot-oracle.
+      #
+      # Added for k8s-homelab#372: the kubelet/cAdvisor scrape jobs cover
+      # chasebot via `role: node` SD, but node_exporter host telemetry was
+      # absent, so a host-level fault (disk, memory, k3s-agent down) was
+      # invisible here until it took the whole node out of the cluster.
+      - job_name: node-chasebot
+        static_configs:
+          - targets: ["192.168.40.200:9100"]
+            labels:
+              node: chasebot
 
       # >>> TO BE REMOVED AT PHASE 5 <<<
       # docker_desktop_exporter.py measures the Docker Desktop qemu VM's
