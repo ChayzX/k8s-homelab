@@ -55,9 +55,46 @@ function Invoke-Sql([string]$Sql) {
   Invoke-Native "psql: $Sql" { docker exec $PostgresContainer psql -U pantry -d pantry -AtX -v ON_ERROR_STOP=1 -c $Sql }
 }
 
+# Docker Desktop's daemon is not always up (host rebooted, Desktop not
+# started, engine restarting). No container can be writing while the daemon
+# is unreachable, so that is a *fenced* state, not a failure — but every
+# `docker` call below writes the daemon error to stderr, which
+# $ErrorActionPreference='Stop' turns into a NativeCommandError that kills
+# this script with exit 1. The composite fence treats any non-75 exit as a
+# hard failure, so a dark Docker on Canada used to block every promotion at
+# every other site (#191, 2026-09-23 outage). Probe the daemon first and
+# report the fence that is already in force. The connector is a Windows
+# service independent of Docker, so it is still stopped below.
+function Test-DockerDaemon {
+  $previous = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    & docker info --format '{{.ServerVersion}}' 2>&1 | Out-Null
+    return ($LASTEXITCODE -eq 0)
+  } catch {
+    return $false
+  } finally {
+    $ErrorActionPreference = $previous
+  }
+}
+
+if (-not (Test-DockerDaemon)) {
+  $connector = Stop-Connector
+  Write-Output "fence_status=passed site=canada database=daemon_down applications=daemon_down connector=$connector postgres_container=$PostgresContainer"
+  exit 0
+}
+
 # Fencing is idempotent: a previously stopped PostgreSQL writer is already
-# fenced, but application writers must still be verified stopped.
-$postgresStatus = (docker inspect --format '{{.State.Status}}' $PostgresContainer 2>$null).Trim()
+# fenced, but application writers must still be verified stopped. A container
+# that has never been created makes `docker inspect` fail and return nothing,
+# which is also "not running" rather than an error.
+$postgresStatus = ''
+try {
+  $inspected = & docker inspect --format '{{.State.Status}}' $PostgresContainer 2>$null
+  if ($LASTEXITCODE -eq 0 -and $null -ne $inspected) { $postgresStatus = ([string]$inspected).Trim() }
+} catch {
+  $postgresStatus = ''
+}
 if ($postgresStatus -ne 'running') {
   $remainingAlreadyFenced = @(docker ps --format '{{.Names}}' | Where-Object { $_ -in $mutating })
   if ($remainingAlreadyFenced.Count -ne 0) { throw "Canada application fence verification failed: $($remainingAlreadyFenced -join ', ')" }

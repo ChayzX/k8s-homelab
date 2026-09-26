@@ -67,6 +67,84 @@ def test_reachable_fence_failure_blocks_promotion() -> None:
         assert "old_writer_fence=verified" not in result.stdout
 
 
+def _run_composite_recording(home_rc: dict[str, int], canada_rc: dict[str, int]):
+    """Run the composite with stubs whose exit code depends on the mode.
+
+    Returns (CompletedProcess, [(site, mode), ...]) in call order, so a test
+    can assert what was actually fenced rather than only the exit code.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        shutil.copy(ROOT / "fence-old-writers-from-oracle.sh", tmp_path)
+        log = tmp_path / "calls.log"
+        for name, site, codes in (
+            ("fence-home-direct-from-oracle.sh", "home", home_rc),
+            ("fence-canada-from-oracle.sh", "canada", canada_rc),
+        ):
+            stub = tmp_path / name
+            stub.write_text(
+                "#!/usr/bin/env bash\n"
+                f'echo "{site} $1" >> "{log}"\n'
+                f'case "$1" in\n'
+                f'  --dry-run) exit {codes["--dry-run"]} ;;\n'
+                f'  --confirm) exit {codes["--confirm"]} ;;\n'
+                "esac\n"
+            )
+            stub.chmod(0o755)
+        env = {**os.environ, "PANTRY_UNREACHABLE_GRACE_SECONDS": "0"}
+        result = subprocess.run(
+            ["bash", str(tmp_path / "fence-old-writers-from-oracle.sh"), "--confirm"],
+            capture_output=True, text=True, env=env,
+        )
+        calls = [tuple(line.split()) for line in log.read_text().splitlines()] if log.exists() else []
+        return result, calls
+
+
+def test_a_later_sites_failure_fences_nobody() -> None:
+    """Catch the livelock that caused the 2026-09-23 outage.
+
+    Canada's fence script exited 1 (its Docker daemon was down). Because the
+    composite fences home before it attempts canada, Home was fenced on every
+    pass and then the promoter crashed on Canada, was restarted by systemd,
+    and did it again - 14 times, never completing a promotion, with no way to
+    unfence Home. Probing every transport first makes that failure cost
+    nothing.
+    """
+    ok = {"--dry-run": 0, "--confirm": 0}
+    broken = {"--dry-run": 1, "--confirm": 1}
+    result, calls = _run_composite_recording(ok, broken)
+
+    assert result.returncode != 0
+    assert "phase=probe" in result.stderr and "nothing fenced" in result.stderr
+    assert ("home", "--confirm") not in calls, (
+        "home was fenced even though canada's fence could never succeed: "
+        f"calls={calls}"
+    )
+    assert calls == [("home", "--dry-run"), ("canada", "--dry-run")]
+
+
+def test_probe_success_still_fences_every_site() -> None:
+    ok = {"--dry-run": 0, "--confirm": 0}
+    result, calls = _run_composite_recording(ok, ok)
+    assert result.returncode == 0
+    assert "home=verified canada=verified" in result.stdout
+    assert ("home", "--confirm") in calls and ("canada", "--confirm") in calls
+
+
+def test_probe_accepts_an_unreachable_site() -> None:
+    """Exit 75 in the probe must not block promotion.
+
+    A fully dark site is accepted as fenced by witness-lease expiry; the
+    probe must not turn that documented policy back into a hard failure.
+    """
+    ok = {"--dry-run": 0, "--confirm": 0}
+    dark = {"--dry-run": 75, "--confirm": 75}
+    result, calls = _run_composite_recording(ok, dark)
+    assert result.returncode == 0, result.stderr
+    assert "home=verified canada=lease_expiry" in result.stdout
+    assert ("home", "--confirm") in calls
+
+
 def _run_home_fence(probe_stderr: str):
     with tempfile.TemporaryDirectory() as tmp:
         kubectl = Path(tmp) / "kubectl"

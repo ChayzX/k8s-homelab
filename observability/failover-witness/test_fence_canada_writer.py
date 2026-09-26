@@ -71,6 +71,35 @@ def test_fence_script_postgres_container_default_matches_authority_gate() -> Non
     assert match.group(1) == "pantrybot-canada-postgres"
 
 
+def test_fence_script_treats_a_down_docker_daemon_as_fenced() -> None:
+    """Catch a dark Docker on Canada blocking every other site's promotion.
+
+    2026-09-23: Docker Desktop was not running on Canada, so the script's
+    first `docker inspect` wrote the daemon error to stderr, which
+    $ErrorActionPreference='Stop' turned into a terminating NativeCommandError
+    and exit 1. fence-old-writers-from-oracle.sh treats any non-75 exit as a
+    hard failure, so Oracle fenced Home, failed on Canada, crashed, restarted,
+    and repeated — fencing Home every cycle while never completing a
+    promotion. No container can be writing while the daemon is unreachable,
+    so that state must report a passed fence, not an error.
+    """
+    script = (HERE / "fence-canada-writer.ps1").read_text()
+    assert "function Test-DockerDaemon" in script, (
+        "fence-canada-writer.ps1 must probe the Docker daemon before running "
+        "any docker command"
+    )
+    probe = script.index("function Test-DockerDaemon")
+    inspect = script.index("docker inspect")
+    assert probe < inspect, (
+        "the Docker daemon probe must come before the first `docker inspect`, "
+        "or an unreachable daemon still terminates the script"
+    )
+    assert "database=daemon_down" in script, (
+        "an unreachable Docker daemon must report a passed fence "
+        "(database=daemon_down), never a hard failure"
+    )
+
+
 if __name__ == "__main__":
     import sys
 

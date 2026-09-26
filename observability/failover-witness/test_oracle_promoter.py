@@ -700,3 +700,97 @@ def test_watchdog_releases_only_after_sustained_primary_loss() -> None:
     now["t"] = 50; assert not w.should_release(False)
     now["t"] = 109; assert not w.should_release(False)
     now["t"] = 110; assert w.should_release(False)
+
+
+def _function_source(name: str) -> str:
+    """Return the source of a nested function in oracle_promoter.py."""
+    import ast
+
+    source = Path(__file__).with_name("oracle_promoter.py").read_text()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.FunctionDef) and node.name == name:
+            return ast.get_source_segment(source, node) or ""
+    raise AssertionError(f"{name}() not found in oracle_promoter.py")
+
+
+def test_switch_endpoint_relabels_the_primary_pod() -> None:
+    """Catch a resumed primary coming back with no Service endpoints.
+
+    2026-09-23: the StatefulSet template labels its pods
+    pantrybot.postgres/role=standby and reapplies that whenever the pod is
+    recreated. promote() sets role=primary as its last step, but
+    validate_generation() returning True skips promote() entirely, so after a
+    fence-and-recreate the Service kept a role=primary selector that matched
+    nothing. Every application died on
+    `getaddrinfo ENOTFOUND postgres-authority-standby-home-canada...` while
+    the promoter reported the site ready. The label must be reasserted on the
+    path that runs in both cases.
+    """
+    switch_endpoint = _function_source("switch_endpoint")
+    assert "pantrybot.postgres/role=primary" in switch_endpoint, (
+        "switch_endpoint() must label the primary pod; promote() alone is "
+        "not enough because the resume path skips it"
+    )
+    assert "endpointslices" in switch_endpoint, (
+        "switch_endpoint() must verify the Service actually has endpoints: a "
+        "selector matching nothing looks healthy until the apps fail to "
+        "resolve it"
+    )
+
+
+def test_promote_still_labels_the_primary_pod() -> None:
+    """The label on the promote path is deliberate redundancy, not dead code."""
+    assert "pantrybot.postgres/role=primary" in _function_source("promote")
+
+
+def test_resume_reanchors_the_receipt_to_the_granted_epoch() -> None:
+    """Catch the one-epoch resume window being eaten by our own restarts.
+
+    2026-09-23: may_resume tolerates exactly prior+1, which proves no other
+    site held authority in between. But every controller restart acquires the
+    lease again and bumps the witness epoch, so one failure after a successful
+    validate_generation pushed the next attempt to prior+2 and foreclosed the
+    resume path for good. Home sat at epoch 102 while the witness was issuing
+    105. Re-anchoring on an epoch that already satisfied may_resume cannot
+    widen the window, it only stops the loop from consuming it.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "activation.json"
+        journal = ActivationJournal(path, site="home")
+        journal.record(102, "7687975437720940591", "active")
+
+        # The tolerated next grant resumes...
+        assert journal.may_resume(103, "7687975437720940591")
+        # ...and after re-anchoring, the grant after that still resumes.
+        journal.record(103, "7687975437720940591", "active")
+        assert journal.may_resume(104, "7687975437720940591")
+        # Without re-anchoring this is the failure that stranded Home.
+        journal.record(102, "7687975437720940591", "active")
+        assert not journal.may_resume(104, "7687975437720940591")
+
+
+def test_resume_refusal_names_the_receipt_and_the_granted_epoch() -> None:
+    """The original message said nothing an operator could act on.
+
+    `already-primary target has no matching durable activation receipt` gave
+    no epoch, no phase and no identity, so diagnosing the 2026-09-23 outage
+    meant reading the journal file on the host by hand.
+    """
+    source = _function_source("validate_generation")
+    for fragment in ("granted epoch", "receipt epoch", "phase", "live identity"):
+        assert fragment in source, f"refusal message must report {fragment!r}"
+
+
+def test_a_different_lineage_never_resumes() -> None:
+    """Re-anchoring must not let a foreign database identity resume."""
+    with tempfile.TemporaryDirectory() as tmp:
+        journal = ActivationJournal(Path(tmp) / "activation.json", site="home")
+        journal.record(102, "7687975437720940591", "active")
+        assert not journal.may_resume(103, "7684020274255130671")
+
+
+def test_another_sites_receipt_never_resumes() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "activation.json"
+        ActivationJournal(path, site="oracle").record(102, "7687975437720940591", "active")
+        assert not ActivationJournal(path, site="home").may_resume(103, "7687975437720940591")

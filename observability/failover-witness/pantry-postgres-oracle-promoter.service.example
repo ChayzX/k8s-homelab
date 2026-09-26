@@ -2,6 +2,16 @@
 Description=PantryBot Oracle PostgreSQL promotion controller
 Wants=network-online.target
 After=network-online.target k3s.service failover-witness-oracle-tunnel.service
+# Circuit breaker (#387). A promotion that fails part-way has usually already
+# fenced the other sites, so an unbounded restart loop re-fences a healthy
+# cluster every cycle and burns a witness epoch each pass - exactly what kept
+# PantryBot down for eleven hours on 2026-09-23. systemd's defaults
+# (5 starts / 10s) never trigger here because one failing cycle takes about a
+# minute. Five failures inside half an hour means this promoter is not going
+# to succeed on the sixth: stop, stay failed, and let the external monitor
+# alert. Clear with `systemctl reset-failed` once the cause is fixed.
+StartLimitIntervalSec=1800
+StartLimitBurst=5
 
 [Service]
 Type=simple
