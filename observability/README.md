@@ -226,10 +226,9 @@ Facts that shape how you use this:
   at Grafana startup, not watched. After changing either this provisioning
   file or the `opsbot-alert-token` Secret, `kubectl -n observability
   rollout restart deploy/grafana`.
-- **`$` must be doubled in the alerting file.** Grafana env-interpolates every
-  provisioned string, so annotation templates are written
-  `{{ $$labels.job }}` (stored as `{{ $labels.job }}`); a bare `$labels`
-  silently becomes an empty string.
+- **Do not `$$`-escape rule annotations.** Grafana env-interpolates
+  contact-point settings (`$OPSBOT_ALERT_TOKEN`) but stores rule annotations
+  raw, so write `{{ $labels.job }}`; `$$labels` breaks the template.
 - **Policy tree is replaced wholesale.** The `policies` block in
   `alerting.yaml` is the complete tree; any policy you later create in the UI
   is overwritten at the next Grafana restart. Keep editing the provisioning

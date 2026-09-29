@@ -37,9 +37,9 @@ assert "type: discord" not in grafana
 assert "http://opsbot-health.opsbot.svc.cluster.local:9091/alerts/grafana" in grafana
 assert "authorization_credentials: $OPSBOT_ALERT_TOKEN" in grafana
 assert "receiver: opsbot-dm" in grafana
-# Grafana env-interpolates provisioned strings: `$labels` must be `$$labels`.
-import re
-assert not re.search(r"(?<!\$)\$labels", grafana), "unescaped $labels in alerting provisioning"
+# Rule annotations are stored raw (not env-interpolated): `$$labels` would
+# reach the template engine literally and fail with "bad character U+0024".
+assert "$$labels" not in grafana, "rule annotations must use $labels, not $$labels"
 
 # The Grafana Deployment actually mounts the alerting provisioning and has
 # the token env (required secretKeyRef).
