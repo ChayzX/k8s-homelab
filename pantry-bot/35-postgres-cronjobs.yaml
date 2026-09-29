@@ -1,0 +1,240 @@
+# PantryBot PostgreSQL maintenance CronJobs on Oracle: nightly dump to R2 and
+# weekly ANALYZE.
+#
+# These two objects were applied to the Oracle cluster from
+# pantry-bot/k8s/ha/base/*-cronjob.yaml, which was deleted from the pantry-bot
+# repo when the HA mesh was removed (pantry-bot 50e656c3), so until now no repo
+# owned them. This file codifies the live objects (taken from their
+# last-applied configuration) plus the fix for ChayzX/pantry-bot#348.
+#
+# #348: the first attempt of both jobs exited 2 within the same second the
+# container started, every run, and only the restartPolicy: OnFailure retry
+# succeeded. Exit 2 is psql's "could not connect" status, and psql is the first
+# command in both scripts under `set -eu`, so the container died silently on
+# the first connection attempt (pod network / Postgres not yet reachable at
+# t+0s) with no message. Both scripts now:
+#   * wait up to ~60s for the server with pg_isready (output suppressed so the
+#     host in the connection URL is not logged), and
+#   * record the current step and print "FAILED (exit N) during step: ..." on
+#     any failure, so the cause is visible in the logs.
+# The backup/verify logic is otherwise unchanged.
+#
+# Apply ONLY these two objects, after `kubectl diff`:
+#   kubectl -n pantry-bot diff  -f pantry-bot/35-postgres-cronjobs.yaml
+#   kubectl -n pantry-bot apply -f pantry-bot/35-postgres-cronjobs.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: postgres-backup
+    app.kubernetes.io/part-of: pantry-bot
+spec:
+  schedule: "10 5 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: postgres-backup
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: OnFailure
+          initContainers:
+            - name: dump
+              image: postgres:16-alpine
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  step="start"
+                  trap 'rc=$?; if [ "$rc" -ne 0 ]; then echo "FAILED (exit $rc) during step: $step" >&2; fi' EXIT
+                  # Wait for PostgreSQL. Exit 2 in the same second the container
+                  # started (#348) was psql failing its first connection before
+                  # the network/database was reachable. Bounded: 30 x 2s = 60s.
+                  step="wait for postgres (pg_isready, max 60s)"
+                  ready=""
+                  i=0
+                  while [ "$i" -lt 30 ]; do
+                    if pg_isready -d "$PANTRY_DATABASE_URL" -t 2 >/dev/null 2>&1; then
+                      ready=1
+                      break
+                    fi
+                    i=$((i + 1))
+                    echo "postgres not ready yet (attempt $i/30), retrying in 2s"
+                    sleep 2
+                  done
+                  if [ -z "$ready" ]; then
+                    echo "postgres did not become ready within 60s" >&2
+                    exit 1
+                  fi
+                  echo "postgres ready after $i failed attempt(s)"
+                  # Refuse to dump a replica. A backup taken from a standby
+                  # that has fallen behind, or been promoted by accident, is
+                  # worse than none because it looks valid.
+                  step="check pg_is_in_recovery"
+                  recovery=$(psql "$PANTRY_DATABASE_URL" -AtX -c 'SELECT pg_is_in_recovery()')
+                  if [ "$recovery" != "f" ]; then
+                    echo "refusing to back up: PANTRY_DATABASE_URL points at a replica (pg_is_in_recovery=$recovery)" >&2
+                    exit 1
+                  fi
+                  step="pg_dump"
+                  stamp=$(date -u +%Y%m%dT%H%M%SZ)
+                  out="/work/pantry-${stamp}.dump.gz"
+                  pg_dump "$PANTRY_DATABASE_URL" --format=custom | gzip -c > "$out"
+                  # Verify what was written, rather than trusting the exit
+                  # status of a pipeline.
+                  step="verify dump (gzip -t, size check)"
+                  gzip -t "$out"
+                  size=$(stat -c '%s' "$out")
+                  echo "wrote $out ($size bytes)"
+                  # The pantry database is ~26 MB and compresses to roughly
+                  # 1 MB. A dump far below that means pg_dump produced a
+                  # near-empty file and exited cleanly, which is exactly the
+                  # failure a size check exists to catch.
+                  if [ "$size" -lt 200000 ]; then
+                    echo "refusing to upload: dump is only $size bytes, expected >200000" >&2
+                    exit 1
+                  fi
+                  echo "$out" > /work/name
+              env:
+                - name: PANTRY_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: pantry-bot-platform
+                      key: PANTRY_DATABASE_URL
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  memory: 256Mi
+              volumeMounts:
+                - name: work
+                  mountPath: /work
+          containers:
+            - name: upload
+              image: rclone/rclone:1.68
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  src=$(cat /work/name)
+                  base=$(basename "$src")
+                  dest="r2:pantry-bot-backups/recovery/pantry-bot"
+                  rclone copyto "$src" "$dest/$base" --s3-no-head --stats-one-line
+                  # Read it back. An upload that reports success but leaves no
+                  # object is the failure mode that makes people trust a
+                  # backup they do not have.
+                  if [ -z "$(rclone lsf "$dest/$base")" ]; then
+                    echo "upload reported success but $dest/$base is not there" >&2
+                    exit 1
+                  fi
+                  echo "verified $dest/$base"
+                  # Same 30-day retention as the Authentik dumps.
+                  rclone delete "$dest" --min-age 30d
+              env:
+                - name: RCLONE_CONFIG_R2_TYPE
+                  value: s3
+                - name: RCLONE_CONFIG_R2_PROVIDER
+                  value: Cloudflare
+                - name: RCLONE_CONFIG_R2_ENDPOINT
+                  value: https://0d22ee71e5473142b1678cb7005f80f8.r2.cloudflarestorage.com
+                - name: RCLONE_CONFIG_R2_NO_CHECK_BUCKET
+                  value: "true"
+                - name: RCLONE_CONFIG_R2_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: pantry-bot-litestream
+                      key: LITESTREAM_ACCESS_KEY_ID
+                - name: RCLONE_CONFIG_R2_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: pantry-bot-litestream
+                      key: LITESTREAM_SECRET_ACCESS_KEY
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 64Mi
+                limits:
+                  memory: 256Mi
+              volumeMounts:
+                - name: work
+                  mountPath: /work
+          volumes:
+            - name: work
+              emptyDir: {}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-analyze
+  namespace: pantry-bot
+  labels:
+    app.kubernetes.io/name: postgres-analyze
+    app.kubernetes.io/part-of: pantry-bot
+spec:
+  schedule: "23 4 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: postgres-analyze
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: OnFailure
+          containers:
+            - name: analyze
+              image: postgres:17.10-bookworm
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  step="start"
+                  trap 'rc=$?; if [ "$rc" -ne 0 ]; then echo "FAILED (exit $rc) during step: $step" >&2; fi' EXIT
+                  # Same startup race as postgres-backup (#348). Bounded: 30 x 2s = 60s.
+                  step="wait for postgres (pg_isready, max 60s)"
+                  ready=""
+                  i=0
+                  while [ "$i" -lt 30 ]; do
+                    if pg_isready -d "$PANTRY_DATABASE_URL" -t 2 >/dev/null 2>&1; then
+                      ready=1
+                      break
+                    fi
+                    i=$((i + 1))
+                    echo "postgres not ready yet (attempt $i/30), retrying in 2s"
+                    sleep 2
+                  done
+                  if [ -z "$ready" ]; then
+                    echo "postgres did not become ready within 60s" >&2
+                    exit 1
+                  fi
+                  echo "postgres ready after $i failed attempt(s)"
+                  step="ANALYZE"
+                  psql "$PANTRY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "ANALYZE;"
+                  step="count tables without statistics"
+                  psql "$PANTRY_DATABASE_URL" -v ON_ERROR_STOP=1 -AtX -c \
+                    "SELECT count(*) || ' tables still without statistics' FROM pg_stat_user_tables WHERE last_analyze IS NULL AND last_autoanalyze IS NULL;"
+              env:
+                - name: PANTRY_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: pantry-bot-platform
+                      key: PANTRY_DATABASE_URL
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 128Mi
