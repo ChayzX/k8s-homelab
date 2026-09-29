@@ -30,7 +30,7 @@ env:
 jobs:
   publish-image:
     name: 1 - Build and publish Minecraft image
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab-ci]
     permissions:
       contents: read
       packages: write
@@ -112,7 +112,7 @@ jobs:
   apply-release:
     name: 2 - Apply image release (merge deploy)
     needs: publish-image
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab-ci]
     steps:
       - name: Connect to cluster and set image
         env:
@@ -136,7 +136,7 @@ jobs:
   restart:
     name: 3 - Restart Minecraft pod (merge deploy)
     needs: apply-release
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab-ci]
     steps:
       - name: Restart deployment
         env:
@@ -157,7 +157,7 @@ jobs:
   verify:
     name: 4 - Verify Minecraft rollout and health (merge deploy)
     needs: [publish-image, restart]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab-ci]
     steps:
       - name: Verify ready pod and image
         env:
@@ -186,7 +186,7 @@ jobs:
     name: Roll back failed release
     needs: [apply-release, restart, verify]
     if: ${{ always() && needs.verify.result == 'failure' }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab-ci]
     steps:
       - name: Roll back to previous ReplicaSet
         env:
