@@ -11,8 +11,9 @@ Deploys **opsbot**: a standalone Discord bot giving remote, phone-friendly
 control over specific homelab workloads — restart/status checks on
 allowlisted Deployments, and Minecraft RCON console
 access — entirely through Discord's own mobile app. The bot makes only an
-OUTBOUND connection to Discord's gateway; there is no new inbound network
-exposure of any kind.
+OUTBOUND connection to Discord's gateway. Its only listener is the in-cluster
+ClusterIP `:9091` (probes plus the Bearer-authenticated Grafana alert relay
+below); nothing is exposed outside the cluster.
 
 Before opening that gateway, the process acquires a site-scoped lease from
 the neutral failover witness (`opsbot-witness`). It renews the lease while
@@ -63,13 +64,35 @@ kubectl apply -f 20-rbac.yaml
 # 3. secrets (imperative, never in git) — see SECRETS.md
 #    creates: opsbot-discord (DISCORD_BOT_TOKEN, DISCORD_USER_ID),
 #    opsbot-github (GITHUB_TOKEN — fine-grained PAT, /bug),
+#    opsbot-alert-token (OPSBOT_ALERT_TOKEN — Grafana alert relay),
 #    ghcr-pull-secret (private GHCR image pull)
 
-# 4. workload — will not come up until all three secrets exist AND
+# 4. workload — will not come up until all of those secrets exist AND
 #    ghcr.io/chayzx/opsbot:latest has been published (see
 #    .github/workflows/opsbot-deploy.yml)
 kubectl apply -f 40-deployment.yaml
 ```
+
+## Grafana alerts as Discord DMs (`POST /alerts/grafana`)
+
+Grafana's `opsbot-dm` webhook contact point posts alert notifications to
+`http://opsbot-health.opsbot.svc.cluster.local:9091/alerts/grafana`; opsbot
+DMs each one to `DISCORD_USER_ID` with the same bot identity (no Discord
+webhook anywhere). Implementation and HTTP contract: `bot/alerts.py`.
+
+- **Auth**: `Authorization: Bearer $OPSBOT_ALERT_TOKEN`, constant-time
+  compare; 401 otherwise. Token Secret `opsbot-alert-token` — see SECRETS.md.
+- **Limits**: body > 64 KiB is 413; non-JSON / not a Grafana payload is 400.
+- **Rate limit**: at most 5 DMs per 60 s. Excess notifications get 202 and
+  are summarised in one `[COALESCED]` DM when the window frees up.
+- **Never silent**: 503 whenever this pod can't deliver (token unset, site
+  lease not held, Discord not connected, DM failed/timed out), so Grafana
+  retries.
+- **Why port 9091**: the `opsbot-health` Service only has endpoints while
+  the pod is Ready, and Ready means "lease held and Discord connected" —
+  exactly when a DM can be sent. A separate always-routable port would only
+  turn "connection refused" into an explicit 503; same retry outcome, one
+  more port/Service to maintain.
 
 ## `/bug` — bug issues from Discord (k8s-homelab-cq8)
 

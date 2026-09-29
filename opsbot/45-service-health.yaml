@@ -15,7 +15,17 @@
 # when the bot is NotReady or dead. Keep port, name, and selector in sync
 # with 40-deployment.yaml (containerPort 9091, named "health").
 #
-# ClusterIP, not NodePort/LoadBalancer: health-checking is an internal concern.
+# Grafana alert relay: the same Service/port also carries
+#
+#     POST http://opsbot-health.opsbot.svc.cluster.local:9091/alerts/grafana
+#
+# (Bearer-token authenticated, see bot/alerts.py and SECRETS.md). Riding on
+# the Ready-only endpoints is deliberate: Ready == holds the site lease and is
+# connected to Discord, i.e. exactly when a DM can be delivered. While the pod
+# is NotReady Grafana's webhook fails to connect and Grafana retries.
+#
+# ClusterIP, not NodePort/LoadBalancer: health-checking and alert delivery are
+# internal concerns.
 apiVersion: v1
 kind: Service
 metadata:

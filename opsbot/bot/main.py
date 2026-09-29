@@ -20,6 +20,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+import alerts
 import gh_ops
 import health
 import k8s_ops
@@ -411,6 +412,25 @@ async def bug(interaction: discord.Interaction, bot: str, what: str) -> None:
     _audit(interaction, True, result=f"filed {issue_url}")
 
 
+async def _send_owner_dm(text: str) -> None:
+    """DM every DISCORD_USER_ID (one today) -- used by the Grafana relay."""
+    if not ALLOWLIST:
+        raise alerts.DeliveryError("DISCORD_USER_ID is not set")
+    for user_id in sorted(ALLOWLIST):
+        user = bot.get_user(user_id) or await bot.fetch_user(user_id)
+        await user.send(text, allowed_mentions=discord.AllowedMentions.none())
+
+
+def _can_deliver_alerts() -> bool:
+    """Only the lease holder with a live Discord session may DM."""
+    return (
+        OWNERSHIP is not None
+        and OWNERSHIP.is_valid()
+        and bot.is_ready()
+        and not bot.is_closed()
+    )
+
+
 @bot.event
 async def setup_hook() -> None:
     assert OWNERSHIP is not None
@@ -423,6 +443,7 @@ async def setup_hook() -> None:
     bot.tree.add_command(bug)
     await bot.tree.sync()
     print("[opsbot] slash commands synced")
+    health.set_alert_relay(alerts.AlertRelay.from_env(_send_owner_dm, _can_deliver_alerts))
     await health.start()
 
 

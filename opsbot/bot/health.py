@@ -10,6 +10,15 @@ discord.py, so this adds no new pip package.
 /health -> 200 once logged into Discord (on_ready fired), else 503
            "starting". Readiness: don't route/consider-up until actually
            connected. (alias: /healthz)
+POST /alerts/grafana -> Grafana webhook contact point -> owner DM
+           (alerts.py). Served on this same port on purpose: the Service
+           `opsbot-health` only has endpoints while this pod is Ready, and
+           Ready means "holds the site lease AND is connected to Discord",
+           which is exactly when a DM can be delivered. While NotReady Grafana
+           gets a connection failure and retries -- the same outcome a 503
+           from a separate always-routable port would give, without a second
+           Service or port. The standby server (start_background) serves the
+           route too but has no relay registered, so it answers 503.
 """
 from __future__ import annotations
 
@@ -19,6 +28,7 @@ import threading
 from aiohttp import web
 
 _ready = False
+_alert_relay = None
 
 
 def mark_ready() -> None:
@@ -30,6 +40,19 @@ def mark_not_ready() -> None:
     """Withdraw readiness immediately when ownership or runtime is fenced."""
     global _ready
     _ready = False
+
+
+def set_alert_relay(relay) -> None:
+    """Register the alerts.AlertRelay that serves POST /alerts/grafana."""
+    global _alert_relay
+    _alert_relay = relay
+
+
+async def _alerts_grafana(request: web.Request) -> web.Response:
+    relay = _alert_relay
+    if relay is None:
+        return web.json_response({"error": "alert relay not active on this pod"}, status=503)
+    return await relay.handle(request)
 
 
 async def _live(_request: web.Request) -> web.Response:
@@ -49,6 +72,7 @@ def _application() -> web.Application:
             web.get("/live", _live),
             web.get("/health", _health),
             web.get("/healthz", _health),
+            web.post("/alerts/grafana", _alerts_grafana),
         ]
     )
     return app
