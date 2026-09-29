@@ -30,7 +30,7 @@ concurrency:
 jobs:
   apply-manifests:
     name: 1 - Apply MCP server and tunnel connector manifests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab-ci]
     steps:
       - uses: actions/checkout@v5
       - name: Connect to cluster
@@ -57,7 +57,7 @@ jobs:
   restart:
     name: 2 - Roll both Deployments
     needs: apply-manifests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab-ci]
     outputs:
       previous_pod_server: ${{ steps.restart.outputs.previous_pod_server }}
       previous_pod_tunnel: ${{ steps.restart.outputs.previous_pod_tunnel }}
@@ -91,7 +91,7 @@ jobs:
   verify:
     name: 3 - Verify rollout and pod health
     needs: restart
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab-ci]
     steps:
       - name: Connect and verify
         env:

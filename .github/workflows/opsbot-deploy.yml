@@ -29,7 +29,7 @@ concurrency:
 jobs:
   publish-image:
     name: 1 - Build and publish (merge deploy)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab-ci]
     permissions:
       contents: read
       packages: write
@@ -83,7 +83,7 @@ jobs:
   apply-manifest:
     name: 2 - Apply deployment manifest (merge deploy)
     needs: publish-image
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab-ci]
     steps:
       - uses: actions/checkout@v5
       - name: Connect to cluster
@@ -108,7 +108,7 @@ jobs:
   restart-opsbot:
     name: 3 - Deploy image and restart pod (merge deploy)
     needs: apply-manifest
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab-ci]
     outputs:
       previous_pod: ${{ steps.restart.outputs.previous_pod }}
     steps:
@@ -141,7 +141,7 @@ jobs:
   verify-opsbot:
     name: 4 - Verify rollout and pod health (merge deploy)
     needs: restart-opsbot
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab-ci]
     steps:
       - name: Connect and verify pod health
         env:
@@ -189,7 +189,7 @@ jobs:
     name: Roll back failed release
     needs: [apply-manifest, restart-opsbot, verify-opsbot]
     if: ${{ always() && needs.verify-opsbot.result == 'failure' }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab-ci]
     steps:
       - name: Roll back to previous ReplicaSet
         env:

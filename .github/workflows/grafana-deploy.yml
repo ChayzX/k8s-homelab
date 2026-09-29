@@ -29,7 +29,7 @@ concurrency:
 jobs:
   apply-configmap:
     name: 1 - Apply retained local dashboard ConfigMap (manual rollback only)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab-ci]
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -102,7 +102,7 @@ jobs:
   restart-grafana:
     name: 2 - Restart Grafana pod
     needs: apply-configmap
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab-ci]
     outputs:
       previous_pod: ${{ steps.restart.outputs.previous_pod }}
     steps:
@@ -155,7 +155,7 @@ jobs:
   verify-grafana:
     name: 3 - Verify rollout and pod health
     needs: restart-grafana
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab-ci]
     steps:
       # This job runs scripts/assert-kube-target.sh, so it needs the repo.
       # Without this step it failed with "No such file or directory" -- the
