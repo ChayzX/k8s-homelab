@@ -12,8 +12,8 @@
 # The alerting ConfigMap (grafana-provisioning-alerting) below is mounted
 # by grafana.yaml at /etc/grafana/provisioning/alerting. Alerting
 # provisioning files are read ONCE, at Grafana startup -- they are not
-# watched. See SECRETS.md in this directory for the Discord webhook Secret
-# that the alerting file references by env var.
+# watched. See SECRETS.md in this directory for the opsbot-alert-token
+# Secret that the alerting file references by env var.
 #
 # The DASHBOARD JSON itself is NOT here. It lives in a separate ConfigMap
 # named `grafana-dashboards`, generated from
@@ -132,20 +132,24 @@ data:
         # the source of truth, so deletion has to flow through as well.
         disableDeletion: false
 ---
-# Grafana Alerting provisioning -- Pantry-bot / Twitch-bot alerts to a
-# Discord DM.
+# Grafana Alerting provisioning -- Pantry-bot / Twitch-bot alerts to the
+# owner's Discord DMs, delivered by opsbot.
 #
 # Mounted by grafana.yaml at /etc/grafana/provisioning/alerting. Read ONCE
 # at Grafana startup (not watched): after changing this file you must
 # restart the grafana pod for it to take effect.
 #
 # What this delivers, and what it deliberately does NOT:
-#   * A Discord contact point whose webhook posts where user
-#     204282471506771971 can be pinged. The webhook URL is NOT in this
-#     repo -- it is injected from the PANTY_TWITCH_DISCORD_WEBHOOK_URL env
-#     var (Grafana interpolates $VAR in provisioning settings from the
-#     process environment; grafana.yaml sources that var from the
-#     grafana-discord-webhooks Secret). See SECRETS.md in this directory.
+#   * A `webhook` contact point (opsbot-dm) that POSTs Grafana's
+#     notification JSON to opsbot's in-cluster relay
+#     (http://opsbot-health.opsbot.svc.cluster.local:9091/alerts/grafana).
+#     opsbot DMs the owner (DISCORD_USER_ID) with its own bot identity; there
+#     is no Discord webhook. The Bearer token is NOT in this repo -- it is
+#     interpolated from the OPSBOT_ALERT_TOKEN env var, which grafana.yaml
+#     sources from the opsbot-alert-token Secret (same value as in the
+#     opsbot namespace). See SECRETS.md here and ../opsbot/SECRETS.md.
+#     opsbot answers 503 when it cannot deliver (standby/fenced, Discord
+#     down) and Grafana retries; see ../opsbot/bot/alerts.py.
 #   * A notification policy that routes pantry-bot/Twitch alert rules to
 #     that contact point IN ADDITION to the existing root receiver
 #     (continue: true), matched on the grafana_folder label (rules kept in
@@ -172,32 +176,35 @@ data:
     # pkg/services/provisioning/alerting in the Grafana source).
     apiVersion: 1
 
-    # Pantry-bot / Twitch-bot Discord contact point.
+    # Pantry-bot / Twitch-bot contact point: opsbot's DM relay.
     #
-    # The webhook URL is interpolated from the process environment at
-    # provisioning-read time (os.ExpandEnv, so the value in this file is a
-    # $VAR reference, never a real URL). If the env var is missing, the
-    # expansion is empty and Grafana's provisioning validation fails the
-    # contact point -- which is why grafana.yaml wires this env var to a
-    # REQUIRED secretKeyRef (fail-loud CreateContainerConfigError, never a
-    # silently-broken webhook). See SECRETS.md in this directory.
+    # Replaces the old `discord-pantry-twitch-dm` Discord-webhook contact
+    # point (never loaded: it needed a webhook that will not be created).
+    #
+    # authorization_credentials is interpolated from the process environment
+    # at provisioning-read time (the value here is a $VAR reference, never the
+    # token). grafana.yaml wires OPSBOT_ALERT_TOKEN to a REQUIRED
+    # secretKeyRef, so a missing Secret is a loud CreateContainerConfigError
+    # rather than a contact point that silently gets 401s.
+    #
+    # ESCAPING: every string in this file goes through Grafana's env
+    # interpolation (os.ExpandEnv), so a literal `$` must be written `$$`.
+    # That is why the rule annotations below say `{{ $$labels.job }}`:
+    # Grafana stores `{{ $labels.job }}`. A bare `$labels` would be expanded
+    # to an empty string and break the template.
     contactPoints:
       - orgId: 1
-        name: discord-pantry-twitch-dm
+        name: opsbot-dm
         receivers:
-          - uid: discord-pantry-twitch-dm
-            type: discord
+          - uid: opsbot-dm
+            type: webhook
             disableResolveMessage: false
             settings:
+              url: http://opsbot-health.opsbot.svc.cluster.local:9091/alerts/grafana
+              httpMethod: POST
+              authorization_scheme: Bearer
               # PLACEHOLDER -- resolved from the environment, not stored here.
-              url: $PANTY_TWITCH_DISCORD_WEBHOOK_URL
-              # Discord webhooks post into the channel they were created in,
-              # so to reach user 204282471506771971 the webhook should be
-              # created in a channel or DM that user is in, and this mention
-              # is what pings them there. use_embed_description stays unset
-              # (false) on purpose: Discord only pings for mentions in the
-              # main message content, not inside embeds.
-              message: '<@204282471506771971> {{ template "default.message" . }}'
+              authorization_credentials: $OPSBOT_ALERT_TOKEN
 
     # Alert rules. Evaluated by Grafana against the home Prometheus, which
     # receives the Oracle series by remote_write. Only metric and job names
@@ -224,8 +231,8 @@ data:
             labels:
               severity: critical
             annotations:
-              summary: "PantryBot {{ $labels.role }} target is down on Oracle"
-              description: "up==0 for 5m on job {{ $labels.job }} (instance {{ $labels.instance }}). Empty result (all targets up) is treated as healthy."
+              summary: "PantryBot {{ $$labels.role }} target is down on Oracle"
+              description: "up==0 for 5m on job {{ $$labels.job }} (instance {{ $$labels.instance }}). Empty result (all targets up) is treated as healthy."
             data:
               - refId: A
                 relativeTimeRange:
@@ -270,8 +277,8 @@ data:
             labels:
               severity: warning
             annotations:
-              summary: "PantryBot runtime failures on {{ $labels.job }}"
-              description: "pantry_bot_runtime_failures_total increased in the last 15m on {{ $labels.job }}. Note: the counter only exists after the first failure, and Prometheus increase() does not count a series first appearing at its initial value, so the very first failure may not fire."
+              summary: "PantryBot runtime failures on {{ $$labels.job }}"
+              description: "pantry_bot_runtime_failures_total increased in the last 15m on {{ $$labels.job }}. Note: the counter only exists after the first failure, and Prometheus increase() does not count a series first appearing at its initial value, so the very first failure may not fire."
             data:
               - refId: A
                 relativeTimeRange:
@@ -411,7 +418,7 @@ data:
     #
     # `continue: true` on each pantry/Twitch route is the "IN ADDITION to
     # the existing recipient" behaviour the card asks for: matched alerts
-    # go to the Discord DM contact point AND continue up to the root
+    # go to the opsbot DM contact point AND continue up to the root
     # receiver.
     policies:
       - orgId: 1
@@ -423,7 +430,7 @@ data:
           # Rules placed in a folder whose name matches pantry-bot / twitch
           # (Grafana labels every alert with the folder name as
           # grafana_folder).
-          - receiver: discord-pantry-twitch-dm
+          - receiver: opsbot-dm
             group_by:
               - grafana_folder
               - alertname
@@ -432,7 +439,7 @@ data:
             continue: true
           # Rules carrying an explicit app label (e.g. app="pantry-bot",
           # app="twitch") instead of a matching folder name.
-          - receiver: discord-pantry-twitch-dm
+          - receiver: opsbot-dm
             group_by:
               - grafana_folder
               - alertname

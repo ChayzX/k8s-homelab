@@ -30,6 +30,25 @@ assert "groups:" in grafana
 for uid in ("pantry-oracle-target-down", "pantry-oracle-runtime-failures", "pantry-oracle-metrics-absent"):
     assert uid in grafana, uid
 
+# Grafana delivers through opsbot's authenticated relay, not a Discord
+# webhook, and the token is only ever an env reference.
+assert "type: webhook" in grafana
+assert "type: discord" not in grafana
+assert "http://opsbot-health.opsbot.svc.cluster.local:9091/alerts/grafana" in grafana
+assert "authorization_credentials: $OPSBOT_ALERT_TOKEN" in grafana
+assert "receiver: opsbot-dm" in grafana
+# Grafana env-interpolates provisioned strings: `$labels` must be `$$labels`.
+import re
+assert not re.search(r"(?<!\$)\$labels", grafana), "unescaped $labels in alerting provisioning"
+
+# The Grafana Deployment actually mounts the alerting provisioning and has
+# the token env (required secretKeyRef).
+grafana_deploy = uncommented(ROOT / "grafana.yaml")
+assert "mountPath: /etc/grafana/provisioning/alerting" in grafana_deploy
+assert "name: grafana-provisioning-alerting" in grafana_deploy
+assert "name: OPSBOT_ALERT_TOKEN" in grafana_deploy
+assert "name: opsbot-alert-token" in grafana_deploy
+
 # The two actual evaluators expose stable identity/ownership mechanisms.
 assert "fcntl.flock" in watcher
 assert '"eventKey"' in watcher
