@@ -112,6 +112,10 @@ jobs:
     outputs:
       previous_pod: ${{ steps.restart.outputs.previous_pod }}
     steps:
+      # Needed for scripts/assert-kube-target.sh. Without it this job failed
+      # with exit 127 (2026-09-19 and 2026-09-29), AFTER apply-manifest had
+      # already rolled the Deployment to the manifest's pinned image.
+      - uses: actions/checkout@v5
       - name: Connect and restart pod
         id: restart
         env:
@@ -143,6 +147,10 @@ jobs:
     needs: restart-opsbot
     runs-on: ubuntu-latest
     steps:
+      # Needed for scripts/assert-kube-target.sh. Without it this job failed
+      # with exit 127 (2026-09-19 and 2026-09-29), AFTER apply-manifest had
+      # already rolled the Deployment to the manifest's pinned image.
+      - uses: actions/checkout@v5
       - name: Connect and verify pod health
         env:
           TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
@@ -188,9 +196,15 @@ jobs:
   rollback-on-failure:
     name: Roll back failed release
     needs: [apply-manifest, restart-opsbot, verify-opsbot]
-    if: ${{ always() && needs.verify-opsbot.result == 'failure' }}
+    # Also roll back when restart-opsbot fails: by then apply-manifest has
+    # already changed the Deployment (2026-09-29 left the pinned image live).
+    if: ${{ always() && (needs.verify-opsbot.result == 'failure' || needs.restart-opsbot.result == 'failure') }}
     runs-on: ubuntu-latest
     steps:
+      # Needed for scripts/assert-kube-target.sh. Without it this job failed
+      # with exit 127 (2026-09-19 and 2026-09-29), AFTER apply-manifest had
+      # already rolled the Deployment to the manifest's pinned image.
+      - uses: actions/checkout@v5
       - name: Roll back to previous ReplicaSet
         env:
           TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}

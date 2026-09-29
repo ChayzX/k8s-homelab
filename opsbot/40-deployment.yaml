@@ -76,11 +76,13 @@ spec:
           type: RuntimeDefault
       containers:
         - name: opsbot
-          # Immutable digest verified live on home and used for the fenced
-          # Oracle standby. This image includes resource-scoped witness
-          # acquisition and obtains the lease before opening the Discord
-          # gateway; stale replicas fail closed.
-          image: ghcr.io/chayzx/opsbot:57ed09ecfd8555d95b6b2cc8178c99378cf1a5cf@sha256:ff7d980afe8eaa38b01d58c00cc7eeafcdb535e5210544cbae16d69869581211
+          # Immutable multi-arch digest (amd64+arm64). Built from #400 (the
+          # Grafana alert relay, bot/alerts.py) on top of the resource-scoped
+          # witness acquisition: the lease is obtained before the Discord
+          # gateway opens and stale replicas fail closed. apply-manifest in
+          # opsbot-deploy.yml rolls out THIS image before `set image`, so a
+          # stale pin here is a real (if brief) downgrade -- keep it current.
+          image: ghcr.io/chayzx/opsbot:c8a61977cd4fd52444ad58bad480be80b41fe159@sha256:31bb773bb3bfdfd75a70ccaf5c10050c0058ef250ac69b04fc40867bb8cb8b1f
           # Keep the pull policy explicit while the manifest digest provides
           # immutable content and multi-architecture resolution.
           imagePullPolicy: Always
