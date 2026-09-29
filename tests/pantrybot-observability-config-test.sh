@@ -21,6 +21,15 @@ for config in "${configs[@]}"; do
 
   for role in "${pantry_roles[@]}"; do
     job="pantry-bot-${role}${suffix}"
+    if [[ "$site" == home ]]; then
+      # PantryBot no longer runs on the home cluster (ChayzX/pantry-bot#316).
+      # The home scrape jobs were permanently down (#346); they must stay gone.
+      ! grep -q "^      - job_name: ${job}$" "$config" || {
+        echo "Stale home Pantry Bot scrape job ${job} found in $config" >&2
+        exit 1
+      }
+      continue
+    fi
     grep -q "^      - job_name: ${job}$" "$config" || {
       echo "Missing Pantry Bot role ${job} in $config" >&2
       exit 1
@@ -35,6 +44,13 @@ for config in "${configs[@]}"; do
       exit 1
     }
   done
+
+  if [[ "$site" == home ]]; then
+    ! grep -q 'pantry-bot\.svc\.cluster\.local' "$config" || {
+      echo "Home Prometheus must not target the (nonexistent) pantry-bot namespace: $config" >&2
+      exit 1
+    }
+  fi
 
   # The failover witness was retired with the three-site design on 2026-09-25
   # (ChayzX/pantry-bot#315). This assertion is inverted deliberately: it used to

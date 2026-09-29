@@ -196,12 +196,16 @@ ConfigMap (mounted by `grafana.yaml` at
 
 Facts that shape how you use this:
 
-- **Grafana ships no alert rules today.** The live grafana.db (inspected
-  2026-08-12) has zero alert rules and only the stock placeholder contact
-  point (`grafana-default-email`). There were no Twitch rules to reproduce,
-  so the provisioning file deliberately provisions no rules. Create rules in
-  the UI and keep them in a pantry-bot/Twitch folder (or add an
-  `app="pantry-bot"` label) and this policy DMs 204282471506771971.
+- **PantryBot alert rules are provisioned** (ChayzX/pantry-bot#346), group
+  `pantry-bot-oracle` in folder `pantry-bot`: Oracle scrape target down (5m),
+  `increase(pantry_bot_runtime_failures_total[15m]) > 0`, PantryBot metrics
+  absent (10m), and Postgres backup older than 26h
+  (`kube_cronjob_status_last_successful_time`). Prometheus itself has no
+  Alertmanager or rule files, so Grafana is the only evaluator. The folder
+  name routes them to the Discord DM via the policy below; do not also add an
+  `app` label, which would match the second route and duplicate the DM. No
+  outbox-backlog / dead_letter metric is exported today, so none is alerted on.
+  Other rules can still be created in the UI in a pantry-bot/Twitch folder.
 - **The current Pantry Twitch-bot alerts come from elsewhere.** The host
   `k3s-watcher` systemd service
   (`/home/chase/.config/systemd/user/k3s-watcher.service` →
