@@ -187,11 +187,11 @@ data:
     # secretKeyRef, so a missing Secret is a loud CreateContainerConfigError
     # rather than a contact point that silently gets 401s.
     #
-    # ESCAPING: every string in this file goes through Grafana's env
-    # interpolation (os.ExpandEnv), so a literal `$` must be written `$$`.
-    # That is why the rule annotations below say `{{ $$labels.job }}`:
-    # Grafana stores `{{ $labels.job }}`. A bare `$labels` would be expanded
-    # to an empty string and break the template.
+    # `$` in rule annotations: write `{{ $labels.job }}` as-is. Grafana
+    # interpolates env vars in contact-point settings (that is how
+    # $OPSBOT_ALERT_TOKEN resolves) but stores rule annotations RAW; a `$$`
+    # escape there is stored literally and breaks the template ("bad
+    # character U+0024"), as observed live on 2026-09-29.
     contactPoints:
       - orgId: 1
         name: opsbot-dm
@@ -231,8 +231,8 @@ data:
             labels:
               severity: critical
             annotations:
-              summary: "PantryBot {{ $$labels.role }} target is down on Oracle"
-              description: "up==0 for 5m on job {{ $$labels.job }} (instance {{ $$labels.instance }}). Empty result (all targets up) is treated as healthy."
+              summary: "PantryBot {{ $labels.role }} target is down on Oracle"
+              description: "up==0 for 5m on job {{ $labels.job }} (instance {{ $labels.instance }}). Empty result (all targets up) is treated as healthy."
             data:
               - refId: A
                 relativeTimeRange:
@@ -277,8 +277,8 @@ data:
             labels:
               severity: warning
             annotations:
-              summary: "PantryBot runtime failures on {{ $$labels.job }}"
-              description: "pantry_bot_runtime_failures_total increased in the last 15m on {{ $$labels.job }}. Note: the counter only exists after the first failure, and Prometheus increase() does not count a series first appearing at its initial value, so the very first failure may not fire."
+              summary: "PantryBot runtime failures on {{ $labels.job }}"
+              description: "pantry_bot_runtime_failures_total increased in the last 15m on {{ $labels.job }}. Note: the counter only exists after the first failure, and Prometheus increase() does not count a series first appearing at its initial value, so the very first failure may not fire."
             data:
               - refId: A
                 relativeTimeRange:
