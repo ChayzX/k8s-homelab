@@ -26,7 +26,7 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py gh_ops.py health.py k8s_ops.py ownership.py util.py _operations_contract.py ./
+COPY main.py alerts.py gh_ops.py health.py k8s_ops.py ownership.py util.py _operations_contract.py ./
 
 # uid/gid 1000 to match ../40-deployment.yaml's securityContext
 # (runAsNonRoot, runAsUser: 1000, runAsGroup: 1000) -- python:*-slim has no
@@ -38,8 +38,9 @@ RUN groupadd --gid 1000 opsbot \
 
 USER 1000:1000
 
-# No listening socket, no HTTP endpoint -- this is a Discord gateway client
-# (outbound only), same reasoning as ../40-deployment.yaml's "no probes"
-# comment. Nothing to EXPOSE.
+# Discord is outbound-only. The only listener is health.py's in-cluster
+# :9091 (probes + the authenticated Grafana alert relay, alerts.py), reached
+# through the ClusterIP Service in ../45-service-health.yaml.
+EXPOSE 9091
 
 ENTRYPOINT ["python3", "main.py"]

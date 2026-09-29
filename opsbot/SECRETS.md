@@ -69,6 +69,61 @@ Acquire returns `{site, epoch, expires_at, token}`; a 409 or any renewal
 failure fences Opsbot. The bot accepts only a lease whose returned `site`
 matches `OPSBOT_SITE`.
 
+## `opsbot-alert-token` — Grafana -> opsbot alert relay bearer token
+
+`POST /alerts/grafana` (`bot/alerts.py`) only accepts requests carrying
+`Authorization: Bearer <token>`, compared in constant time against
+`OPSBOT_ALERT_TOKEN`. Grafana's `opsbot-dm` webhook contact point
+(`../observability/grafana-provisioning.yaml`) sends that header. The SAME
+value therefore lives in a Secret named `opsbot-alert-token` (key `token`) in
+**two** namespaces: `opsbot` (read by this Deployment) and `observability`
+(read by Grafana). It is a random shared secret, not a Discord or Grafana
+credential — never reuse another token here.
+
+Created 2026-09-29 on minecraftmachine without the value ever being printed,
+written to disk, or placed on a command line: generated straight into the
+opsbot Secret, then copied pipe-to-pipe into observability.
+
+```bash
+openssl rand -hex 32 | tr -d '\n' \
+  | kubectl -n opsbot create secret generic opsbot-alert-token --from-file=token=/dev/stdin
+kubectl -n opsbot get secret opsbot-alert-token -o jsonpath='{.data.token}' | base64 -d \
+  | kubectl -n observability create secret generic opsbot-alert-token --from-file=token=/dev/stdin
+```
+
+Verify they match without revealing either value (compare hashes only):
+
+```bash
+for ns in opsbot observability; do
+  kubectl -n "$ns" get secret opsbot-alert-token -o jsonpath='{.data.token}' | sha256sum
+done
+```
+
+### Rotating
+
+Both readers load the value at startup, so rotate both Secrets, then restart
+opsbot, then Grafana. Between the two restarts Grafana's webhook gets 401s and
+retries; nothing is lost as long as Grafana is restarted within a few minutes.
+
+```bash
+openssl rand -hex 32 | tr -d '\n' \
+  | kubectl -n opsbot create secret generic opsbot-alert-token --from-file=token=/dev/stdin \
+      --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n opsbot get secret opsbot-alert-token -o jsonpath='{.data.token}' | base64 -d \
+  | kubectl -n observability create secret generic opsbot-alert-token --from-file=token=/dev/stdin \
+      --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n opsbot rollout restart deploy/opsbot
+kubectl -n observability rollout restart deploy/grafana
+```
+
+(The `--dry-run=client -o yaml` output goes straight into `kubectl apply`'s
+stdin; never redirect it to a file or terminal.) If the Secret is missing, the
+opsbot pod sits in `CreateContainerConfigError` (required `secretKeyRef`) —
+the intended loud failure. The Oracle standby does not need it: Grafana only
+reaches the home Service, and a pod without the token answers 503.
+
+---
+
 ## `ghcr-pull-secret` — private GHCR access
 
 `ghcr.io/chayzx/opsbot` is a **private** package, same as pantry-bot's. This
@@ -161,8 +216,8 @@ grained PAT above (`kubectl -n opsbot delete secret opsbot-github`).
 ## Checklist before applying `40-deployment.yaml`
 
 ```bash
-kubectl -n opsbot get secret opsbot-discord opsbot-witness ghcr-pull-secret opsbot-github
+kubectl -n opsbot get secret opsbot-discord opsbot-witness ghcr-pull-secret opsbot-github opsbot-alert-token
 ```
 
-All four must exist. Never commit them, never `kubectl get -o yaml` them into a
+All five must exist. Never commit them, never `kubectl get -o yaml` them into a
 paste.

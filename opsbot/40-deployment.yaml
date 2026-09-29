@@ -127,6 +127,19 @@ spec:
                   key: OPSBOT_WITNESS_SECRET
             - name: OPSBOT_WITNESS_RESOURCE
               value: opsbot
+            # Bearer token for POST /alerts/grafana (bot/alerts.py): Grafana's
+            # webhook contact point sends alerts here and opsbot DMs them to
+            # DISCORD_USER_ID. Required: the same value lives in the
+            # `opsbot-alert-token` Secret in BOTH opsbot and observability
+            # namespaces -- see SECRETS.md for creation and rotation.
+            - name: OPSBOT_ALERT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: opsbot-alert-token
+                  key: token
+          # :9091 serves the probes below AND the authenticated Grafana
+          # alert relay (POST /alerts/grafana). Only reachable in-cluster via
+          # the ClusterIP Service in 45-service-health.yaml.
           ports:
             - name: health
               containerPort: 9091
