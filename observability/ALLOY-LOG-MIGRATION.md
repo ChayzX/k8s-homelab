@@ -6,8 +6,8 @@ Alloy now runs as a per-node DaemonSet on MinecraftMachine and Oracle. It tails 
 - Oracle: `http://100.84.89.87:31100/loki/api/v1/push`
 
 The previous log collector is retired and has been removed from both live
-clusters. Alloy is the active collector and currently writes only to self-hosted Loki; Grafana Cloud
-log and metrics forwarding remains disabled. The Windows Alloy Cloudflare
+clusters. Alloy is the active collector and writes only to self-hosted Loki. Grafana Cloud is no longer
+used. The Windows Alloy Cloudflare
 metrics tunnel is scaled to zero until a self-hosted metrics endpoint is
 selected.
 

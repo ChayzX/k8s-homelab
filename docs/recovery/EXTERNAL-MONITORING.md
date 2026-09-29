@@ -1,3 +1,5 @@
+> **Historical:** describes the retired multi-site / Grafana Cloud setup (PantryBot home, Canada and failover topology; Grafana Cloud). Current state: PantryBot runs only on the Oracle node (single-site since 2026-09-25) with self-hosted Grafana/Prometheus/Loki in the `observability` namespace. Body left unchanged as a dated record.
+
 # External Monitoring Design
 
 Run monitoring outside `minecraftmachine`, preferably on Oracle or GCP. It must continue when the home cluster, CoreDNS, Authentik, local Grafana, and host watcher are unavailable. The first implementation is on the GCP VM.

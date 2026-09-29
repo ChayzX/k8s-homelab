@@ -103,7 +103,7 @@ Auth). **Do not** attach the Authentik outpost/IdP policy used by
 exists to avoid (see `mcp-grafana-cloudflared.yaml`'s header for the full
 reasoning: Authentik's outpost redirects unauthenticated requests to a login
 page, which breaks a Bearer-token MCP client the same way it broke the
-Grafana Cloud MCP connector).
+earlier OAuth-based hosted MCP connector).
 
 If your MCP client can't be configured to send the
 `CF-Access-Client-Id`/`CF-Access-Client-Secret` headers a Service Token

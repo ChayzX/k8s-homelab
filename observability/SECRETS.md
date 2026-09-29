@@ -12,7 +12,8 @@ applied. A Deployment whose Secret does not exist yet will sit in
 
 The alerting ConfigMap still contains the Discord contact-point definition,
 but it is currently not mounted by the Grafana Deployment because the Secret
-was absent during the Grafana Cloud migration. Existing alert state remains
+was absent when the earlier (since abandoned) Grafana Cloud migration was
+attempted. Existing alert state remains
 in Grafana's database; this Secret is needed before re-enabling that
 provisioner.
 
@@ -70,61 +71,15 @@ kubectl -n observability create secret generic grafana-admin \
 
 ---
 
-## 3. `grafana-cloud-loki` — Grafana Cloud Loki push credential (alloy)
+## 3. and 4. Retired: `grafana-cloud-loki` and `grafana-cloud-metrics`
 
-Consumed by the alloy DaemonSet (`alloy-logs-home.yaml` / `alloy-logs-oracle.yaml`) as a mounted file.
-
-**This Secret MUST exist before `alloy-logs-*.yaml` is applied**, or the pod sits
-in `CreateContainerConfigError` (the volume references it directly, not
-`optional: true`).
-
-```bash
-kubectl -n observability create secret generic grafana-cloud-loki \
-  --from-literal=grafana-cloud-loki-password='<the glc_... access token>'
-```
-
-The key must be exactly `grafana-cloud-loki-password` — that's the filename
-alloy's config expects under the mount. Username (`1769810`) and the push
-URL (`https://logs-prod-036.grafana.net/loki/api/v1/push`) are not secret and
-are configured in the alloy DaemonSet manifests.
-
-The live Alloy manifests currently write only to the local `loki` service.
-Enabling Grafana Cloud as a second destination requires a separate reviewed
-change and a receipt/freshness check; do not infer that forwarding is active
-from this Secret contract alone.
-
----
-
-Never commit this Secret or paste its YAML. When the real webhook is restored,
-the alerting mount and environment variable must be re-enabled together.
-
-## 4. `grafana-cloud-metrics` — Grafana Cloud Prometheus remote-write credentials
-
-This Secret is consumed by both the home Prometheus Deployment and the
-Oracle-specific `prometheus-oracle` Deployment. The same Cloud token is
-mounted independently in each cluster; it is never committed to the repo.
-
-```bash
-kubectl -n observability create secret generic grafana-cloud-metrics \
-  --from-literal=password='<metrics:write access-policy-token>'
-```
-
-The current manifests require the `password` key; the documented Secret
-contract contains only that remote-write credential. Use a token with only the
-`metrics:write` scope. The remote-write URL and username are
-configured in the tracked Prometheus ConfigMaps, not read from this Secret.
-This Secret is for Prometheus remote write only. It does not contain, and must
-not be used as, the separate `metrics:read` credentials used to query Grafana
-Cloud.
-
-For query access, use the read credentials and query endpoint supplied by the
-Grafana Cloud portal for the stack's Prometheus data source. The query
-endpoint is portal-provided; do not derive it from the remote-write URL or
-from `/api/prom/push`. That path is the write destination configured for
-Prometheus in this repository.
-
-See
-`docs/recovery/GRAFANA-CLOUD-MIGRATION.md` for the staged cutover gates.
+Historical: these Secrets were the Grafana Cloud Loki push credential and
+Prometheus remote-write credential. Grafana Cloud is no longer used, no live
+manifest consumes either Secret, and observability is self-hosted Grafana,
+Prometheus and Loki in this namespace. Do not create them. Delete them from
+the cluster if they still exist (after confirming nothing references them).
+The numbering of the sections below is unchanged so existing references
+still resolve.
 
 ---
 

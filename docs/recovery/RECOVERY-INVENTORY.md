@@ -1,3 +1,5 @@
+> **Historical:** describes the retired multi-site / Grafana Cloud setup (PantryBot home, Canada and failover topology; Grafana Cloud). Current state: PantryBot runs only on the Oracle node (single-site since 2026-09-25) with self-hosted Grafana/Prometheus/Loki in the `observability` namespace. Body left unchanged as a dated record.
+
 # Recovery Inventory
 
 **Status:** inventory started 2026-09-08. This file records recovery coverage without storing secret values.
@@ -21,13 +23,13 @@
 | `jmusicbot` | `jmusicbot-config`, R2 file sync | Mutable mirror, no generation/freshness gate | Restore a retained generation and verify token/config integrity |
 | `jmusicbot` notifier | `jmusicbot-notifier-data`, 256Mi local-path | Local-only notifier state | Determine whether state matters; restore if required |
 | Minecraft | `minecraft-world`, 10Gi local-path plus host backup | Archive is now copied offsite, but isolated startup restore is not yet rehearsed | Restore world, plugins, config, and version metadata elsewhere |
-| Observability | Grafana 2Gi, Loki 20Gi, Prometheus 20Gi local-path | Local dashboards/history tied to tower | Treat Grafana Cloud as external log path; document acceptable local loss |
+| Observability | Grafana 2Gi, Loki 20Gi, Prometheus 20Gi local-path | Local dashboards/history tied to tower | Self-hosted only (Grafana Cloud is no longer used); document acceptable local loss |
 | Operations | `operations-data`, 1Gi local-path | Dashboard data and Authentik dependency tied to tower | Restore data and validate emergency access without LDAP dependency |
 | PantryBot | R2/Litestream with `emptyDir` | Possible split writer during partition | Test fencing, retained generations, and promotion |
 
 ## Live secret names
 
-Secret values remain in Kubernetes/GitHub secret stores and must not be copied here. Current names include Authentik/Postgres, LDAP, tunnel, CI deploy, image-pull, R2/Litestream, bot credentials, RCON, Grafana Cloud, and Operations credentials. The complete names are obtainable with:
+Secret values remain in Kubernetes/GitHub secret stores and must not be copied here. Current names include Authentik/Postgres, LDAP, tunnel, CI deploy, image-pull, R2/Litestream, bot credentials, RCON, and Operations credentials. The complete names are obtainable with:
 
 ```bash
 kubectl get secrets -A --no-headers | awk '{print $1 "/" $2}' | sort

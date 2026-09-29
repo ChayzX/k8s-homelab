@@ -11,7 +11,7 @@ everything is fine and you're done.
 | **PantryBot** | Is PantryBot working, and is anyone using it? | Anything PantryBot. |
 | **Minecraft** | Is the Minecraft server healthy? | Lag, crashes, or player complaints. |
 | **Logs** | What exactly did an app say? | You need the actual error text. |
-| **Sites & Failover** | Which site (home / Oracle / Canada) is each thing running at? | Failover work, or "is it running somewhere else?" |
+| **Sites & Failover** | Which site (home / Oracle) is each thing running at? (PantryBot is Oracle-only.) | Failover work, or "is it running somewhere else?" |
 
 Every dashboard has the same row of links across the top, so you can jump
 between them without going back to the list.
@@ -73,7 +73,7 @@ dashboards stayed in Grafana indefinitely after their files were gone.
 - **Never hard-code a name that does not exist yet.** A panel pointed at a
   missing job or metric shows "No data", which looks identical to a broken query.
   Count what exists instead (Sites & Failover counts `site="canada"` targets
-  rather than probing a job name).
+  rather than probing a job name; Canada is retired, so that count is expected to be 0).
 - **Escape regexes for RE2, not Python.** Prometheus and Loki use Go's RE2, which
   rejects `\-`. Python's `re.escape` emits exactly that.
 - **Pod selector** `pod=~"<name>-([a-z0-9]+-)?[a-z0-9]+"` allows at most two
@@ -83,7 +83,7 @@ dashboards stayed in Grafana indefinitely after their files were gone.
 
 - `minecraft_world_size_bytes` never registers — exporter bug, #374.
 - Fencing-lease holder not scraped — Prometheus config drift, #373.
-- Canada has no scrape target — #375.
+- Canada has no scrape target — #375 (moot: the Canada site is retired).
 
 The full history of the 2026-09-21 audit — every broken panel, why, and what was
 retired — is in git history for this file and in issues #371–#376.

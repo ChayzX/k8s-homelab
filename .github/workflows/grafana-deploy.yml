@@ -1,9 +1,8 @@
-# Deploy workflow for the retained self-hosted Grafana instance.
-#
-# Grafana Cloud is the production observability UI and dashboard destination.
-# The local Grafana deployment is retained as a comparison/rollback buffer,
-# so this stays MANUAL (workflow_dispatch only) -- a dashboard commit must
-# never mutate it automatically.
+# Deploy workflow for the self-hosted Grafana instance (namespace
+# `observability` on minecraftmachine). Grafana Cloud is no longer used;
+# this Grafana, with local Prometheus and Loki, is the production
+# observability stack. The workflow stays MANUAL (workflow_dispatch only) --
+# a dashboard commit must never mutate the live instance automatically.
 #
 # It applies the dashboard ConfigMaps, the provisioning ConfigMaps and the
 # Grafana Deployment. It deliberately applies the Deployment too: on
@@ -20,8 +19,7 @@ on:
 permissions:
   contents: read
 
-# This workflow is rollback-only. Do not let two manual rollback operations
-# race the same retained Grafana target.
+# Do not let two manual deploy operations race the same Grafana target.
 concurrency:
   group: grafana-rollback
   cancel-in-progress: false

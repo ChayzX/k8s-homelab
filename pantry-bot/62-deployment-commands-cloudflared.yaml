@@ -1,8 +1,7 @@
 # Dedicated connector for commands.greeniespantry.uk only.
 #
-# Apply this same manifest once to the home cluster and once to the independent
-# Oracle cluster. Each environment gets one connector for the same remotely
-# managed tunnel. The tunnel's control-plane ingress must contain only:
+# PantryBot runs only on the Oracle cluster (single-site since 2026-09-25), so
+# this connector is applied to the Oracle cluster only. The tunnel's control-plane ingress must contain only:
 #
 #   commands.greeniespantry.uk ->
 #     http://pantry-commands-site.pantry-bot.svc.cluster.local:3000
@@ -62,9 +61,8 @@ spec:
                 secretKeyRef:
                   name: commands-cloudflared-tunnel-token
                   key: TUNNEL_TOKEN
-            # HTTP/2 is the proven transport for the home network; using the
-            # same setting in both environments avoids QUIC/UDP idle timeout
-            # behavior changing during failover.
+            # HTTP/2 is the proven transport here; it avoids QUIC/UDP idle
+            # timeout behavior.
             - name: TUNNEL_TRANSPORT_PROTOCOL
               value: http2
           ports:

@@ -63,11 +63,10 @@ is ever exposed, rotate it in the Cloudflare Zero Trust dashboard
 
 ### `commands-cloudflared-tunnel-token` — public commands-only tunnel token
 
-Create this Secret separately in the home and independent Oracle clusters
-after Cloudflare has created the dedicated remotely managed tunnel. Both
-Secrets use the same name and key so the checked-in connector manifest is
-portable, but the value is entered directly into each cluster and never saved
-in Git, a ConfigMap, a shell argument, or an issue comment.
+Create this Secret in the Oracle cluster (where PantryBot runs) after
+Cloudflare has created the dedicated remotely managed tunnel. The value is
+entered directly into the cluster and never saved in Git, a ConfigMap, a shell
+argument, or an issue comment.
 
 ```bash
 read -r -s -p 'commands-only tunnel token: ' COMMANDS_TUNNEL_TOKEN; echo
@@ -142,8 +141,8 @@ resulting pull Secret will silently be empty. In that case use the explicit
 ## 4. `pantry-bot-litestream` — R2 credentials for continuous SQLite backup
 
 New as of the litestream sidecar (`25-configmap-litestream.yaml`,
-`40-deployment.yaml`) — Step A of the cross-node failover migration, see
-that ConfigMap's header comment. Without this Secret the pod fails to start
+`40-deployment.yaml`) — Step A of the (since retired) cross-node failover
+migration, see that ConfigMap's header comment. PantryBot is now Oracle-only. Without this Secret the pod fails to start
 (`CreateContainerConfigError`), by design — the sidecar has nothing useful
 to do without R2 credentials, so failing loudly beats silently not backing
 up.

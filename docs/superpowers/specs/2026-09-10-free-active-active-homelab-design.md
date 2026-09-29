@@ -1,3 +1,5 @@
+> **Historical:** describes the retired multi-site / Grafana Cloud setup (PantryBot home, Canada and failover topology; Grafana Cloud). Current state: PantryBot runs only on the Oracle node (single-site since 2026-09-25) with self-hosted Grafana/Prometheus/Loki in the `observability` namespace. Body left unchanged as a dated record.
+
 # Free Active-Active Homelab Design
 
 **Status:** approved design; implementation begins with GitHub-tracked, reversible work

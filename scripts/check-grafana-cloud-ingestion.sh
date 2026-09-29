@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Verify site-local Prometheus remote-write health without a Grafana Cloud
-# query credential. The configured credential is metrics:write; Cloud
-# Explore/query verification is a separate human/API gate.
+# LEGACY: checks Prometheus remote-write health for the retired Grafana Cloud
+# metrics path. Grafana Cloud is no longer used; observability is self-hosted
+# Grafana/Prometheus/Loki in the `observability` namespace. Kept for history
+# only; do not run it as a current health check.
 
 namespace=${OBSERVABILITY_NAMESPACE:-observability}
 kubectl_bin=${KUBECTL_BIN:-kubectl}
