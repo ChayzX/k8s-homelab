@@ -49,7 +49,7 @@ Current cluster health is not the same as architecture readiness. The three k3s 
 | Opsbot | Oracle candidate | Stateless, multi-arch image | Scoped access to both environments and duplicate-work behavior test |
 | Authentik + Postgres | Keep together initially | Database backup and isolated Authentik readiness restore verified | Non-production login and promotion procedure |
 | Operations | Follows Authentik only after recovery proof | Currently tower-local | Emergency access independent of LDAP and promotion procedure |
-| Observability | Home initially; external monitoring on GCP/Oracle | Grafana Cloud receives logs; GCP public and protected API-route checks are deployed; UptimeRobot owns external reachability | Authenticated API health, read-only R2 credential, and human delivery test |
+| Observability | Home initially; external monitoring on GCP/Oracle | self-hosted Grafana/Prometheus/Loki (Grafana Cloud is no longer used); GCP public and protected API-route checks are deployed; UptimeRobot owns external reachability | Authenticated API health, read-only R2 credential, and human delivery test |
 | CI tunnel | Home initially | Treat as unavailable during home outage | Independent deployment/recovery path |
 
 Do not create multiple bot replicas merely for appearance. Any service with external side effects needs duplicate-work prevention and a single active writer or explicit coordination.

@@ -1,3 +1,6 @@
+# HISTORICAL: PantryBot now runs only on Oracle (single-site since 2026-09-25)
+# on PostgreSQL; this SQLite/Litestream config is retired.
+#
 # Litestream config for pantry-bot's SQLite database (STEP A of the
 # cross-node failover migration — see pantry-bot-infra's docs/ARCHITECTURE.md
 # and docs/DEPLOYMENT-PIPELINE-IMPACT.md for the full picture).

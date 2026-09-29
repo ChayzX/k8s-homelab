@@ -127,13 +127,15 @@ kubectl apply -f alloy-logs-home.yaml
 ## Oracle collector
 
 Oracle is an independent k3s cluster, so the Oracle collector manifests must
-be applied with Oracle's kubeconfig or directly on that host. Create the
-`grafana-cloud-metrics` Secret there using the same remote-write password
-contract in `SECRETS.md`, then apply `node-exporter-oracle.yaml`,
-`kube-state-metrics.yaml`, `oracle-prometheus-config.yaml`, and
-`oracle-prometheus.yaml`. The Oracle collector uses `site=oracle` and
-`cluster=pantry-bot-oracle` labels so its metrics are distinguishable from
-home in Grafana Cloud. It has no local Grafana or Loki dependency.
+be applied with Oracle's kubeconfig or directly on that host. Apply
+`node-exporter-oracle.yaml`, `kube-state-metrics.yaml`,
+`oracle-prometheus-config.yaml`, and `oracle-prometheus.yaml`. No Grafana
+Cloud credential is needed (Grafana Cloud is no longer used). The Oracle
+collector uses `site=oracle` and `cluster=pantry-bot-oracle` labels and
+remote-writes to the home Prometheus through `prometheus-write-gateway.yaml`,
+so its metrics appear in the self-hosted Grafana next to the home cluster's.
+It has no local Grafana or Loki dependency. Oracle is where PantryBot runs
+(Oracle-only since 2026-09-25).
 
 `grafana.yaml` contains the Grafana Deployment/PVC/SA block and a **primary
 Service** on port 3002 that will sit `EXTERNAL-IP <pending>` until the
@@ -345,9 +347,9 @@ producing some.
 ## mcp-grafana — MCP server for agent access to Grafana
 
 `mcp-grafana.yaml` runs the upstream `grafana/mcp-grafana` server so an MCP
-client (Claude) can query this self-hosted Grafana instance instead of using
-Grafana Cloud's OAuth-based MCP connector, which doesn't fit a non-interactive
-agent session. It talks to Grafana over the in-cluster ClusterIP path, not
+client (Claude) can query this self-hosted Grafana instance with a static
+service-account token, which fits a non-interactive agent session better than
+a browser OAuth flow. It talks to Grafana over the in-cluster ClusterIP path, not
 the public `grafana.greeniespantry.uk` hostname, specifically to avoid
 Authentik's proxy outpost (fronting that public hostname) redirecting its
 Bearer-token API calls to a login page.
@@ -359,17 +361,11 @@ policy (or an IP allowlist), deliberately **not** an Authentik/IdP policy, for
 the same reason. Full setup: `MCP-GRAFANA-SETUP.md`. Required Secrets:
 `SECRETS.md` items 5–7.
 
-## Grafana Cloud ingestion check
+## Observability is self-hosted
 
-Grafana Cloud is the production observability destination. The retained local
-Grafana UI is rollback-only. To verify the site-local Prometheus push path
-without requiring a Cloud query credential, run from the repository root:
-
-```
-scripts/check-grafana-cloud-ingestion.sh
-```
-
-The check fails on any non-zero remote-write failure counter. A non-zero
-pending queue is reported but is expected during WAL catch-up; dashboard and
-Explore verification still requires Grafana Cloud UI access or a separate
-`metrics:read` credential.
+Grafana, Prometheus and Loki run in this `observability` namespace on
+minecraftmachine and are the only observability stack in use. Grafana Cloud is
+no longer used anywhere. The Oracle site's Prometheus collector remote-writes
+to the home Prometheus (`prometheus-write-gateway.yaml`), and Alloy on both
+sites writes logs to the local Loki. `scripts/check-grafana-cloud-ingestion.sh`
+is a legacy script for the retired Cloud path and is not a current check.

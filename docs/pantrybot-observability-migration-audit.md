@@ -1,3 +1,5 @@
+> **Historical:** describes the retired multi-site / Grafana Cloud setup (PantryBot home, Canada and failover topology; Grafana Cloud). Current state: PantryBot runs only on the Oracle node (single-site since 2026-09-25) with self-hosted Grafana/Prometheus/Loki in the `observability` namespace. Body left unchanged as a dated record.
+
 # Observability Audit: PantryBot Consolidation to Oracle (#320)
 
 **Target State**: PantryBot consolidated exclusively on Oracle (`site: oracle`). Home standby PostgreSQL, Canada node, witness relay, HA fencing scripts, authority promoter, and epoch metrics are decommissioned. Grafana, Authentik, and Home Prometheus/Loki remain on Home (`minecraftmachine`).
