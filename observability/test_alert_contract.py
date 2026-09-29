@@ -24,8 +24,11 @@ assert "alertmanager" not in prometheus
 assert "ruler:" not in loki
 assert "alertmanager" not in loki
 
-# Grafana has routing policy but no provisioned rule groups.
-assert "groups:" not in grafana
+# Grafana has routing policy and, since ChayzX/pantry-bot#346, provisioned
+# PantryBot rule groups (Grafana is the only rule evaluator).
+assert "groups:" in grafana
+for uid in ("pantry-oracle-target-down", "pantry-oracle-runtime-failures", "pantry-oracle-metrics-absent"):
+    assert uid in grafana, uid
 
 # The two actual evaluators expose stable identity/ownership mechanisms.
 assert "fcntl.flock" in watcher

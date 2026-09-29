@@ -185,39 +185,13 @@ data:
         static_configs:
           - targets: ["kube-state-metrics.observability.svc.cluster.local:8080"]
 
-      # The HA API owns application counters and exposes Prometheus text metrics.
-      # Keep this behind a ClusterIP Service; /metrics is not published externally.
-      - job_name: pantry-bot-api
-        metrics_path: /metrics
-        static_configs:
-          - targets: ["pantry-private-api.pantry-bot.svc.cluster.local:3000"]
-            labels:
-              site: home
-              role: api
-
-      - job_name: pantry-bot-gateway
-        metrics_path: /metrics
-        static_configs:
-          - targets: ["pantry-twitch-gateway.pantry-bot.svc.cluster.local:3001"]
-            labels:
-              site: home
-              role: gateway
-
-      - job_name: pantry-bot-worker
-        metrics_path: /metrics
-        static_configs:
-          - targets: ["pantry-chat-worker.pantry-bot.svc.cluster.local:3001"]
-            labels:
-              site: home
-              role: worker
-
-      - job_name: pantry-bot-dispatcher
-        metrics_path: /metrics
-        static_configs:
-          - targets: ["pantry-twitch-dispatcher.pantry-bot.svc.cluster.local:3001"]
-            labels:
-              site: home
-              role: dispatcher
+      # PantryBot does not run on the home cluster any more (moved to Oracle
+      # on 2026-09-25, ChayzX/pantry-bot#316), so the home pantry-bot-{api,
+      # gateway,worker,dispatcher} scrape jobs were removed (ChayzX/pantry-bot#346):
+      # they targeted Services in a pantry-bot namespace that no longer exists
+      # here, and sat permanently down. The live series are scraped by
+      # Oracle's own Prometheus (pantry-bot-*-oracle jobs, see
+      # oracle-prometheus-config.yaml) and arrive here by remote_write.
 
       # ---------------------------------------------------------------
       # The observability stack scraping itself

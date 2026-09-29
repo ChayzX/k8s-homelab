@@ -150,13 +150,13 @@ data:
 #     that contact point IN ADDITION to the existing root receiver
 #     (continue: true), matched on the grafana_folder label (rules kept in
 #     a "pantry-bot"/"twitch"-named folder) or on an app label.
-#   * NO alert rules. Grafana 11.4's DB (grafana.db, inspected 2026-08-12)
-#     contains zero alert rules -- there were no Twitch rules to reproduce,
-#     so none are shipped here. Create your rules in the UI and put them in
-#     a pantry-bot/Twitch folder (or add an app=~"pantry-bot" label); this
-#     policy then DMs 204282471506771971 in addition to the default
-#     receiver. Provisioned rules would go under the `groups:` top-level
-#     key if this ever grows rules -- do not invent a top-level key.
+#   * Provisioned alert rules for PantryBot on Oracle (folder "pantry-bot",
+#     group "pantry-bot-oracle", see the `groups:` key below). Home Prometheus
+#     has no Alertmanager or rule_files, so Grafana is the only evaluator.
+#     The folder name matches the notification policy's grafana_folder route,
+#     so no per-rule routing labels are needed (adding an app label as well
+#     would match BOTH routes and risk a duplicate DM).
+#
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -198,6 +198,206 @@ data:
               # (false) on purpose: Discord only pings for mentions in the
               # main message content, not inside embeds.
               message: '<@204282471506771971> {{ template "default.message" . }}'
+
+    # Alert rules. Evaluated by Grafana against the home Prometheus, which
+    # receives the Oracle series by remote_write. Only metric and job names
+    # confirmed to exist in that Prometheus (2026-09-29) are used. There is no
+    # outbox-backlog / dead_letter metric exported by PantryBot today, so no
+    # rule exists for it; add one when the app exports such a metric.
+    #
+    # noDataState OK on the first three: `x == 0`, `increase(..) > 0` and
+    # `absent()` all return an EMPTY result when healthy. Total loss of the
+    # metrics is covered separately by the absent() rule.
+    groups:
+      - orgId: 1
+        name: pantry-bot-oracle
+        folder: pantry-bot
+        interval: 1m
+        rules:
+          - uid: pantry-oracle-target-down
+            title: PantryBot Oracle scrape target down
+            condition: C
+            for: 5m
+            noDataState: OK
+            execErrState: Error
+            isPaused: false
+            labels:
+              severity: critical
+            annotations:
+              summary: "PantryBot {{ $labels.role }} target is down on Oracle"
+              description: "up==0 for 5m on job {{ $labels.job }} (instance {{ $labels.instance }}). Empty result (all targets up) is treated as healthy."
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: Prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: Prometheus
+                  expr: 'up{job=~"pantry-bot-.*-oracle"} == 0'
+                  instant: true
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  type: reduce
+                  expression: A
+                  reducer: last
+                  settings:
+                    mode: dropNN
+                  refId: B
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator:
+                        type: gt
+                        params: [0]
+                  refId: C
+          - uid: pantry-oracle-runtime-failures
+            title: PantryBot runtime failures
+            condition: C
+            for: 0s
+            noDataState: OK
+            execErrState: Error
+            isPaused: false
+            labels:
+              severity: warning
+            annotations:
+              summary: "PantryBot runtime failures on {{ $labels.job }}"
+              description: "pantry_bot_runtime_failures_total increased in the last 15m on {{ $labels.job }}. Note: the counter only exists after the first failure, and Prometheus increase() does not count a series first appearing at its initial value, so the very first failure may not fire."
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 900
+                  to: 0
+                datasourceUid: Prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: Prometheus
+                  expr: 'increase(pantry_bot_runtime_failures_total[15m]) > 0'
+                  instant: true
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  type: reduce
+                  expression: A
+                  reducer: last
+                  settings:
+                    mode: dropNN
+                  refId: B
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator:
+                        type: gt
+                        params: [0]
+                  refId: C
+          - uid: pantry-oracle-metrics-absent
+            title: PantryBot metrics absent
+            condition: C
+            for: 10m
+            noDataState: OK
+            execErrState: Error
+            isPaused: false
+            labels:
+              severity: critical
+            annotations:
+              summary: "PantryBot metrics have disappeared"
+              description: "No pantry_bot_runtime_claims_total series from the Oracle pantry-bot jobs for 10m: the app is not exporting, Oracle Prometheus is down, or remote_write to home is broken."
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: Prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: Prometheus
+                  expr: 'absent(pantry_bot_runtime_claims_total{job=~"pantry-bot-.*-oracle"})'
+                  instant: true
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  type: reduce
+                  expression: A
+                  reducer: last
+                  settings:
+                    mode: dropNN
+                  refId: B
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator:
+                        type: gt
+                        params: [0]
+                  refId: C
+          - uid: pantry-postgres-backup-stale
+            title: PantryBot Postgres backup older than 26h
+            condition: C
+            for: 0s
+            noDataState: Alerting
+            execErrState: Error
+            isPaused: false
+            labels:
+              severity: critical
+            annotations:
+              summary: "PantryBot Postgres backup has not succeeded in over 26h"
+              description: "CronJob postgres-backup (schedule daily 05:10 UTC) last succeeded more than 26h ago, or its metric is missing (kube-state-metrics-oracle down)."
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 900
+                  to: 0
+                datasourceUid: Prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: Prometheus
+                  expr: 'time() - kube_cronjob_status_last_successful_time{job="kube-state-metrics-oracle",namespace="pantry-bot",cronjob="postgres-backup"}'
+                  instant: true
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  type: reduce
+                  expression: A
+                  reducer: last
+                  settings:
+                    mode: dropNN
+                  refId: B
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator:
+                        type: gt
+                        params: [93600]
+                  refId: C
 
     # Notification policy tree.
     #
