@@ -74,7 +74,7 @@ spec:
         app.kubernetes.io/name: grafana
         app.kubernetes.io/part-of: observability
       annotations:
-        homelab.local/config-revision: "2"
+        homelab.local/config-revision: "3"
     spec:
       serviceAccountName: grafana-sa
       automountServiceAccountToken: false
@@ -110,19 +110,22 @@ spec:
                   name: grafana-admin
                   key: admin-password
                   optional: true
-            # NOTE: alerting provisioning is intentionally NOT wired up.
-            # PANTY_TWITCH_DISCORD_WEBHOOK_URL and the
-            # /etc/grafana/provisioning/alerting mount used to be declared
-            # here, but the grafana-discord-webhooks Secret has never
-            # existed in the cluster and the env var was deliberately
-            # non-optional -- so this file could not be applied at all
-            # without Grafana failing to start with
-            # CreateContainerConfigError. The alerting ConfigMap itself is
-            # still defined in grafana-provisioning.yaml and ships no alert
-            # rules, only a Discord contact point and a routing policy.
-            # To turn alerting on: create the Secret, then restore the env
-            # var plus the volume/volumeMount. Until then this file matches
-            # what actually runs.
+            # Bearer token for the opsbot-dm webhook contact point
+            # (grafana-provisioning-alerting interpolates $OPSBOT_ALERT_TOKEN
+            # into authorization_credentials). REQUIRED on purpose: a missing
+            # Secret must fail loudly (CreateContainerConfigError), not
+            # provision a contact point that silently gets 401s. The same
+            # value lives in the opsbot namespace; see SECRETS.md here and
+            # ../opsbot/SECRETS.md. Grafana reads it once at startup --
+            # restart after rotating.
+            # (History: this slot used to hold PANTY_TWITCH_DISCORD_WEBHOOK_URL
+            # for a Discord-webhook contact point whose Secret never existed,
+            # which is why alerting provisioning was unmounted until now.)
+            - name: OPSBOT_ALERT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: opsbot-alert-token
+                  key: token
             # Password for the PantryPostgres datasource
             # (grafana-provisioning.yaml interpolates
             # $PANTRY_GRAFANA_DB_PASSWORD into its secureJsonData). The
@@ -214,6 +217,11 @@ spec:
             - name: provisioning-dashboards
               mountPath: /etc/grafana/provisioning/dashboards
               readOnly: true
+            # Alert rules, the opsbot-dm contact point and the policy tree.
+            # Read once at startup (restart after changing the ConfigMap).
+            - name: provisioning-alerting
+              mountPath: /etc/grafana/provisioning/alerting
+              readOnly: true
             - name: dashboards
               mountPath: /etc/grafana/dashboards
               readOnly: true
@@ -226,6 +234,9 @@ spec:
         - name: provisioning-dashboards
           configMap:
             name: grafana-provisioning-dashboards
+        - name: provisioning-alerting
+          configMap:
+            name: grafana-provisioning-alerting
         - name: dashboards
           configMap:
             name: grafana-dashboards

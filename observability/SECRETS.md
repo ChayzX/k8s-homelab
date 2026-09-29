@@ -8,53 +8,35 @@ applied. A Deployment whose Secret does not exist yet will sit in
 
 ---
 
-## 1. `grafana-discord-webhooks` — Discord webhook for Pantry-bot / Twitch alerting
+## 1. `opsbot-alert-token` — Bearer token for the `opsbot-dm` contact point
 
-The alerting ConfigMap still contains the Discord contact-point definition,
-but it is currently not mounted by the Grafana Deployment because the Secret
-was absent when the earlier (since abandoned) Grafana Cloud migration was
-attempted. Existing alert state remains
-in Grafana's database; this Secret is needed before re-enabling that
-provisioner.
+Grafana alerting delivers PantryBot / Twitch alerts through opsbot, not a
+Discord webhook: the `opsbot-dm` `webhook` contact point
+(`grafana-provisioning.yaml`) POSTs to
+`http://opsbot-health.opsbot.svc.cluster.local:9091/alerts/grafana` with
+`Authorization: Bearer $OPSBOT_ALERT_TOKEN`. `grafana.yaml` reads that env var
+from this Secret (key `token`, **required** — a missing Secret is a loud
+`CreateContainerConfigError`, never a contact point quietly getting 401s).
 
-Do not create a placeholder value. An empty or invalid webhook makes Grafana's
-alerting provisioner fail at startup.
-
-```bash
-kubectl -n observability create secret generic grafana-discord-webhooks \
-  --from-literal=pantry-twitch-webhook-url='https://discord.com/api/webhooks/REPLACE/ME'
-```
-
-The key must be exactly `pantry-twitch-webhook-url` — that is the name
-`grafana.yaml` reads. A typo produces the same `CreateContainerConfigError`.
-
-### What the webhook URL must be
-
-The provisioned contact point posts to the channel the webhook was created in,
-and its message is prefixed with `<@204282471506771971>` so that user is pinged
-(Discord pings for mentions in the main message content, which is why
-`use_embed_description` is deliberately left unset). Two ways to satisfy that:
-
-- **Recommended:** a webhook in a private channel of a Discord server both
-  users can see. The mention pings user 204282471506771971 on every alert.
-- A webhook created in a DM / group-DM with user 204282471506771971 (Discord
-  supports webhooks in DMs). The mention is then redundant but harmless.
-
-A Discord webhook URL is a bearer credential — anyone holding it can post to
-that channel as the webhook. Treat it like a token.
-
-### Updating it later
+The value is shared with the `opsbot` namespace: a Secret with the same name
+and key must hold the same value there. Creation (2026-09-29, value never
+printed, written to disk or put on a command line) and rotation are documented
+once, in `../opsbot/SECRETS.md` (`opsbot-alert-token`). Short version:
 
 ```bash
-kubectl -n observability create secret generic grafana-discord-webhooks \
-  --from-literal=pantry-twitch-webhook-url='https://discord.com/api/webhooks/REPLACE/ME' \
-  --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n observability rollout restart deploy/grafana
+openssl rand -hex 32 | tr -d '\n' \
+  | kubectl -n opsbot create secret generic opsbot-alert-token --from-file=token=/dev/stdin
+kubectl -n opsbot get secret opsbot-alert-token -o jsonpath='{.data.token}' | base64 -d \
+  | kubectl -n observability create secret generic opsbot-alert-token --from-file=token=/dev/stdin
 ```
 
-The `rollout restart` is **required**: alerting provisioning files are read
-once, at Grafana startup — a changed Secret value is not picked up until the
-pod restarts.
+After rotating, restart opsbot first, then Grafana — alerting provisioning
+(and the env var) are read once, at startup.
+
+**Retired: `grafana-discord-webhooks`.** The previous Discord-webhook contact
+point (`discord-pantry-twitch-dm`, env `PANTY_TWITCH_DISCORD_WEBHOOK_URL`)
+needed a webhook that was never created and will not be. Do not create that
+Secret; nothing reads it any more.
 
 ---
 

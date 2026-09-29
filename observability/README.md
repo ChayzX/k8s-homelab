@@ -113,9 +113,9 @@ kubectl apply -f alloy-logs-home.yaml
 kubectl apply -f loki.yaml
 kubectl apply -f prometheus.yaml
 
-# grafana.yaml REQUIRES the grafana-discord-webhooks Secret to exist first
-# (see SECRETS.md in this directory) -- the alerting contact point env var
-# is a required secretKeyRef. Without it the pod sits in
+# grafana.yaml REQUIRES the opsbot-alert-token Secret to exist first
+# (see SECRETS.md in this directory) -- the opsbot-dm contact point's token
+# env var is a required secretKeyRef. Without it the pod sits in
 # CreateContainerConfigError.
 kubectl apply -f grafana.yaml
 
@@ -187,9 +187,14 @@ fail-open timeout case.
 ConfigMap (mounted by `grafana.yaml` at
 `/etc/grafana/provisioning/alerting`) that provisions:
 
-- a **Discord contact point** (`discord-pantry-twitch-dm`) whose webhook URL
-  is interpolated from the `PANTY_TWITCH_DISCORD_WEBHOOK_URL` env var (never
-  committed here) and whose message pings `<@204282471506771971>`;
+- a **`webhook` contact point** (`opsbot-dm`) that POSTs to opsbot's
+  in-cluster relay
+  `http://opsbot-health.opsbot.svc.cluster.local:9091/alerts/grafana` with
+  `Authorization: Bearer $OPSBOT_ALERT_TOKEN` (interpolated from the env,
+  never committed). opsbot DMs each notification to its `DISCORD_USER_ID`
+  using the bot's own identity -- there is no Discord webhook. opsbot
+  rate-limits (5 DMs/min, excess summarised) and answers 503 when it cannot
+  deliver, so Grafana retries. See `../opsbot/README.md`;
 - a **notification policy** that routes pantry-bot/Twitch alert rules to that
   contact point **in addition to** the existing root receiver
   (`continue: true`), matching rules either in a `pantry-bot`/`twitch`-named
@@ -204,7 +209,7 @@ Facts that shape how you use this:
   absent (10m), and Postgres backup older than 26h
   (`kube_cronjob_status_last_successful_time`). Prometheus itself has no
   Alertmanager or rule files, so Grafana is the only evaluator. The folder
-  name routes them to the Discord DM via the policy below; do not also add an
+  name routes them to the opsbot DM via the policy below; do not also add an
   `app` label, which would match the second route and duplicate the DM. No
   outbox-backlog / dead_letter metric is exported today, so none is alerted on.
   Other rules can still be created in the UI in a pantry-bot/Twitch folder.
@@ -214,13 +219,17 @@ Facts that shape how you use this:
   `/home/chase/docker/observability/monitoring/k3s-watcher/watcher.py`)
   polls Loki and DMs log-error/restart-loop alerts to user
   `929216447723499562`. It is untouched by this change, so the existing
-  recipient keeps receiving alerts; Grafana is the *additional* channel to
-  `204282471506771971`. Do not expect this provisioning to make Grafana
+  recipient keeps receiving alerts; Grafana is the *additional* channel, to
+  opsbot's `DISCORD_USER_ID`. Do not expect this provisioning to make Grafana
   duplicate k3s-watcher's messages.
 - **Restart required to apply changes.** Alerting provisioning is read once
   at Grafana startup, not watched. After changing either this provisioning
-  file or the `grafana-discord-webhooks` Secret, `kubectl -n observability
+  file or the `opsbot-alert-token` Secret, `kubectl -n observability
   rollout restart deploy/grafana`.
+- **`$` must be doubled in the alerting file.** Grafana env-interpolates every
+  provisioned string, so annotation templates are written
+  `{{ $$labels.job }}` (stored as `{{ $labels.job }}`); a bare `$labels`
+  silently becomes an empty string.
 - **Policy tree is replaced wholesale.** The `policies` block in
   `alerting.yaml` is the complete tree; any policy you later create in the UI
   is overwritten at the next Grafana restart. Keep editing the provisioning
