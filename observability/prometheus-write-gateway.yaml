@@ -1,6 +1,8 @@
-# Remote-write ingress for Home Prometheus (#191): lets Oracle's Prometheus
-# push its series here so the Home dashboards keep showing PantryBot data
-# while Oracle is the active site. Only POST /api/v1/write is forwarded;
+# Remote-write ingress for Home Prometheus (#191). This is the metrics path
+# for Oracle: Oracle is an independent single-node k3s cluster where PantryBot
+# runs, and its Prometheus (oracle-prometheus-config.yaml) pushes every series
+# here, labelled site=oracle, so the self-hosted Grafana on the home cluster
+# shows PantryBot and Oracle node data. Only POST /api/v1/write is forwarded;
 # everything else (queries, admin, /-/quit from --web.enable-lifecycle) is
 # refused, so exposing a NodePort does not expose Prometheus itself.
 # Requires --web.enable-remote-write-receiver on the Prometheus container.

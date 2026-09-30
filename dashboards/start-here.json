@@ -90,7 +90,7 @@
    "tooltip": ""
   },
   {
-   "title": "Sites & Failover",
+   "title": "Sites",
    "url": "/d/homelab-site-service-health",
    "type": "link",
    "icon": "sitemap",

@@ -1,4 +1,4 @@
-> **Historical:** describes the retired multi-site / Grafana Cloud setup (PantryBot home, Canada and failover topology; Grafana Cloud). Current state: PantryBot runs only on the Oracle node (single-site since 2026-09-25) with self-hosted Grafana/Prometheus/Loki in the `observability` namespace. Body left unchanged as a dated record.
+> **Historical:** describes the retired multi-site / Grafana Cloud setup (PantryBot home, Canada and failover topology; Grafana Cloud). Current state: PantryBot runs only on the Oracle node (single-site since 2026-09-25) with self-hosted Grafana/Prometheus/Loki in the `observability` namespace. Body left unchanged as a dated record. The PantryBot failover files it links (under `observability/failover-witness/`, `docs/recovery/pantrybot-*.yaml` and the Canada freshness checker) were removed on 2026-09-29; see git history.
 
 # PantryBot production PostgreSQL authority bootstrap
 

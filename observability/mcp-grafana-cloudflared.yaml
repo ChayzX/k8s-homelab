@@ -13,8 +13,8 @@
 # IMPORTANT -- this hostname must NOT get an Authentik-backed Access policy
 # like grafana.greeniespantry.uk's. Authentik's proxy outpost redirects
 # unauthenticated requests to an interactive login page; an MCP client
-# presenting only a Bearer token would hit that redirect and fail exactly the
-# way the Grafana Cloud OAuth-based MCP connector just did. Instead, gate this
+# presenting only a Bearer token would hit that redirect and fail, because it
+# cannot complete an interactive login. Instead, gate this
 # hostname's Cloudflare Access application with a **Service Token** policy
 # (Zero Trust -> Access -> Service Auth) -- the same mechanism already used
 # for k8s-api.greeniespantry.uk (see ../ci-tunnel/MANUAL-SETUP.md step 3).

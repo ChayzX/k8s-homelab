@@ -12,7 +12,7 @@ data:
       "version": 1,
       "refresh": "30s",
       "graphTooltip": 1,
-      "links": [{"title": "Start Here", "url": "/d/home", "type": "link", "icon": "dashboard", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Services", "url": "/d/services", "type": "link", "icon": "apps", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Machines", "url": "/d/machines", "type": "link", "icon": "monitor", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "PantryBot", "url": "/d/homelab-pantry-bot", "type": "link", "icon": "bolt", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Minecraft", "url": "/d/homelab-minecraft", "type": "link", "icon": "cube", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Logs", "url": "/d/homelab-logs", "type": "link", "icon": "doc", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Sites & Failover", "url": "/d/homelab-site-service-health", "type": "link", "icon": "sitemap", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}],
+      "links": [{"title": "Start Here", "url": "/d/home", "type": "link", "icon": "dashboard", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Services", "url": "/d/services", "type": "link", "icon": "apps", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Machines", "url": "/d/machines", "type": "link", "icon": "monitor", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "PantryBot", "url": "/d/homelab-pantry-bot", "type": "link", "icon": "bolt", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Minecraft", "url": "/d/homelab-minecraft", "type": "link", "icon": "cube", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Logs", "url": "/d/homelab-logs", "type": "link", "icon": "doc", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Sites", "url": "/d/homelab-site-service-health", "type": "link", "icon": "sitemap", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}],
       "time": { "from": "now-1h", "to": "now" },
       "templating": {
         "list": [
@@ -613,7 +613,7 @@ data:
        "tooltip": ""
       },
       {
-       "title": "Sites & Failover",
+       "title": "Sites",
        "url": "/d/homelab-site-service-health",
        "type": "link",
        "icon": "sitemap",
@@ -1484,7 +1484,7 @@ data:
       "version": 3,
       "refresh": "15s",
       "graphTooltip": 1,
-      "links": [{"title": "Start Here", "url": "/d/home", "type": "link", "icon": "dashboard", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Services", "url": "/d/services", "type": "link", "icon": "apps", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Machines", "url": "/d/machines", "type": "link", "icon": "monitor", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "PantryBot", "url": "/d/homelab-pantry-bot", "type": "link", "icon": "bolt", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Minecraft", "url": "/d/homelab-minecraft", "type": "link", "icon": "cube", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Logs", "url": "/d/homelab-logs", "type": "link", "icon": "doc", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Sites & Failover", "url": "/d/homelab-site-service-health", "type": "link", "icon": "sitemap", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}],
+      "links": [{"title": "Start Here", "url": "/d/home", "type": "link", "icon": "dashboard", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Services", "url": "/d/services", "type": "link", "icon": "apps", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Machines", "url": "/d/machines", "type": "link", "icon": "monitor", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "PantryBot", "url": "/d/homelab-pantry-bot", "type": "link", "icon": "bolt", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Minecraft", "url": "/d/homelab-minecraft", "type": "link", "icon": "cube", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Logs", "url": "/d/homelab-logs", "type": "link", "icon": "doc", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}, {"title": "Sites", "url": "/d/homelab-site-service-health", "type": "link", "icon": "sitemap", "asDropdown": false, "includeVars": false, "keepTime": true, "targetBlank": false, "tags": [], "tooltip": ""}],
       "time": { "from": "now-6h", "to": "now" },
       "templating": { "list": [
         { "name": "DS_PROMETHEUS", "label": "Prometheus", "type": "datasource", "query": "prometheus", "current": {}, "hide": 0, "refresh": 1, "regex": "", "skipUrlSync": false },
@@ -1603,7 +1603,7 @@ data:
           "tooltip": ""
         },
         {
-          "title": "Sites & Failover",
+          "title": "Sites",
           "url": "/d/homelab-site-service-health",
           "type": "link",
           "icon": "sitemap",
@@ -2656,7 +2656,7 @@ data:
        "tooltip": ""
       },
       {
-       "title": "Sites & Failover",
+       "title": "Sites",
        "url": "/d/homelab-site-service-health",
        "type": "link",
        "icon": "sitemap",
@@ -3431,7 +3431,7 @@ data:
   site-service-health.json: |
     {
       "uid": "homelab-site-service-health",
-      "title": "Sites & Failover \u2014 Which Site Is Each Thing At?",
+      "title": "Sites \u2014 Which Site Is Each Thing At?",
       "description": "Which site is each service at, and is it up. Every service row carries an explicit Site column. HOME is this k3s cluster and is fully instrumented; Kubernetes objects have no site label of their own, so this dashboard stamps site=\"home\" onto them with label_replace \u2014 a definition, not a measurement. ORACLE runs a separate, non-federated Prometheus and CANADA has no scrape target at all, so both are reported as \"unknown from here\" rather than faked. Both of those panels count targets instead of probing a hard-coded job name, so they start working by themselves once the corresponding scrape job is added. Rebuilt 2026-09-21: the previous Canada panel queried up{job=\"canada-pantry-bot-api\"}, a job present in neither the repo nor the live Prometheus config, so it could only ever render No data. Updated 2026-09-22 (#191): Oracle now remote-writes its series here (site=\"oracle\") and Canada's roles are scraped through Home's relay (site=\"canada\"); Home series carry no site label, so Home-only panels filter site=\"\".",
       "tags": [
         "homelab",
@@ -3524,7 +3524,7 @@ data:
           "tooltip": ""
         },
         {
-          "title": "Sites & Failover",
+          "title": "Sites",
           "url": "/d/homelab-site-service-health",
           "type": "link",
           "icon": "sitemap",
@@ -3576,7 +3576,7 @@ data:
           },
           "options": {
             "mode": "markdown",
-            "content": "Every service row below carries an explicit **Site** column, so no panel here requires you to already know where something runs.\n\n> **2026-09-25:** PantryBot was consolidated onto Oracle and the three-site failover design (Home/Oracle/Canada plus a GCP witness) was retired. The Canada site, the failover witness and the fencing panels have been removed from this dashboard because their subjects no longer exist \u2014 an empty panel reads as a fault, which is worse than no panel.\n\n\n| Site | What it is | How this Prometheus sees it |\n|---|---|---|\n| **HOME** | MinecraftMachine, the single-node k3s cluster on the home LAN (192.168.40.208). Since 2026-09-25 it runs **Minecraft and Authentik only** \u2014 PantryBot moved to Oracle. It is kept as a cold restore target: nothing PantryBot-shaped runs here, but the manifests and a pre-cutover database volume remain. | Fully instrumented: kube-state-metrics, cAdvisor, Alloy/Loki. PantryBot microservice scrape jobs here will be down, and that is now correct rather than a fault. |\n| **ORACLE** | Oracle Cloud ARM instance, `pantry-bot-oracle`. **This is where PantryBot runs.** Gateway, worker, dispatcher, overlay, api, private-site and commands-site all serve from here, behind both Cloudflare tunnels. | **Not federated into this Prometheus.** `observability/oracle-prometheus-config.yaml` configures a separate Prometheus on Oracle. Panels below that show Oracle as absent are describing this federation gap, not an outage. |\n| **GREENIE'S PC** | Windows/Docker gaming PC (`ThePantry`) | Reaches this Prometheus via Alloy remote-write as `site=\"windows-remote\"`. Detail on the Greenie's Main PC dashboard. |"
+            "content": "Every service row below carries an explicit **Site** column, so no panel here requires you to already know where something runs.\n\n> **2026-09-25:** PantryBot was consolidated onto Oracle and the three-site failover design (Home/Oracle/Canada plus a GCP witness) was retired. The Canada site, the failover witness and the fencing panels have been removed from this dashboard because their subjects no longer exist \u2014 an empty panel reads as a fault, which is worse than no panel.\n\n\n| Site | What it is | How this Prometheus sees it |\n|---|---|---|\n| **HOME** | The home k3s cluster on the LAN: MinecraftMachine (192.168.40.208, control-plane) plus the ChaseBot agent. Since 2026-09-25 it runs **Minecraft and Authentik only** \u2014 PantryBot moved to Oracle. Nothing PantryBot-shaped runs here. | Fully instrumented: kube-state-metrics, cAdvisor, Alloy/Loki. Series from here have no `site` label. |\n| **ORACLE** | Oracle Cloud ARM instance, `pantry-bot-oracle`. **This is where PantryBot runs.** Gateway, worker, dispatcher, overlay, api, private-site and commands-site all serve from here, behind both Cloudflare tunnels. | An independent single-node k3s cluster with its own Prometheus, which remote-writes here through `prometheus-write-gateway` as `site=\"oracle\"`. |\n| **GREENIE'S PC** | Windows/Docker gaming PC (`ThePantry`) | Reaches this Prometheus via Alloy remote-write as `site=\"windows-remote\"`. Detail on the Greenie's Main PC dashboard. |"
           }
         },
         {
@@ -3717,8 +3717,8 @@ data:
         {
           "id": 4,
           "type": "stat",
-          "title": "ORACLE \u2014 instrumented here?",
-          "description": "Number of Oracle scrape targets in THIS Prometheus. 0 means Oracle health is unknown from here \u2014 not that Oracle is down.",
+          "title": "ORACLE \u2014 scrape targets reporting",
+          "description": "Number of Oracle scrape targets whose samples reach this Prometheus by remote-write (site=\"oracle\"). 0 means the remote-write path is broken, not necessarily that Oracle is down.",
           "gridPos": {
             "h": 4,
             "w": 6,
@@ -3763,8 +3763,8 @@ data:
                   "type": "value",
                   "options": {
                     "0": {
-                      "text": "NOT INSTRUMENTED",
-                      "color": "text",
+                      "text": "NO DATA FROM ORACLE",
+                      "color": "red",
                       "index": 0
                     }
                   }
@@ -3774,7 +3774,7 @@ data:
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "text",
+                    "color": "red",
                     "value": null
                   },
                   {
@@ -4323,13 +4323,13 @@ data:
         {
           "id": 10,
           "type": "stat",
-          "title": "Ready PantryBot Pods (home)",
-          "description": "",
+          "title": "Ready PantryBot Pods (Oracle)",
+          "description": "Ready pods in Oracle's pantry-bot namespace (all PantryBot services, both Cloudflare connectors and PostgreSQL).",
           "gridPos": {
             "h": 4,
             "w": 6,
-            "x": 12,
-            "y": 38
+            "x": 0,
+            "y": 54
           },
           "datasource": {
             "type": "prometheus",
@@ -4342,7 +4342,7 @@ data:
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "sum(kube_pod_status_ready{namespace=\"pantry-bot\", condition=\"true\", site=\"\"}) or vector(0)",
+              "expr": "sum(kube_pod_status_ready{namespace=\"pantry-bot\", condition=\"true\", site=\"oracle\"}) or vector(0)",
               "instant": true
             }
           ],
@@ -4385,13 +4385,13 @@ data:
         {
           "id": 11,
           "type": "stat",
-          "title": "PantryBot Containers CrashLooping (home)",
-          "description": "Non-zero means the home app plane is failing, not parked. A parked plane has its Deployments scaled to 0 and shows nothing here.",
+          "title": "PantryBot Containers CrashLooping (Oracle)",
+          "description": "Non-zero means a PantryBot container on Oracle is crash-looping.",
           "gridPos": {
             "h": 4,
             "w": 6,
-            "x": 18,
-            "y": 38
+            "x": 6,
+            "y": 54
           },
           "datasource": {
             "type": "prometheus",
@@ -4404,7 +4404,7 @@ data:
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "sum(kube_pod_container_status_waiting_reason{namespace=\"pantry-bot\", reason=\"CrashLoopBackOff\", site=\"\"}) or vector(0)",
+              "expr": "sum(kube_pod_container_status_waiting_reason{namespace=\"pantry-bot\", reason=\"CrashLoopBackOff\", site=\"oracle\"}) or vector(0)",
               "instant": true
             }
           ],
@@ -4617,16 +4617,16 @@ data:
         {
           "id": 13,
           "type": "text",
-          "title": "Oracle is not instrumented into this Prometheus",
+          "title": "How Oracle reaches this Prometheus",
           "gridPos": {
-            "h": 5,
+            "h": 3,
             "w": 24,
             "x": 0,
             "y": 51
           },
           "options": {
             "mode": "markdown",
-            "content": "No series in this Prometheus carries `site=\"oracle\"`, and there is no Oracle job in `observability/prometheus-config.yaml`. Oracle runs its own Prometheus, configured by `observability/oracle-prometheus-config.yaml`; it is neither federated nor remote-written here.\n\n**So: this dashboard cannot say whether Oracle is up.** The ORACLE stat above counts Oracle targets, so it stops saying NOT INSTRUMENTED the moment federation or remote-write is added \u2014 no dashboard edit needed."
+            "content": "Oracle is an independent single-node k3s cluster with its own Prometheus (`observability/oracle-prometheus-config.yaml`). It remote-writes everything to this Prometheus through `prometheus-write-gateway`, and every Oracle series carries `site=\"oracle\"`. If the ORACLE stat above reads NO DATA FROM ORACLE, check that path first."
           }
         }
       ]
@@ -4724,7 +4724,7 @@ data:
        "tooltip": ""
       },
       {
-       "title": "Sites & Failover",
+       "title": "Sites",
        "url": "/d/homelab-site-service-health",
        "type": "link",
        "icon": "sitemap",
