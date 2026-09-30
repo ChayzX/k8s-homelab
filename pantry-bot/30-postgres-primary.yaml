@@ -22,7 +22,7 @@ metadata:
   labels:
     app.kubernetes.io/name: pantry-postgres
     homelab/production: 'true'
-    pantrybot.postgres/role: standby
+    pantrybot.postgres/role: primary
   name: pantry-postgres
   namespace: pantry-bot
 spec:
@@ -49,6 +49,10 @@ spec:
         - -c
         - wal_receiver_timeout=10s
         envFrom:
+        # The Secret keeps its historical "-standby" name only because this
+        # live StatefulSet references it; renaming it means recreating the
+        # Secret and rolling the database. It holds this primary's
+        # POSTGRES_* credentials.
         - secretRef:
             name: pantry-bot-postgres-standby
         image: postgres:16-alpine

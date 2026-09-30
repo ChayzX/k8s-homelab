@@ -1,13 +1,10 @@
 # grafana/mcp-grafana -- MCP server giving an AI agent (Claude) query access
 # to this cluster's self-hosted Grafana, over Streamable HTTP.
 #
-# Why this exists instead of using Grafana Cloud's OAuth-based MCP connector:
-# that connector's browser OAuth flow doesn't fit a non-interactive agent
-# session the same way a static service account token does. This runs the
-# upstream grafana/mcp-grafana server as its own workload instead, talking to
-# the *self-hosted* Grafana at grafana.greeniespantry.uk (retained here as the
-# rollback-only instance -- see grafana-deploy.yml's header -- not Grafana
-# Cloud, which is production).
+# Why a static service account token: a browser OAuth flow doesn't fit a
+# non-interactive agent session. This runs the upstream grafana/mcp-grafana
+# server as its own workload, talking to the self-hosted Grafana at
+# grafana.greeniespantry.uk, which is the only Grafana in use.
 #
 # GRAFANA_URL below points at the in-cluster ClusterIP path
 # (grafana.observability.svc.cluster.local:3002), NOT the public
@@ -15,8 +12,8 @@
 # the public hostname is fronted by Authentik's proxy outpost
 # (GF_AUTH_PROXY_ENABLED in grafana.yaml expects the browser-auth
 # X-authentik-username header), and routing this server's Bearer-token API
-# calls through that outpost would just repeat the redirect-to-login failure
-# that broke the Grafana Cloud MCP connector in the first place. Grafana's
+# calls through that outpost would just hit the interactive
+# redirect-to-login page, which a Bearer-token client cannot follow. Grafana's
 # service-account-token auth (Authorization: Bearer <token>) is handled by a
 # separate, earlier stage of Grafana's auth chain than the proxy-header path,
 # so it works the same whether GF_AUTH_PROXY_ENABLED is set or not -- but

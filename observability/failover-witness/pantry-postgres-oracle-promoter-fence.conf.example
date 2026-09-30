@@ -1,5 +1,0 @@
-[Service]
-# The composite adapter positively fences both the home writer and the
-# Canada recovery writer before Oracle promotion. Keep the command fixed and
-# explicitly confirmed; the adapter rejects any other target identity.
-Environment="OLD_WRITER_FENCE_COMMAND=/usr/local/lib/failover-witness/fence-old-writers-from-oracle.sh --confirm"

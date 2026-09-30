@@ -44,7 +44,7 @@ NAV = [
     {'title': 'PantryBot', 'url': '/d/homelab-pantry-bot', 'type': 'link', 'icon': 'bolt'},
     {'title': 'Minecraft', 'url': '/d/homelab-minecraft', 'type': 'link', 'icon': 'cube'},
     {'title': 'Logs', 'url': '/d/homelab-logs', 'type': 'link', 'icon': 'doc'},
-    {'title': 'Sites & Failover', 'url': '/d/homelab-site-service-health', 'type': 'link',
+    {'title': 'Sites', 'url': '/d/homelab-site-service-health', 'type': 'link',
      'icon': 'sitemap'},
 ]
 

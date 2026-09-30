@@ -1,103 +1,60 @@
-> **Historical:** describes the retired multi-site / Grafana Cloud setup (PantryBot home, Canada and failover topology; Grafana Cloud). Current state: PantryBot runs only on the Oracle node (single-site since 2026-09-25) with self-hosted Grafana/Prometheus/Loki in the `observability` namespace. Body left unchanged as a dated record.
-
 # Lightweight failover witness
 
-This is a deliberately small, private witness for PantryBot's fenced
-failover controller. It stores a monotonically increasing fencing epoch and
-grants one short-lived authority lease to either `home` or `oracle`.
-Multiple replicas from the current site receive the same epoch/token, so a
-site can scale its worker role horizontally without granting authority to the
-other site.
+A small, private lease witness that runs on the GCP e2-micro `discordmusicbot`
+(`failover-witness.service`, `witness.py`). It stores a monotonically
+increasing fencing epoch and grants one short-lived authority lease per
+resource to one site at a time.
+
+**Current consumers** (all separate from PantryBot):
+
+- **opsbot** and **JMusicBot**: their Deployments hold a resource-scoped
+  lease before connecting to Discord (`opsbot-witness`, `jmusicbot-witness`
+  Secrets).
+- **Authentik PostgreSQL** standby design:
+  `authentik-postgres-self-fence.service.example`,
+  `authentik_oracle_promoter.py`, and the `fence-authentik-*.sh` scripts.
+
+**PantryBot no longer uses the witness.** It runs only on Oracle, an
+independent single-node k3s cluster, with no standby, fencing or failover.
+The PantryBot home/Oracle/Canada promoters, fences, standby followers, Canada
+scripts and PantryBot fencer RBAC were removed from this directory. See git
+history for the retired design.
+
+`oracle_promoter.py` and its two `pantry-postgres-oracle-promoter.*.example`
+test fixtures remain only because `authentik_oracle_promoter.py` imports
+`OraclePromoter`, `PromotionAdapters` and helpers from it. Do not install
+the PantryBot promoter unit.
 
 It is not a database, a health detector, or a source-fencing mechanism. A
-caller must still prove that the old PostgreSQL writer is stopped or rejects
-writes before promoting a new writer. Automatic failover remains disabled
-until that proof exists.
+caller must still prove that the old writer is stopped or rejects writes
+before promoting a new one.
 
-## Canada last-resort promotion
+## Network path
 
-Canada is a manually-driven, single-shot last-resort recovery path — never
-automated, never preferred over Home or Oracle. See
-`docs/recovery/runbooks/pantrybot-canada-last-resort.md` for the full
-procedure. Summary: `canada-last-resort-home-gate.sh` and
-`canada-last-resort-oracle-gate.sh` independently prove both preferred sites
-are dark before `canada-last-resort-promote.sh` will touch anything, and a
-`CANADA_LAST_RESORT_CONFIRM` token gates both the promotion and the route
-publish. The `canada/` subdirectory holds the live Canada production
-scripts (`authority-gate.ps1` and friends), captured from the host because
-they were running in production without ever being committed anywhere.
+The service listens on localhost on the GCP VM. Each site reaches it through
+an outbound SSH local-forward; no public application port or load balancer is
+needed. The shared secret belongs in a root-owned environment file and must
+not be committed.
 
-## Oracle promotion preflight
+- `failover-witness-home-tunnel.service` (minecraftmachine) and
+  `failover-witness-chasebot-tunnel.service` (chasebot) bind host loopback
+  `127.0.0.1:18765`.
+- `failover-witness-chasebot-fence-tunnel.service` is the reverse SSH path
+  the witness side uses to reach chasebot for a fence.
+- `failover-witness-oracle-tunnel.service` does the same on Oracle.
 
-Before any controlled Oracle promotion, run the read-only guard on Oracle:
+Kubernetes workloads on the home cluster reach the local tunnel through
+`failover-witness-relay.observability.svc.cluster.local:18765`, backed by the
+host-networked DaemonSet in `failover-witness-relay.yaml` and a Service with
+`internalTrafficPolicy: Local`. That policy sends a workload to the relay on
+its own node and fails closed if that node has no relay. It never sends
+coordination traffic across nodes. The relay listens on the node's internal
+address at port 18766 and forwards only to that node's loopback tunnel. It
+adds no authentication: callers still need the witness Bearer secret.
 
-```sh
-sudo sh -c '
-  set -a
-  . /etc/failover-witness/postgres-fence.env
-  set +a
-  /usr/local/lib/failover-witness/oracle-promotion-preflight.sh
-'
-```
+## Install
 
-Source the root-owned environment file on the Oracle host: the live standby
-uses the `pantry` database role and pod-specific values, while the script's
-defaults are intended only for isolated test fixtures. Do not print or commit
-the environment file; it may contain fencing credentials.
-
-It must report the candidate as a read-only standby with non-empty receive and
-replay LSNs, the live PostgreSQL data directory, and an inactive promoter. It
-does not acquire authority, fence a writer, promote PostgreSQL, patch a
-Service, or scale workloads.
-
-## Minecraft-safe PantryBot writer fence
-
-`fence-pantry-postgres.sh` is the source-side fence contract for the home
-PantryBot database. It scales down and force-removes only the named PantryBot
-PostgreSQL StatefulSets, verifies that their services have no endpoints, and
-fails closed if the Kubernetes API or any database pod remains reachable. It
-does not stop `k3s`, `k3s-agent`, containerd, a node, or Minecraft. The
-repository contract test is `test_pantry_postgres_fence.py`.
-
-Install it only on the source-writer host that owns the local PostgreSQL
-authority (currently ChaseBot during normal home-primary operation). Do not
-install this command on MinecraftMachine; Minecraft shares its control plane
-with the home standby and is intentionally excluded from the fence target:
-
-```sh
-sudo install -o root -g root -m 0755 \
-  observability/failover-witness/fence-pantry-postgres.sh \
-  /usr/local/sbin/fence-pantry-postgres
-```
-
-The command is destructive fencing, not a health check. `--help` is the only
-non-mutating invocation. The existing GCP reverse-SSH endpoint is a forced
-operation on ChaseBot and currently rejects arguments; inspect or replace
-that forced operation only through the ChaseBot maintenance path. Do not test
-the fence through production SSH until a maintenance window has recorded the
-expected standby restore and stale-writer proof in GitHub Issues #147 and
-#191.
-
-The service listens on localhost only. Each site can reach it through an
-outbound SSH local-forward to GCP; no public application port or paid load
-balancer is required. The shared secret belongs in a root-owned environment
-file and must not be committed.
-
-The home tunnel units bind to host loopback (`127.0.0.1:18765`). Kubernetes
-workloads reach the local tunnel through
-`failover-witness-relay.observability.svc.cluster.local:18765`, which is
-backed by a host-networked DaemonSet and a Service with
-`internalTrafficPolicy: Local`. That policy deliberately sends a workload to
-the relay on its own home node and fails closed if that node has no relay; it
-does not silently send coordination traffic across the home pair.
-
-The relay listens on the node's Kubernetes internal address at port 18766 and
-forwards only to that node's loopback tunnel. It adds no authentication: callers still need
-the witness Bearer secret, and the relay is intended only for the private home
-network. The Oracle tunnel remains a node-address listener until an equivalent
-Oracle relay is deployed.
-
-Before enabling the unit, create its unprivileged account once:
+Before enabling the witness unit, create its unprivileged account once:
 
 ```sh
 sudo useradd --system --home-dir /var/lib/failover-witness \
@@ -106,73 +63,24 @@ sudo install -d -o failover-witness -g failover-witness -m 0750 \
   /var/lib/failover-witness
 ```
 
-Run the unit test with:
-
-```sh
-python3 observability/failover-witness/test_witness.py
-python3 observability/failover-witness/test_relay.py
-```
-
-The workload relay is defined in
-`failover-witness-relay.yaml`. Apply it after the `observability` namespace
-exists:
+Apply the relay after the `observability` namespace exists:
 
 ```sh
 kubectl apply -f observability/namespace.yaml
 kubectl apply -f observability/failover-witness/failover-witness-relay.yaml
 ```
 
-Install the revised home tunnel units on both home hosts, then restart the
-corresponding unit so the SSH forward moves from the LAN address to loopback:
-
-```sh
-sudo systemctl daemon-reload
-sudo systemctl restart failover-witness-home-tunnel.service
-# On chasebot, use the same commands for failover-witness-chasebot-tunnel.service.
-```
-
-Workloads should use the Service DNS name above rather than either host LAN
-address. A node-local relay is a reachability mechanism, not failover proof:
-the witness still requires a valid secret, and database writer fencing and
-promotion remain separate gates.
-
 The service API is `GET /healthz`, `POST /v1/authority/acquire`, and
 `POST /v1/authority/renew`, authenticated with `Authorization: Bearer ...`.
 
-## PantryBot PostgreSQL transport
-
-The repository also contains a guarded transport pair for the home PantryBot
-authority:
-
-- `pantry-bot-postgres-home-tunnel.service` runs on `chasebot` and reverse-
-  forwards the ClusterIP authority to GCP loopback port `25432`.
-- `pantry-bot-postgres-oracle-forward.service` runs on Oracle and forwards its
-  node-local `100.78.181.15:25432` to that GCP loopback port.
-
-The two SSH identities remain site-local. This is encrypted transport for a
-standby rehearsal, not database replication, promotion, or writer fencing.
-Install and test these units independently before creating a replication role;
-do not expose port `25432` publicly or route application traffic through it.
-
-The repository also includes the home-side tunnel unit. Install it only on a
-site that has its own SSH identity authorized on GCP; never copy the home
-private key to Oracle:
+## Tests
 
 ```sh
-sudo install -o root -g root -m 0644 \
-  observability/failover-witness/failover-witness-home-tunnel.service \
-  /etc/systemd/system/failover-witness-home-tunnel.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now failover-witness-home-tunnel.service
+cd observability/failover-witness
+python3 test_witness.py
+python3 test_relay.py
+python3 test_command_policy.py
+bash test_authentik_home_fence_transport.sh
+# pytest-style: test_fence_agent.py, test_oracle_promoter.py,
+# test_authentik_oracle_promoter.py
 ```
-
-Oracle uses the separate `failover-witness-oracle-tunnel.service` unit and
-the Oracle-generated `/home/ubuntu/.ssh/gcp-witness-oracle` key. Its GCP OS
-Login public key must be added for the service-account OS Login username shown
-by `gcloud beta compute os-login ssh-keys add`; do not reuse the home key.
-
-The home worker node uses `failover-witness-chasebot-tunnel.service` with a
-separate `/home/cpederson/.ssh/gcp-witness-chasebot` key and binds to the
-ChaseBot node address. This keeps home pod access to coordination available
-when MinecraftMachine is unavailable; the witness remains authenticated and
-private to the LAN path.

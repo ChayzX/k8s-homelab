@@ -58,8 +58,8 @@ kubectl -n observability create secret generic grafana-admin \
 Historical: these Secrets were the Grafana Cloud Loki push credential and
 Prometheus remote-write credential. Grafana Cloud is no longer used, no live
 manifest consumes either Secret, and observability is self-hosted Grafana,
-Prometheus and Loki in this namespace. Do not create them. Delete them from
-the cluster if they still exist (after confirming nothing references them).
+Prometheus and Loki in this namespace. Do not create them. They were deleted
+from both clusters on 2026-09-29 after confirming no pod referenced them.
 The numbering of the sections below is unchanged so existing references
 still resolve.
 

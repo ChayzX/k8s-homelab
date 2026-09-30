@@ -375,5 +375,4 @@ Grafana, Prometheus and Loki run in this `observability` namespace on
 minecraftmachine and are the only observability stack in use. Grafana Cloud is
 no longer used anywhere. The Oracle site's Prometheus collector remote-writes
 to the home Prometheus (`prometheus-write-gateway.yaml`), and Alloy on both
-sites writes logs to the local Loki. `scripts/check-grafana-cloud-ingestion.sh`
-is a legacy script for the retired Cloud path and is not a current check.
+sites writes logs to the local Loki.
