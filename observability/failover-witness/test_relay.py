@@ -42,7 +42,6 @@ class RelayTests(unittest.TestCase):
         root = Path(__file__).parent
         for unit in (
             "failover-witness-home-tunnel.service",
-            "failover-witness-chasebot-tunnel.service",
             "failover-witness-oracle-tunnel.service",
         ):
             text = (root / unit).read_text()
@@ -57,7 +56,7 @@ class RelayTests(unittest.TestCase):
         self.assertIn("internalTrafficPolicy: Local", manifest)
         self.assertIn("kubernetes.io/hostname", manifest)
         self.assertIn("minecraftmachine", manifest)
-        self.assertIn("chasebot", manifest)
+        self.assertNotIn("chasebot", manifest)
         self.assertIn("pantry-bot-oracle", manifest)
 
 

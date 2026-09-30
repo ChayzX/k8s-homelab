@@ -6,7 +6,6 @@ set -u
 SOURCE_LABEL=${SOURCE_LABEL:-$(hostname -s)}
 TARGET_HOME_API=${TARGET_HOME_API:-100.84.89.87}
 TARGET_HOME_LAN_API=${TARGET_HOME_LAN_API:-192.168.40.208}
-TARGET_CHASEBOT=${TARGET_CHASEBOT:-192.168.40.200}
 TARGET_ORACLE=${TARGET_ORACLE:-100.78.181.15}
 DNS_SERVICE=${DNS_SERVICE:-10.43.0.10}
 failures=0
@@ -36,8 +35,6 @@ tcp_check home-tailscale-ssh "$TARGET_HOME_API" 22
 tcp_check home-lan-ssh "$TARGET_HOME_LAN_API" 22
 tcp_check home-tailscale-kubelet "$TARGET_HOME_API" 10250
 tcp_check home-lan-api "$TARGET_HOME_LAN_API" 6443
-tcp_check chasebot-ssh "$TARGET_CHASEBOT" 22
-tcp_check chasebot-kubelet "$TARGET_CHASEBOT" 10250
 tcp_check oracle-ssh "$TARGET_ORACLE" 22
 tcp_check oracle-kubelet "$TARGET_ORACLE" 10250
 

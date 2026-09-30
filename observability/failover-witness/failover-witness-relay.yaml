@@ -97,7 +97,6 @@ spec:
                     operator: In
                     values:
                       - minecraftmachine
-                      - chasebot
                       - pantry-bot-oracle
       securityContext:
         runAsUser: 65532

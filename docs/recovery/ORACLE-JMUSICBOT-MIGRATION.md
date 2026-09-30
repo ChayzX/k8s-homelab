@@ -1,3 +1,5 @@
+> **Historical:** dated record written while ChaseBot was a home k3s node. ChaseBot was retired from the cluster on 2026-09-29; the home cluster is now minecraftmachine only. Body left unchanged.
+
 # Oracle independent-environment migration: JMusicBot
 
 ## Why JMusicBot is the first candidate
