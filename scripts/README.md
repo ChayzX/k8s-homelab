@@ -41,7 +41,7 @@ Run `network-validation.sh` from a node host network namespace to record
 management, kubelet, cluster-DNS, service/pod, and home NodePort paths:
 
 ```bash
-SOURCE_LABEL=chasebot scripts/network-validation.sh
+SOURCE_LABEL=minecraftmachine scripts/network-validation.sh
 ```
 
 The script is read-only and exits non-zero when a required path fails. Expected

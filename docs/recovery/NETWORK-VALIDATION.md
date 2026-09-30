@@ -1,3 +1,5 @@
+> **Historical:** dated record written while ChaseBot was a home k3s node. ChaseBot was retired from the cluster on 2026-09-29; the home cluster is now minecraftmachine only. Body left unchanged.
+
 # Network Validation Matrix
 
 **Status:** the home-cluster node-pair baseline was refreshed 2026-09-10 before

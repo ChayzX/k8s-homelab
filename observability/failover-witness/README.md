@@ -11,7 +11,6 @@ resource to one site at a time.
   lease before connecting to Discord (`opsbot-witness`, `jmusicbot-witness`
   Secrets).
 - **Authentik PostgreSQL** standby design:
-  `authentik-postgres-self-fence.service.example`,
   `authentik_oracle_promoter.py`, and the `fence-authentik-*.sh` scripts.
 
 **PantryBot no longer uses the witness.** It runs only on Oracle, an
@@ -36,11 +35,9 @@ an outbound SSH local-forward; no public application port or load balancer is
 needed. The shared secret belongs in a root-owned environment file and must
 not be committed.
 
-- `failover-witness-home-tunnel.service` (minecraftmachine) and
-  `failover-witness-chasebot-tunnel.service` (chasebot) bind host loopback
-  `127.0.0.1:18765`.
-- `failover-witness-chasebot-fence-tunnel.service` is the reverse SSH path
-  the witness side uses to reach chasebot for a fence.
+- `failover-witness-home-tunnel.service` (minecraftmachine) binds host
+  loopback `127.0.0.1:18765`. (The chasebot tunnel and fence-tunnel units were
+  removed when chasebot left the cluster on 2026-09-29.)
 - `failover-witness-oracle-tunnel.service` does the same on Oracle.
 
 Kubernetes workloads on the home cluster reach the local tunnel through

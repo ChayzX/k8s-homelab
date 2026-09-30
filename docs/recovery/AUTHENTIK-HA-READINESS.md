@@ -1,3 +1,5 @@
+> **Historical:** dated record written while ChaseBot was a home k3s node. ChaseBot was retired from the cluster on 2026-09-29; the home cluster is now minecraftmachine only. Body left unchanged.
+
 # Authentik emergency-access readiness
 
 This bounded record covers homelab issues #198 and #202. It records sanitized

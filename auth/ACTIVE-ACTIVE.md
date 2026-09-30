@@ -90,7 +90,7 @@ outposts. A scale attempt on 2026-09-11 caused ChaseBot's node to report
 ephemeral-storage pressure and evict the extra server/LDAP pods, so those
 replicas were rolled back after the remaining workloads returned Ready.
 
-Do not describe same-site two-replica density as complete until ChaseBot's
-storage pressure is resolved and the anti-affinity rollout is re-proven. The
+ChaseBot was retired from the home cluster on 2026-09-29, so home is now a
+single node and same-site two-replica density does not apply. The
 cross-site active-active application capacity and database/fencing gates must
 still be verified independently.

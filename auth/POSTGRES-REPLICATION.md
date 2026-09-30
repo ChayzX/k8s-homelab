@@ -20,10 +20,10 @@ multi-primary writes are not provided by the free homelab design.
 - Home return target: `auth-postgresql-home-return-0` is the current writable
   primary on its fresh PVC. It must not be confused with the fenced original
   primary PVC.
-- Historical migration target: the ChaseBot-pinned
-  `auth-postgresql-chasebot-standby-0` StatefulSet retains its old `standby`
-  name and `primary` role label for migration compatibility, but it is not the
-  current production authority and must not be treated as independently fenced.
+- Retired migration target: the ChaseBot-pinned
+  `auth-postgresql-chasebot-standby` StatefulSet, Service, PVC and PV were
+  deleted on 2026-09-29 when ChaseBot left the cluster. It was never the
+  production authority. A copy of its stale data is kept off-cluster.
 - Home transport: the private `auth-postgresql-transport` NodePort on `30433`.
 - Oracle standby: `auth-postgresql-standby-0`, backed by a newly provisioned
   local-path 10Gi PVC after the return-home reseed.

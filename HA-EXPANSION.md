@@ -1,3 +1,5 @@
+> **Historical:** dated record written while ChaseBot was a home k3s node. ChaseBot was retired from the cluster on 2026-09-29; the home cluster is now minecraftmachine only. Body left unchanged.
+
 # Homelab Availability and Recovery Architecture
 
 > **Superseded direction:** This document remains the recovery baseline and records why WAN-spanning k3s consensus was rejected. The current target is the approved free active-active application architecture in [`docs/superpowers/specs/2026-09-10-free-active-active-homelab-design.md`](docs/superpowers/specs/2026-09-10-free-active-active-homelab-design.md) and [`docs/superpowers/plans/2026-09-10-free-active-active-homelab.md`](docs/superpowers/plans/2026-09-10-free-active-active-homelab.md). Minecraft remains excluded. PantryBot is the first implementation; other services follow after their own state and side-effect gates.

@@ -1,3 +1,5 @@
+> **Historical:** dated record written while ChaseBot was a home k3s node. ChaseBot was retired from the cluster on 2026-09-29; the home cluster is now minecraftmachine only. Body left unchanged.
+
 # Independent Environments HA and Recovery Implementation Plan
 
 > **Historical baseline:** This plan covers the recovery foundation that preceded the approved free active-active application design. Continue with [`2026-09-10-free-active-active-homelab.md`](2026-09-10-free-active-active-homelab.md) for the current goal. Minecraft remains excluded from active-active work.
