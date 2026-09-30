@@ -27,7 +27,8 @@ assert "alertmanager" not in loki
 # Grafana has routing policy and, since ChayzX/pantry-bot#346, provisioned
 # PantryBot rule groups (Grafana is the only rule evaluator).
 assert "groups:" in grafana
-for uid in ("pantry-oracle-target-down", "pantry-oracle-runtime-failures", "pantry-oracle-metrics-absent"):
+for uid in ("pantry-oracle-target-down", "pantry-oracle-runtime-failures", "pantry-oracle-metrics-absent",
+            "pantry-oracle-disk-high", "pantry-oracle-disk-critical", "pantry-oracle-disk-metrics-absent"):
     assert uid in grafana, uid
 
 # Grafana delivers through opsbot's authenticated relay, not a Discord
