@@ -406,6 +406,145 @@ data:
                         params: [93600]
                   refId: C
 
+          - uid: pantry-oracle-disk-high
+            title: Oracle disk usage high
+            condition: C
+            for: 10m
+            noDataState: OK
+            execErrState: Error
+            isPaused: false
+            labels:
+              severity: warning
+            annotations:
+              summary: "Oracle root disk is {{ $values.B.Value | humanize }}% full"
+              description: "Root filesystem (/) on the Oracle node has been above 85% for 10m. Check on the Oracle node: `docker system df` (images, containers, volumes, build cache), `docker volume prune` (an hourly cron also prunes; if the cron is failing the disk fills), and the CI runner work dirs. Kubelet starts evicting pods at ~95% (2026-09-30: 96% evicted every PantryBot pod and Postgres, ~37 min outage)."
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: Prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: Prometheus
+                  expr: '100 * (1 - node_filesystem_avail_bytes{site="oracle",mountpoint="/",fstype="ext4"} / node_filesystem_size_bytes{site="oracle",mountpoint="/",fstype="ext4"})'
+                  instant: true
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  type: reduce
+                  expression: A
+                  reducer: last
+                  settings:
+                    mode: dropNN
+                  refId: B
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator:
+                        type: gt
+                        params: [85]
+                  refId: C
+          - uid: pantry-oracle-disk-critical
+            title: Oracle disk usage critical
+            condition: C
+            for: 5m
+            noDataState: OK
+            execErrState: Error
+            isPaused: false
+            labels:
+              severity: critical
+            annotations:
+              summary: "Oracle root disk is {{ $values.B.Value | humanize }}% full - eviction imminent"
+              description: "Root filesystem (/) on the Oracle node has been above 92% for 5m. ACT NOW. Check on the Oracle node: `docker system df` (images, containers, volumes, build cache), `docker volume prune` (an hourly cron also prunes; if the cron is failing the disk fills), and the CI runner work dirs. Kubelet starts evicting pods at ~95% (2026-09-30: 96% evicted every PantryBot pod and Postgres, ~37 min outage)."
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: Prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: Prometheus
+                  expr: '100 * (1 - node_filesystem_avail_bytes{site="oracle",mountpoint="/",fstype="ext4"} / node_filesystem_size_bytes{site="oracle",mountpoint="/",fstype="ext4"})'
+                  instant: true
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  type: reduce
+                  expression: A
+                  reducer: last
+                  settings:
+                    mode: dropNN
+                  refId: B
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator:
+                        type: gt
+                        params: [92]
+                  refId: C
+          - uid: pantry-oracle-disk-metrics-absent
+            title: No Oracle disk metrics
+            condition: C
+            for: 10m
+            noDataState: OK
+            execErrState: Error
+            isPaused: false
+            labels:
+              severity: warning
+            annotations:
+              summary: "Oracle node-exporter disk metrics have disappeared"
+              description: "No node_filesystem_size_bytes{site=oracle,mountpoint=/} series for 10m, so the Oracle disk usage alerts cannot fire: node-exporter-oracle is down, Oracle Prometheus is down, or remote_write to home is broken. Distinct from PantryBot metrics absent, which watches app metrics only."
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: Prometheus
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: Prometheus
+                  expr: 'absent(node_filesystem_size_bytes{site="oracle",mountpoint="/",fstype="ext4"})'
+                  instant: true
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  type: reduce
+                  expression: A
+                  reducer: last
+                  settings:
+                    mode: dropNN
+                  refId: B
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator:
+                        type: gt
+                        params: [0]
+                  refId: C
+
     # Notification policy tree.
     #
     # WARNING: provisioning REPLACES the whole policy tree on startup, and
