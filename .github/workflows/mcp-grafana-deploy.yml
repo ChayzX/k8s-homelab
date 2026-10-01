@@ -23,10 +23,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: mcp-grafana-production
-  cancel-in-progress: false
-
 jobs:
   apply-manifests:
     name: 1 - Apply MCP server and tunnel connector manifests

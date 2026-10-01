@@ -20,10 +20,6 @@ permissions:
   contents: read
 
 # Serialize Minecraft updates; world/version changes must never overlap.
-concurrency:
-  group: minecraft-production
-  cancel-in-progress: false
-
 env:
   IMAGE: ghcr.io/chayzx/paper-minecraft
 
