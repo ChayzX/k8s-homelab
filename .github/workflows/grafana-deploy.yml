@@ -20,10 +20,6 @@ permissions:
   contents: read
 
 # Do not let two manual deploy operations race the same Grafana target.
-concurrency:
-  group: grafana-rollback
-  cancel-in-progress: false
-
 jobs:
   apply-configmap:
     name: 1 - Apply retained local dashboard ConfigMap (manual rollback only)

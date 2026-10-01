@@ -20,10 +20,6 @@ permissions:
   contents: read
 
 # A second release must not race the first release's image/health verification.
-concurrency:
-  group: jmusicbot-production
-  cancel-in-progress: false
-
 env:
   IMAGE: ghcr.io/chayzx/jmusicbot
 
