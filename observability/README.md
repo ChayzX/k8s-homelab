@@ -177,13 +177,17 @@ To remove only the TRUFFLES dashboard, restore the previous
 ## Oracle collector
 
 Oracle is an independent k3s cluster, so the Oracle collector manifests must
-be applied with Oracle's kubeconfig or directly on that host. Create the
-`grafana-cloud-metrics` Secret there using the same remote-write password
-contract in `SECRETS.md`, then apply `node-exporter-oracle.yaml`,
-`kube-state-metrics.yaml`, `oracle-prometheus-config.yaml`, and
-`oracle-prometheus.yaml`. The Oracle collector uses `site=oracle` and
-`cluster=pantry-bot-oracle` labels so its metrics are distinguishable from
-home in Grafana Cloud. It has no local Grafana or Loki dependency.
+be applied with Oracle's kubeconfig or directly on that host. Apply
+`node-exporter-oracle.yaml`, `kube-state-metrics.yaml`,
+`oracle-prometheus-config.yaml`, and `oracle-prometheus.yaml`. The Oracle
+collector uses `site=oracle` and `cluster=pantry-bot-oracle` labels.
+
+Oracle Prometheus keeps its full metric set local. The sole remote-write
+exception sends `pantry-bot/postgres-backup`'s
+`kube_cronjob_status_last_successful_time` series to the on-prem
+`metrics.greeniespantry.uk` receiver. Home Grafana uses that series for
+the 26-hour backup freshness alert; no other Oracle series or metadata are
+forwarded, and nothing is sent to Grafana Cloud.
 
 `grafana.yaml` contains the Grafana Deployment/PVC/SA block and a **primary
 Service** on port 3002 that will sit `EXTERNAL-IP <pending>` until the
