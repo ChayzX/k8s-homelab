@@ -482,6 +482,16 @@ only by `process_id` — this exporter version does not expose a process
 name label). Linked from the Overview dashboard alongside the other host
 dashboards.
 
+### `truffles-streaming.json` — TRUFFLES Streaming
+
+Provisioned for the separate Windows streaming laptop. It filters every
+query with `instance="TRUFFLES"` and `role="streaming-laptop"`, uses the
+`Prometheus` datasource UID, and covers Windows host metrics, OBS and
+VTubeControl process usage, NVIDIA GPU/encoder telemetry, and OBS streaming
+quality. Custom panels require a collector heartbeat newer than 45 seconds;
+stream-quality rates also require fresh successful OBS collection and an
+active stream. The dashboard intentionally defines no laptop-offline alert.
+
 ### `site-service-health.json` — Site & Service Health — Home / Oracle / Canada
 
 **Rebuilt 2026-09-21** so that every service row carries an explicit

@@ -75,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$TUNNEL_TOKEN"
-          for permission in "get secrets" "create secrets" "patch secrets" "get serviceaccounts" "create serviceaccounts" "patch serviceaccounts" "create deployments" "patch deployments"; do
+          for permission in "get secrets" "create secrets" "patch secrets" "get configmaps" "create configmaps" "patch configmaps" "get services" "create services" "patch services" "get serviceaccounts" "create serviceaccounts" "patch serviceaccounts" "create deployments" "patch deployments"; do
             verb="${permission%% *}"
             resource="${permission##* }"
             kubectl auth can-i "$verb" "$resource" -n observability | grep -qx yes
@@ -84,6 +84,7 @@ jobs:
             --from-literal=TUNNEL_TOKEN="$TUNNEL_TOKEN" \
             --dry-run=client -o yaml | kubectl apply -f - -n observability
           kubectl apply -f observability/prometheus.yaml -n observability
+          kubectl apply -f observability/prometheus-write-gateway.yaml -n observability
           kubectl apply -f observability/windows-alloy-metrics-cloudflared.yaml -n observability
           kubectl rollout status deployment/prometheus -n observability --timeout=180s
           kubectl rollout status deployment/windows-alloy-metrics-cloudflared -n observability --timeout=180s

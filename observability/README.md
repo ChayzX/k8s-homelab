@@ -124,6 +124,56 @@ kubectl apply -f kube-state-metrics.yaml
 kubectl apply -f alloy-logs-home.yaml
 ```
 
+## Windows Alloy remote-write ingress
+
+`metrics.greeniespantry.uk` is a dedicated Cloudflare Tunnel hostname. Its
+connector pod maps the tunnel's Prometheus origin hostname to a local
+`write-gateway` sidecar. The gateway forwards only exact `POST /api/v1/write`
+requests through the `prometheus-origin` ClusterIP Service to the receiver.
+Prometheus query, admin, lifecycle, and UI endpoints remain private.
+The shared endpoint retains its existing authentication behavior so the
+already-connected Windows gaming PC is not disrupted. It currently has no
+HTTP Basic or Cloudflare Access authentication; both Windows agents use the
+HTTPS endpoint directly, with no `Authorization` or `CF-Access-*` headers.
+
+The live receiver is enabled by `--web.enable-remote-write-receiver` in
+`prometheus.yaml`; keep that flag together with the explicit config path,
+TSDB path, retention, block-duration, lifecycle, and console flags whenever
+the argument list changes. `prometheus-write-gateway.yaml` persists the
+gateway that fronts the receiver, and
+`windows-alloy-metrics-cloudflared.yaml` persists the dedicated tunnel
+connector. The tunnel token remains in the
+`windows-alloy-metrics-tunnel` Kubernetes Secret and the matching GitHub
+Actions secret, never in this repository.
+
+TRUFFLES must attach `instance="TRUFFLES"` and
+`role="streaming-laptop"` to every forwarded series. Its provisioned
+dashboard is `/d/truffles-streaming/truffles-streaming`. The dashboard uses
+the verified Windows exporter and streaming collector contract for CPU,
+memory, disk, network, OBS/VTubeControl process usage, NVIDIA GPU/encoder,
+temperature, power, FPS, stream state, render/encode loss, and network drops.
+Custom panels require a collector heartbeat newer than 45 seconds and a
+successful subsystem collection. Stream-quality panels additionally require
+`streaming_obs_stream_active == 1`; no laptop-offline alert is provisioned.
+
+To roll back the receiver safely, first stop the shared Windows metrics
+connector. This interrupts both Windows agents, but avoids restoring the old
+tunnel revision that exposed Prometheus query and health paths. Do not restart
+the connector until its Cloudflare origin is removed or again points through
+an exact-path gateway:
+
+```bash
+kubectl -n observability scale deployment/windows-alloy-metrics-cloudflared --replicas=0
+kubectl -n observability rollout undo deployment/prometheus
+kubectl -n observability delete service/prometheus-origin
+kubectl -n observability delete configmap/prometheus-write-gateway
+git revert <change-commit>
+```
+
+To remove only the TRUFFLES dashboard, restore the previous
+`dashboards/dashboards-configmap.yaml` and reapply that ConfigMap. Do not run
+`kubectl delete pvc`, `helm uninstall`, or the retired Docker Compose stack.
+
 ## Oracle collector
 
 Oracle is an independent k3s cluster, so the Oracle collector manifests must

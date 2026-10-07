@@ -40,6 +40,10 @@ spec:
       serviceAccountName: windows-alloy-metrics-cloudflared
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 30
+      hostAliases:
+        - ip: "127.0.0.1"
+          hostnames:
+            - prometheus.observability.svc.cluster.local
       securityContext:
         runAsUser: 65532
         runAsGroup: 65532
@@ -93,3 +97,37 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
+        - name: write-gateway
+          image: nginxinc/nginx-unprivileged:1.27-alpine
+          ports:
+            - name: write
+              containerPort: 9090
+            - name: gateway-health
+              containerPort: 8081
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: gateway-health
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: write-gateway-config
+              mountPath: /etc/nginx/conf.d
+            - name: write-gateway-tmp
+              mountPath: /tmp
+      volumes:
+        - name: write-gateway-config
+          configMap:
+            name: prometheus-write-gateway
+        - name: write-gateway-tmp
+          emptyDir: {}
