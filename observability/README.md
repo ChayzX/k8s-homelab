@@ -182,12 +182,12 @@ be applied with Oracle's kubeconfig or directly on that host. Apply
 `oracle-prometheus-config.yaml`, and `oracle-prometheus.yaml`. The Oracle
 collector uses `site=oracle` and `cluster=pantry-bot-oracle` labels.
 
-Oracle Prometheus keeps its full metric set local. The sole remote-write
-exception sends `pantry-bot/postgres-backup`'s
-`kube_cronjob_status_last_successful_time` series to the on-prem
-`metrics.greeniespantry.uk` receiver. Home Grafana uses that series for
-the 26-hour backup freshness alert; no other Oracle series or metadata are
-forwarded, and nothing is sent to Grafana Cloud.
+Oracle Prometheus keeps its full metric set local. A narrow remote-write
+allowlist sends only the series used by home Grafana's Oracle health rules to
+the on-prem `metrics.greeniespantry.uk` receiver: PantryBot target `up`,
+runtime claims/failures, the `pantry-bot/postgres-backup` success timestamp,
+and root-filesystem available/size bytes. No other Oracle series or metadata
+are forwarded, and nothing is sent to Grafana Cloud.
 
 `grafana.yaml` contains the Grafana Deployment/PVC/SA block and a **primary
 Service** on port 3002 that will sit `EXTERNAL-IP <pending>` until the

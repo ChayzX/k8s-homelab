@@ -17,10 +17,10 @@ data:
         node: pantry-bot-oracle
         site: oracle
 
-    # Keep Oracle metrics local except for the single backup freshness series
-    # evaluated by the home Grafana alert. This targets the on-prem receiver,
-    # not Grafana Cloud, and prevents a missing cross-site series from being
-    # mistaken for a failed backup.
+    # Keep Oracle metrics local except for the small series set evaluated by
+    # home Grafana's Oracle health rules. This targets the on-prem receiver,
+    # not Grafana Cloud, and prevents missing cross-site series from being
+    # mistaken for failures.
     remote_write:
       - url: https://metrics.greeniespantry.uk/api/v1/write
         queue_config:
@@ -32,9 +32,9 @@ data:
         metadata_config:
           send: false
         write_relabel_configs:
-          - source_labels: [__name__, job, namespace, cronjob]
+          - source_labels: [__name__, job, namespace, cronjob, mountpoint, fstype]
             separator: ";"
-            regex: 'kube_cronjob_status_last_successful_time;kube-state-metrics-oracle;pantry-bot;postgres-backup'
+            regex: '(kube_cronjob_status_last_successful_time;kube-state-metrics-oracle;pantry-bot;postgres-backup;;|(up|pantry_bot_runtime_(claims|failures)_total);pantry-bot-.*-oracle;;;;|node_filesystem_(avail|size)_bytes;node-oracle;;;/;ext4)'
             action: keep
 
     scrape_configs:
