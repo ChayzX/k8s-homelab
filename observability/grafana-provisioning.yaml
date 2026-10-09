@@ -105,7 +105,9 @@ data:
         # next pod restart. Say so in the UI rather than letting people
         # lose work.
         allowUiUpdates: false
-        disableDeletion: true
+        # Remove dashboards whose JSON file was deleted from the ConfigMap.
+        # Keep the ConfigMap source complete so this only removes intentional retirements.
+        disableDeletion: false
 ---
 # Grafana Alerting provisioning -- Pantry-bot / Twitch-bot alerts to a
 # Discord DM.

@@ -1,593 +1,5 @@
 apiVersion: v1
 data:
-  apps.json: |
-    {
-      "uid": "homelab-apps",
-      "title": "Apps — Minecraft / jmusicbot / pantry-bot",
-      "description": "App-specific panels for the three bespoke workloads. Minecraft has a real application-level exporter (RCON-based), and pantry-bot exposes usage counters at /metrics. The shared app dashboard keeps Kubernetes health signals; detailed pantry-bot participation and outcome charts live on the separate Pantry Bot — Usage dashboard.",
-      "tags": ["homelab", "k3s", "apps"],
-      "timezone": "browser",
-      "editable": true,
-      "schemaVersion": 39,
-      "version": 1,
-      "refresh": "15s",
-      "graphTooltip": 1,
-      "time": { "from": "now-6h", "to": "now" },
-      "templating": {
-        "list": [
-          {
-            "name": "DS_PROMETHEUS",
-            "label": "Prometheus",
-            "type": "datasource",
-            "query": "prometheus",
-            "current": {},
-            "hide": 0,
-            "refresh": 1,
-            "regex": "",
-            "skipUrlSync": false
-          },
-          {
-            "name": "DS_LOKI",
-            "label": "Loki",
-            "type": "datasource",
-            "query": "loki",
-            "current": {},
-            "hide": 0,
-            "refresh": 1,
-            "regex": "",
-            "skipUrlSync": false
-          }
-        ]
-      },
-      "panels": [
-        {
-          "type": "row",
-          "title": "Minecraft — RCON-based exporter (TPS, players, world size); memory via cAdvisor, not psutil",
-          "collapsed": false,
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
-          "panels": []
-        },
-        {
-          "id": 1,
-          "type": "stat",
-          "title": "Server Up",
-          "description": "minecraft_server_up, from minecraft_exporter's RCON poll (in-cluster now, via the minecraft-rcon ClusterIP Service). 1 = RCON connected successfully.",
-          "gridPos": { "h": 4, "w": 5, "x": 0, "y": 1 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_server_up", "legendFormat": "up" }],
-          "options": {
-            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-            "orientation": "auto",
-            "textMode": "auto",
-            "colorMode": "background",
-            "graphMode": "none",
-            "justifyMode": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "mappings": [
-                { "type": "value", "options": { "0": { "text": "DOWN", "color": "red", "index": 0 } } },
-                { "type": "value", "options": { "1": { "text": "UP", "color": "green", "index": 1 } } }
-              ],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 2,
-          "type": "stat",
-          "title": "Players Online / Max",
-          "gridPos": { "h": 4, "w": 5, "x": 5, "y": 1 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_players_online", "legendFormat": "online" },
-            { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_players_max", "legendFormat": "max" }
-          ],
-          "options": {
-            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-            "orientation": "horizontal",
-            "textMode": "value_and_name",
-            "colorMode": "none",
-            "graphMode": "none",
-            "justifyMode": "auto"
-          },
-          "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] }
-        },
-        {
-          "id": 3,
-          "type": "gauge",
-          "title": "TPS (1m)",
-          "description": "20.0 is perfect. Below 15 is visibly laggy (mob AI, redstone, block breaking slow down); below 10 is severe. Heap is capped at -Xmx6G (down from 12G) as of this migration -- if TPS regresses versus the old Docker deployment, check the JVM Memory panel below before assuming it's unrelated.",
-          "gridPos": { "h": 4, "w": 6, "x": 10, "y": 1 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_tps_1m", "legendFormat": "tps" }],
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true },
-          "fieldConfig": {
-            "defaults": {
-              "min": 0,
-              "max": 20,
-              "decimals": 1,
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "#EAB839", "value": 15 }, { "color": "green", "value": 19 }] }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 4,
-          "type": "gauge",
-          "title": "Pod Memory vs 8Gi Limit",
-          "description": "container_memory_working_set_bytes for the minecraft container, from kubelet's cAdvisor endpoint -- NOT the old minecraft_process_memory_bytes gauge. That gauge is gone: it came from psutil reading the java process's RSS from outside the container's PID namespace, which does not work once the process is containerized. This is the cgroup working-set number, which is what the OOM killer actually compares against the 8Gi limit. Heap is -Xmx6G, so 2Gi of headroom above the heap ceiling is expected for JVM overhead (metaspace, off-heap, native buffers) -- watch this trend after a few days of real play per the migration plan's verification step.",
-          "gridPos": { "h": 4, "w": 8, "x": 16, "y": 1 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum(container_memory_working_set_bytes{namespace=\"minecraft\", pod=~\"minecraft-.*\", container=\"minecraft\"})"
-            }
-          ],
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "bytes",
-              "min": 0,
-              "max": 8589934592,
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  { "color": "green", "value": null },
-                  { "color": "#EAB839", "value": 6442450944 },
-                  { "color": "red", "value": 7301444813 }
-                ]
-              }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 5,
-          "type": "timeseries",
-          "title": "TPS Over Time (1m / 5m / 15m)",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_tps_1m", "legendFormat": "1m" },
-            { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_tps_5m", "legendFormat": "5m" },
-            { "refId": "C", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_tps_15m", "legendFormat": "15m" }
-          ],
-          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-          "fieldConfig": {
-            "defaults": {
-              "min": 0,
-              "max": 20,
-              "color": { "mode": "palette-classic" },
-              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 6,
-          "type": "timeseries",
-          "title": "Pod Memory vs Limit Over Time",
-          "description": "Solid = working set (cAdvisor). Dashed = 8Gi limit. Dotted = 3Gi request. A second dashed reference at 6Gi marks the -Xmx heap ceiling, so you can see how much of the gap above it is JVM overhead vs actual growth.",
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum(container_memory_working_set_bytes{namespace=\"minecraft\", pod=~\"minecraft-.*\", container=\"minecraft\"})",
-              "legendFormat": "working set"
-            },
-            {
-              "refId": "B",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum(kube_pod_container_resource_limits{namespace=\"minecraft\", pod=~\"minecraft-.*\", container=\"minecraft\", resource=\"memory\"})",
-              "legendFormat": "LIMIT (8Gi)"
-            },
-            {
-              "refId": "C",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum(kube_pod_container_resource_requests{namespace=\"minecraft\", pod=~\"minecraft-.*\", container=\"minecraft\", resource=\"memory\"})",
-              "legendFormat": "request (3Gi)"
-            },
-            {
-              "refId": "D",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "vector(6442450944)",
-              "legendFormat": "-Xmx6G heap ceiling"
-            }
-          ],
-          "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "bytes",
-              "min": 0,
-              "color": { "mode": "palette-classic" },
-              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false }
-            },
-            "overrides": [
-              {
-                "matcher": { "id": "byName", "options": "LIMIT (8Gi)" },
-                "properties": [
-                  { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } },
-                  { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [12, 6] } },
-                  { "id": "custom.fillOpacity", "value": 0 },
-                  { "id": "custom.lineWidth", "value": 2 }
-                ]
-              },
-              {
-                "matcher": { "id": "byName", "options": "request (3Gi)" },
-                "properties": [
-                  { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } },
-                  { "id": "custom.lineStyle", "value": { "fill": "dot", "dash": [2, 6] } },
-                  { "id": "custom.fillOpacity", "value": 0 }
-                ]
-              },
-              {
-                "matcher": { "id": "byName", "options": "-Xmx6G heap ceiling" },
-                "properties": [
-                  { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } },
-                  { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [4, 4] } },
-                  { "id": "custom.fillOpacity", "value": 0 },
-                  { "id": "custom.lineWidth", "value": 2 }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": 7,
-          "type": "timeseries",
-          "title": "Players Online Over Time",
-          "gridPos": { "h": 7, "w": 8, "x": 0, "y": 13 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_players_online", "legendFormat": "players" }],
-          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false, "calcs": [] }, "tooltip": { "mode": "single", "sort": "none" } },
-          "fieldConfig": {
-            "defaults": {
-              "min": 0,
-              "decimals": 0,
-              "color": { "mode": "fixed", "fixedColor": "green" },
-              "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 40, "showPoints": "never", "spanNulls": false }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 8,
-          "type": "timeseries",
-          "title": "CPU Usage vs Limit (cores)",
-          "description": "Request 2 cores, limit 6 cores. cAdvisor rate of container_cpu_usage_seconds_total.",
-          "gridPos": { "h": 7, "w": 8, "x": 8, "y": 13 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"minecraft\", pod=~\"minecraft-.*\", container=\"minecraft\"}[5m]))",
-              "legendFormat": "usage"
-            },
-            {
-              "refId": "B",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum(kube_pod_container_resource_limits{namespace=\"minecraft\", pod=~\"minecraft-.*\", container=\"minecraft\", resource=\"cpu\"})",
-              "legendFormat": "LIMIT (6 cores)"
-            }
-          ],
-          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "none",
-              "min": 0,
-              "decimals": 2,
-              "color": { "mode": "palette-classic" },
-              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "cores" }
-            },
-            "overrides": [
-              {
-                "matcher": { "id": "byName", "options": "LIMIT (6 cores)" },
-                "properties": [
-                  { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } },
-                  { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [12, 6] } },
-                  { "id": "custom.fillOpacity", "value": 0 }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": 9,
-          "type": "timeseries",
-          "title": "World Size on Disk",
-          "description": "minecraft_world_size_bytes, checked every 10 minutes (not continuously -- walking thousands of small region files on every 15s poll would be wasteful and would itself add HDD load). A sudden jump can indicate world corruption/duplication, not just normal exploration growth.",
-          "gridPos": { "h": 7, "w": 8, "x": 16, "y": 13 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "minecraft_world_size_bytes", "legendFormat": "{{world}}" }],
-          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "bytes",
-              "min": 0,
-              "color": { "mode": "palette-classic" },
-              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 10,
-          "type": "stat",
-          "title": "Pod Restarts (24h)",
-          "description": "There is deliberately NO livenessProbe on the minecraft container -- a wedged JVM restarting mid-tick would risk world corruption, which is a worse outcome than a hung server. So this number will not self-heal a hang; readinessProbe alone drives traffic/RCON gating. A restart here means either an OOMKill (see cluster/pods dashboards) or the container process actually exiting.",
-          "gridPos": { "h": 5, "w": 6, "x": 0, "y": 20 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"minecraft\"}[24h])) or vector(0)", "legendFormat": "restarts" }],
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0,
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "#EAB839", "value": 1 }, { "color": "red", "value": 2 }] }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 11,
-          "type": "logs",
-          "title": "Minecraft Server Logs",
-          "description": "Paper/Log4j format, level extracted by promtail. Use the Logs dashboard for full severity-filter/search controls -- this is a fixed quick view scoped to this pod.",
-          "gridPos": { "h": 10, "w": 24, "x": 6, "y": 20 },
-          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "{namespace=\"minecraft\"}", "maxLines": 1000 }],
-          "options": { "showTime": true, "showLabels": false, "showCommonLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" },
-          "fieldConfig": { "defaults": {}, "overrides": [] }
-        },
-        {
-          "type": "row",
-          "title": "jmusicbot — no application metrics exist; pod-level signals only",
-          "collapsed": false,
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 },
-          "panels": []
-        },
-        {
-          "id": 12,
-          "type": "text",
-          "title": "About this section",
-          "gridPos": { "h": 3, "w": 24, "x": 0, "y": 31 },
-          "options": {
-            "mode": "markdown",
-            "content": "jmusicbot is a Discord bot with **no Prometheus exporter or metrics endpoint** -- it never had one on Docker either. There is no TODO to \"add\" a real metric here; the honest state is that the only signal available is what Kubernetes itself observes about the pod (running/not, restarts, memory). `release-notifier` (GitHub release poller, posts to Discord) is included below since it shares the namespace."
-          }
-        },
-        {
-          "id": 13,
-          "type": "table",
-          "title": "Pod Status (jmusicbot namespace)",
-          "gridPos": { "h": 7, "w": 10, "x": 0, "y": 34 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "(kube_pod_status_phase{namespace=\"jmusicbot\"} == 1) * on(namespace, pod) group_left(label_app_kubernetes_io_name) kube_pod_labels{namespace=\"jmusicbot\"}", "format": "table", "instant": true },
-            { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (pod) (kube_pod_container_status_restarts_total{namespace=\"jmusicbot\"})", "format": "table", "instant": true }
-          ],
-          "transformations": [
-            { "id": "joinByField", "options": { "byField": "pod", "mode": "outer" } },
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": { "Time": true, "Time 1": true, "Time 2": true, "__name__": true, "job": true, "instance": true, "namespace": true, "uid": true, "Value #A": true, "pod": true },
-                "renameByName": { "label_app_kubernetes_io_name": "Pod", "phase": "Phase", "Value #B": "Restarts" },
-                "indexByName": {}
-              }
-            }
-          ],
-          "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false, "reducer": ["sum"], "countRows": false, "fields": "" } },
-          "fieldConfig": {
-            "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
-            "overrides": [
-              {
-                "matcher": { "id": "byName", "options": "Phase" },
-                "properties": [
-                  {
-                    "id": "mappings",
-                    "value": [
-                      { "type": "value", "options": { "Running": { "color": "green", "index": 0 } } },
-                      { "type": "value", "options": { "Pending": { "color": "orange", "index": 1 } } },
-                      { "type": "value", "options": { "Failed": { "color": "red", "index": 2 } } }
-                    ]
-                  },
-                  { "id": "custom.cellOptions", "value": { "type": "color-text" } }
-                ]
-              },
-              {
-                "matcher": { "id": "byName", "options": "Restarts" },
-                "properties": [
-                  { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "#EAB839", "value": 1 }, { "color": "red", "value": 5 }] } },
-                  { "id": "custom.cellOptions", "value": { "type": "color-text" } }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": 14,
-          "type": "timeseries",
-          "title": "Memory vs Limit — jmusicbot (1Gi) / release-notifier (128Mi)",
-          "gridPos": { "h": 7, "w": 14, "x": 10, "y": 34 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum by (container) (container_memory_working_set_bytes{namespace=\"jmusicbot\", container!=\"\", container!=\"POD\"})",
-              "legendFormat": "{{container}}"
-            },
-            {
-              "refId": "B",
-              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-              "expr": "sum by (container) (kube_pod_container_resource_limits{namespace=\"jmusicbot\", resource=\"memory\"})",
-              "legendFormat": "{{container}} LIMIT"
-            }
-          ],
-          "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "bytes",
-              "min": 0,
-              "color": { "mode": "palette-classic" },
-              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false }
-            },
-            "overrides": [
-              {
-                "matcher": { "id": "byRegexp", "options": ".*LIMIT$" },
-                "properties": [
-                  { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [12, 6] } },
-                  { "id": "custom.fillOpacity", "value": 0 },
-                  { "id": "custom.lineWidth", "value": 2 }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": 15,
-          "type": "timeseries",
-          "title": "jmusicbot Restarts (rolling 1h)",
-          "gridPos": { "h": 6, "w": 12, "x": 0, "y": 41 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (pod, container) (increase(kube_pod_container_status_restarts_total{namespace=\"jmusicbot\"}[1h]))", "legendFormat": "{{container}}" }],
-          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "min": 0,
-              "decimals": 0,
-              "color": { "mode": "palette-classic" },
-              "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 70, "showPoints": "never", "spanNulls": false }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 16,
-          "type": "logs",
-          "title": "jmusicbot Logs",
-          "description": "Java/Log4j format. Watch here for the exact YouTube itag-18 decode failure this deployment is a workaround for (see the deployment manifest's CUSTOM-BUILD-NOTE) -- 'Something went wrong when decoding the track' is the signature string.",
-          "gridPos": { "h": 12, "w": 12, "x": 12, "y": 41 },
-          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "{namespace=\"jmusicbot\"}", "maxLines": 1000 }],
-          "options": { "showTime": true, "showLabels": true, "showCommonLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" },
-          "fieldConfig": { "defaults": {}, "overrides": [] }
-        },
-        {
-          "type": "row",
-          "title": "pantry-bot — Twitch bot; usage is on the separate dashboard, readiness is the health signal here",
-          "collapsed": false,
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 53 },
-          "panels": []
-        },
-        {
-          "id": 17,
-          "type": "text",
-          "title": "About HTTP health here",
-          "gridPos": { "h": 4, "w": 24, "x": 0, "y": 54 },
-          "options": {
-            "mode": "markdown",
-            "content": "pantry-bot now exposes application usage counters at `/metrics`; this dashboard keeps Kubernetes health context. It still has **no `/health` or `/healthz` endpoint** -- `GET /` returns a bare 404 (verified through the live tunnel). The k8s probes are `exec` checks (`node -e \"require('http').get(...)\"`) reproducing the old Compose healthcheck's \"any response, even a 404, proves the server is alive\" logic, specifically *because* an `httpGet` probe would treat that same 404 as a failure and crash-loop a healthy pod. That means there is no Prometheus series for HTTP health -- the panels below (readiness, restarts) are the only signal Kubernetes can give us, sourced from the exec probe's pass/fail via kube-state-metrics. **TODO for real HTTP health visibility:** add `app.get('/healthz', (_req, res) => res.status(200).send('ok'))` to the bot (noted as the preferred fix in `pantry-bot/40-deployment.yaml`), switch the probes to `httpGet`, and this dashboard could then plot actual request latency/status if the route is later instrumented with `prom-client`. Until then, do not invent a metric name for this."
-          }
-        },
-        {
-          "id": 18,
-          "type": "stat",
-          "title": "Readiness (proxy for HTTP health)",
-          "description": "kube_pod_status_ready, condition=true. This reflects the exec probe passing, which only proves the Node HTTP server on :3000 accepted a TCP connection and returned any response -- not that Twitch auth, the SQLite DB, or the Cloudflare tunnel are functioning.",
-          "gridPos": { "h": 5, "w": 6, "x": 0, "y": 58 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "min(kube_pod_status_ready{namespace=\"pantry-bot\", condition=\"true\"})", "legendFormat": "ready" }],
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" },
-          "fieldConfig": {
-            "defaults": {
-              "mappings": [
-                { "type": "value", "options": { "0": { "text": "NOT READY", "color": "red", "index": 0 } } },
-                { "type": "value", "options": { "1": { "text": "READY", "color": "green", "index": 1 } } }
-              ],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 19,
-          "type": "stat",
-          "title": "Restarts (24h)",
-          "description": "livenessProbe failureThreshold is 5 (150s of continuous failure) specifically because a restart here means real downtime -- strategy: Recreate + a single RWO SQLite PVC means the old pod fully terminates before the new one mounts. Frequent restarts are worth chasing down, not shrugging off.",
-          "gridPos": { "h": 5, "w": 6, "x": 6, "y": 58 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"pantry-bot\", container=\"bot\"}[24h])) or vector(0)", "legendFormat": "restarts" }],
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0,
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "#EAB839", "value": 1 }, { "color": "red", "value": 2 }] }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 20,
-          "type": "gauge",
-          "title": "bot Memory vs 256Mi Limit",
-          "gridPos": { "h": 5, "w": 6, "x": 12, "y": 58 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(container_memory_working_set_bytes{namespace=\"pantry-bot\", container=\"bot\"})" }],
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "bytes",
-              "min": 0,
-              "max": 268435456,
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "#EAB839", "value": 201326592 }, { "color": "red", "value": 228065280 }] }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 21,
-          "type": "stat",
-          "title": "cloudflared Sidecar Up",
-          "description": "The Cloudflare tunnel container in the same pod. If pantry-bot itself is Ready but this container has restarted, the Twitch bot may be running with no public ingress at all.",
-          "gridPos": { "h": 5, "w": 6, "x": 18, "y": 58 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "min(kube_pod_container_status_running{namespace=\"pantry-bot\", container=\"cloudflared\"})", "legendFormat": "running" }],
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" },
-          "fieldConfig": {
-            "defaults": {
-              "mappings": [
-                { "type": "value", "options": { "0": { "text": "DOWN", "color": "red", "index": 0 } } },
-                { "type": "value", "options": { "1": { "text": "UP", "color": "green", "index": 1 } } }
-              ],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 22,
-          "type": "logs",
-          "title": "pantry-bot Logs (bot + cloudflared)",
-          "description": "Node.js format for the bot container; cloudflared has its own plain-text log format. Both share the pod's namespace label.",
-          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 63 },
-          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-          "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "{namespace=\"pantry-bot\"}", "maxLines": 1000 }],
-          "options": { "showTime": true, "showLabels": true, "showCommonLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" },
-          "fieldConfig": { "defaults": {}, "overrides": [] }
-        }
-      ]
-    }
   cloudflared.json: |
     {
       "uid": "homelab-cloudflared",
@@ -1938,6 +1350,43 @@ data:
             "overrides": []
           }
         }
+      ]
+    }
+  greenies-main-pc-health.json: |
+    {
+      "uid": "greenies-main-pc-health",
+      "title": "Greenie's Main PC — Health",
+      "description": "Windows/Docker gaming PC ('ThePantry'), monitored via windows_exporter and forwarded into this Prometheus through Grafana Alloy's remote-write receiver -- the same path used for Canada's host telemetry when that becomes available. No host selector is needed: every panel is scoped to the one remote Windows job. Labels verified live against Prometheus on 2026-09-21: site=\"windows-remote\", job=\"integrations/windows\", host=\"ThePantry\", instance=\"ThePantry\" -- this replaces the stale never-merged draft on feat/greenies-main-pc-dashboard, which assumed site=\"remote\"/job=\"host\" and never matched anything live.",
+      "tags": ["homelab", "windows", "remote", "alloy", "pc", "gpu"],
+      "timezone": "browser",
+      "editable": true,
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "time": { "from": "now-6h", "to": "now" },
+      "templating": { "list": [
+        { "name": "DS_PROMETHEUS", "label": "Prometheus", "type": "datasource", "query": "prometheus", "refresh": 1 }
+      ] },
+      "panels": [
+        { "type": "row", "title": "Current state", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "panels": [] },
+        { "id": 1, "type": "stat", "title": "Host Reachable", "description": "Alloy remote-write scrape health for ThePantry. 0/no-data means Alloy on the Windows box has stopped forwarding metrics -- it does not by itself mean the PC is powered off.", "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "up{site=\"windows-remote\", job=\"integrations/windows\"}", "legendFormat": "ThePantry" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "background", "graphMode": "none", "justifyMode": "auto" }, "fieldConfig": { "defaults": { "mappings": [{ "type": "value", "options": { "0": { "text": "DOWN / NOT REPORTING", "color": "red", "index": 0 }, "1": { "text": "UP", "color": "green", "index": 1 } } }], "noValue": "NO DATA", "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] } },
+        { "id": 2, "type": "gauge", "title": "CPU Used", "description": "Whole-host CPU used, averaged across all logical cores from the idle-mode counter.", "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "100 * (1 - avg(rate(windows_cpu_time_total{site=\"windows-remote\", mode=\"idle\"}[5m])))", "legendFormat": "CPU" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true }, "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 70 }, { "color": "red", "value": 90 }] } }, "overrides": [] } },
+        { "id": 3, "type": "gauge", "title": "Memory Used", "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "100 * (1 - windows_memory_available_bytes{site=\"windows-remote\"} / windows_memory_physical_total_bytes{site=\"windows-remote\"})", "legendFormat": "memory" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true }, "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 80 }, { "color": "red", "value": 95 }] } }, "overrides": [] } },
+        { "id": 4, "type": "stat", "title": "Uptime", "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "time() - windows_system_boot_time_timestamp{site=\"windows-remote\"}", "legendFormat": "uptime" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name", "colorMode": "value" }, "fieldConfig": { "defaults": { "unit": "dtdurations", "decimals": 1 }, "overrides": [] } },
+        { "type": "row", "title": "CPU and memory", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 }, "panels": [] },
+        { "id": 5, "type": "timeseries", "title": "CPU by Mode", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "100 * avg by (mode) (rate(windows_cpu_time_total{site=\"windows-remote\"}[5m]))", "legendFormat": "{{mode}}" }], "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] }, "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } } },
+        { "id": 6, "type": "timeseries", "title": "Memory Available vs Total", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "windows_memory_available_bytes{site=\"windows-remote\"}", "legendFormat": "available" }, { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "windows_memory_physical_total_bytes{site=\"windows-remote\"}", "legendFormat": "total" }], "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] }, "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } } },
+        { "type": "row", "title": "Disk and network", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 }, "panels": [] },
+        { "id": 7, "type": "timeseries", "title": "Disk Used % by Volume", "description": "Label is `volume` (e.g. C:, D:), not `volume_id` -- the draft on the stale branch used the wrong label name for this exporter version.", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "100 * (1 - windows_logical_disk_free_bytes{site=\"windows-remote\"} / windows_logical_disk_size_bytes{site=\"windows-remote\"})", "legendFormat": "{{volume}}" }], "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 80 }, { "color": "red", "value": 90 }] } }, "overrides": [] }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } } },
+        { "id": 8, "type": "timeseries", "title": "Network Throughput", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(windows_net_bytes_received_total{site=\"windows-remote\"}[5m])", "legendFormat": "{{nic}} received" }, { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(windows_net_bytes_sent_total{site=\"windows-remote\"}[5m])", "legendFormat": "{{nic}} sent" }], "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] }, "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } } },
+        { "type": "row", "title": "Windows host details", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 }, "panels": [] },
+        { "id": 9, "type": "timeseries", "title": "Disk Free by Volume", "gridPos": { "h": 7, "w": 12, "x": 0, "y": 25 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "windows_logical_disk_free_bytes{site=\"windows-remote\"}", "legendFormat": "{{volume}}" }], "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } } },
+        { "id": 10, "type": "stat", "title": "Last Boot", "gridPos": { "h": 7, "w": 12, "x": 12, "y": 25 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "windows_system_boot_time_timestamp{site=\"windows-remote\"}", "legendFormat": "boot time" }], "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value" }, "fieldConfig": { "defaults": { "unit": "dateTimeAsIso", "decimals": 0 }, "overrides": [] } },
+        { "type": "row", "title": "GPU (NVIDIA GeForce RTX 3070)", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 }, "panels": [] },
+        { "id": 11, "type": "table", "title": "GPU Adapter", "description": "Identity of the adapter windows_exporter is reporting on, from windows_gpu_info. An info-style metric: the value is always 1, the label set is the payload.", "gridPos": { "h": 5, "w": 24, "x": 0, "y": 33 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "windows_gpu_info{site=\"windows-remote\"}", "format": "table", "instant": true }], "transformations": [{ "id": "organize", "options": { "excludeByName": { "Time": true, "Value": true, "__name__": true, "instance": true, "job": true, "site": true }, "renameByName": { "name": "Adapter", "host": "Host", "device_id": "PCI Device ID", "bus_number": "Bus", "function_number": "Function", "luid": "LUID", "phys": "Physical Adapter Index" } } }], "options": { "showHeader": true, "cellHeight": "sm" }, "fieldConfig": { "defaults": {}, "overrides": [] } },
+        { "id": 12, "type": "timeseries", "title": "GPU Engine Utilisation", "description": "windows_gpu_engine_time_seconds is a per-process, per-engine counter; rate() gives fractional engine-seconds/sec (i.e. percent busy) summed across every process, broken out by engine type (3D, Copy, VideoDecode, etc).", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 38 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (host, engtype) (rate(windows_gpu_engine_time_seconds{site=\"windows-remote\"}[5m])) * 100", "legendFormat": "{{host}} {{engtype}}" }], "fieldConfig": { "defaults": { "unit": "percent", "min": 0 }, "overrides": [] }, "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } } },
+        { "id": 13, "type": "timeseries", "title": "GPU Adapter Memory", "description": "Dedicated (on-board VRAM), shared (system RAM borrowed by the GPU), and committed (total the adapter has reserved) memory for the whole adapter.", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 38 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "windows_gpu_adapter_memory_dedicated_bytes{site=\"windows-remote\"}", "legendFormat": "dedicated" }, { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "windows_gpu_adapter_memory_shared_bytes{site=\"windows-remote\"}", "legendFormat": "shared" }, { "refId": "C", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "windows_gpu_adapter_memory_committed_bytes{site=\"windows-remote\"}", "legendFormat": "committed" }], "fieldConfig": { "defaults": { "unit": "bytes", "min": 0 }, "overrides": [] }, "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } } },
+        { "id": 14, "type": "timeseries", "title": "Top GPU Memory Consumers (dedicated, by process)", "description": "windows_exporter only labels this by process_id, not process name (no name label is exposed) -- cross-reference the PID with Task Manager on the box if you need to know which application this is. topk(8) keeps the panel readable when many processes touch the GPU.", "gridPos": { "h": 8, "w": 24, "x": 0, "y": 46 }, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "topk(8, windows_gpu_process_memory_dedicated_bytes{site=\"windows-remote\"})", "legendFormat": "pid {{process_id}}" }], "fieldConfig": { "defaults": { "unit": "bytes", "min": 0 }, "overrides": [] }, "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } } }
       ]
     }
   host-pc.json: |
@@ -3345,17 +2794,17 @@ data:
         }
       ]
     }
-  pantry-bot-postgres.json: |
+  pantry-bot-usage.json: |
     {
-      "uid": "homelab-pantry-bot-postgres",
-      "title": "Pantry Bot — Usage (Postgres)",
-      "description": "Application usage read from Pantry Bot's PostgreSQL tables through the home standby replica (postgres-authority-home-return), which streams from the Oracle writer. No Prometheus scrape required, so this works while the home app plane is parked and Oracle holds the Twitch leases. Standby reads lag the writer by seconds; extension-route and per-command counters have no table and remain pending the /metrics-per-role code fix.",
+      "uid": "homelab-pantry-bot-usage",
+      "title": "Pantry Bot — Chat Usage",
+      "description": "A single view of chat command use, durable custom-command counts, Twitch event intake, engagement actions, and bot replies.",
       "tags": [
         "homelab",
         "twitch",
         "pantry-bot",
-        "usage",
-        "postgres"
+        "chat",
+        "usage"
       ],
       "timezone": "browser",
       "editable": true,
@@ -3364,7 +2813,7 @@ data:
       "refresh": "1m",
       "graphTooltip": 1,
       "time": {
-        "from": "now-24h",
+        "from": "now-7d",
         "to": "now"
       },
       "templating": {
@@ -3379,657 +2828,7 @@ data:
             "refresh": 1,
             "regex": "",
             "skipUrlSync": false
-          }
-        ]
-      },
-      "panels": [
-        {
-          "type": "row",
-          "title": "Ingest — is Twitch reaching the bot?",
-          "collapsed": false,
-          "gridPos": {
-            "h": 1,
-            "w": 24,
-            "x": 0,
-            "y": 0
           },
-          "panels": []
-        },
-        {
-          "id": 1,
-          "type": "stat",
-          "title": "Events ingested (1h)",
-          "description": "Rows appended to pantry_events in the last hour, all sources. This is raw Twitch ingest (chat messages, redemptions, subs), not game actions.",
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 0,
-            "y": 1
-          },
-          "datasource": {
-            "type": "postgres",
-            "uid": "${DS_POSTGRES}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "postgres",
-                "uid": "${DS_POSTGRES}"
-              },
-              "format": "table",
-              "rawSql": "SELECT count(*) AS \"events\" FROM pantry_events WHERE created_at > now() - interval '1 hour'",
-              "rawQuery": true
-            }
-          ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "orientation": "auto",
-            "textMode": "value_and_name",
-            "colorMode": "background",
-            "graphMode": "none",
-            "justifyMode": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0,
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  },
-                  {
-                    "color": "green",
-                    "value": 1
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 2,
-          "type": "stat",
-          "title": "Pending events now",
-          "description": "pantry_events rows still awaiting a worker. Sustained non-zero means workers are behind or stopped on the writer site.",
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 6,
-            "y": 1
-          },
-          "datasource": {
-            "type": "postgres",
-            "uid": "${DS_POSTGRES}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "postgres",
-                "uid": "${DS_POSTGRES}"
-              },
-              "format": "table",
-              "rawSql": "SELECT count(*) AS \"pending\" FROM pantry_events WHERE status = 'pending'",
-              "rawQuery": true
-            }
-          ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "orientation": "auto",
-            "textMode": "value_and_name",
-            "colorMode": "background",
-            "graphMode": "none",
-            "justifyMode": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0,
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "#EAB839",
-                    "value": 1
-                  },
-                  {
-                    "color": "red",
-                    "value": 50
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 3,
-          "type": "stat",
-          "title": "Dead-letter outbox",
-          "description": "pantry_outbox rows that exhausted retries. Any non-zero row deserves a look at last_error on the writer.",
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 12,
-            "y": 1
-          },
-          "datasource": {
-            "type": "postgres",
-            "uid": "${DS_POSTGRES}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "postgres",
-                "uid": "${DS_POSTGRES}"
-              },
-              "format": "table",
-              "rawSql": "SELECT count(*) AS \"dead_letter\" FROM pantry_outbox WHERE status = 'dead_letter'",
-              "rawQuery": true
-            }
-          ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "orientation": "auto",
-            "textMode": "value_and_name",
-            "colorMode": "background",
-            "graphMode": "none",
-            "justifyMode": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0,
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 1
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 4,
-          "type": "stat",
-          "title": "Distinct community participants",
-          "description": "Distinct user_ids in community_participants (all time on this DB generation). first_time counts users whose first recorded game was here — the distinct-participant answer the Prometheus dashboard cannot give.",
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 18,
-            "y": 1
-          },
-          "datasource": {
-            "type": "postgres",
-            "uid": "${DS_POSTGRES}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "postgres",
-                "uid": "${DS_POSTGRES}"
-              },
-              "format": "table",
-              "rawSql": "SELECT count(DISTINCT user_id) AS \"participants\", count(*) FILTER (WHERE first_time) AS \"first_time_rows\" FROM community_participants",
-              "rawQuery": true
-            }
-          ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "orientation": "horizontal",
-            "textMode": "value_and_name",
-            "colorMode": "none",
-            "graphMode": "none",
-            "justifyMode": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 5,
-          "type": "timeseries",
-          "title": "Ingested events by source/type",
-          "description": "pantry_events rows per interval, split by source and event type. chat.message is the steady background; redemption/raid/cheer spikes are the interesting overlays.",
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 5
-          },
-          "datasource": {
-            "type": "postgres",
-            "uid": "${DS_POSTGRES}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "postgres",
-                "uid": "${DS_POSTGRES}"
-              },
-              "format": "time_series",
-              "rawSql": "SELECT $__timeGroup(created_at,$__interval) AS \"time\", source || '/' || event_type AS metric, count(*) AS \"events\" FROM pantry_events WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1,2 ORDER BY 1",
-              "rawQuery": true
-            }
-          ],
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true,
-              "calcs": [
-                "sum"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0,
-              "min": 0,
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 1,
-                "fillOpacity": 12,
-                "showPoints": "never",
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 6,
-          "type": "timeseries",
-          "title": "Community game actions by action",
-          "description": "community_actions rows per interval (at is epoch millis). Attacks, joins, shields, combos — the actual game mix. Flat here means a quiet game, not a broken pipeline; cross-check panel 5 ingest first.",
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 5
-          },
-          "datasource": {
-            "type": "postgres",
-            "uid": "${DS_POSTGRES}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "postgres",
-                "uid": "${DS_POSTGRES}"
-              },
-              "format": "time_series",
-              "rawSql": "SELECT $__timeGroup(to_timestamp(at/1000.0),$__interval) AS \"time\", action AS metric, count(*) AS \"actions\" FROM community_actions WHERE to_timestamp(at/1000.0) BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1,2 ORDER BY 1",
-              "rawQuery": true
-            }
-          ],
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true,
-              "calcs": [
-                "sum"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0,
-              "min": 0,
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 1,
-                "fillOpacity": 12,
-                "showPoints": "never",
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "type": "row",
-          "title": "Boss activity and bot messages",
-          "collapsed": false,
-          "gridPos": {
-            "h": 1,
-            "w": 24,
-            "x": 0,
-            "y": 13
-          },
-          "panels": []
-        },
-        {
-          "id": 7,
-          "type": "stat",
-          "title": "Boss damage (24h)",
-          "description": "Sum of damage_dealt in boss_contributions over the last 24 hours. Real dealt damage, not the legacy donation-path counter.",
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 0,
-            "y": 14
-          },
-          "datasource": {
-            "type": "postgres",
-            "uid": "${DS_POSTGRES}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "postgres",
-                "uid": "${DS_POSTGRES}"
-              },
-              "format": "table",
-              "rawSql": "SELECT coalesce(sum(damage_dealt),0) AS \"damage\" FROM boss_contributions WHERE created_at > now() - interval '24 hours'",
-              "rawQuery": true
-            }
-          ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "orientation": "auto",
-            "textMode": "value_and_name",
-            "colorMode": "background",
-            "graphMode": "none",
-            "justifyMode": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0,
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  },
-                  {
-                    "color": "green",
-                    "value": 1
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 8,
-          "type": "stat",
-          "title": "Boss outcomes (7d)",
-          "description": "boss_events resolutions in the last seven days by status. defeated vs expired is the real outcome mix.",
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 6,
-            "y": 14
-          },
-          "datasource": {
-            "type": "postgres",
-            "uid": "${DS_POSTGRES}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "postgres",
-                "uid": "${DS_POSTGRES}"
-              },
-              "format": "table",
-              "rawSql": "SELECT status AS \"outcome\", count(*) AS \"fights\" FROM boss_events WHERE start_time > now() - interval '7 days' GROUP BY 1 ORDER BY 2 DESC",
-              "rawQuery": true
-            }
-          ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "orientation": "horizontal",
-            "textMode": "value_and_name",
-            "colorMode": "none",
-            "graphMode": "none",
-            "justifyMode": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 9,
-          "type": "timeseries",
-          "title": "Bot messages by status (daily)",
-          "description": "engagement_message_counts is a daily rollup (day/status/count) written by the bot itself — daily grain, not per-second. Use for 7d/30d ranges.",
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 14
-          },
-          "datasource": {
-            "type": "postgres",
-            "uid": "${DS_POSTGRES}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "postgres",
-                "uid": "${DS_POSTGRES}"
-              },
-              "format": "time_series",
-              "rawSql": "SELECT day AS \"time\", status AS metric, sum(count)::bigint AS \"messages\" FROM engagement_message_counts WHERE day BETWEEN $__timeFrom()::date - interval '1 day' AND $__timeTo()::date GROUP BY 1,2 ORDER BY 1",
-              "rawQuery": true
-            }
-          ],
-          "options": {
-            "legend": {
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0,
-              "min": 0,
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "drawStyle": "bars",
-                "lineWidth": 0,
-                "fillOpacity": 85,
-                "showPoints": "never",
-                "spanNulls": false,
-                "barAlignment": 0,
-                "stacking": {
-                  "mode": "normal",
-                  "group": "A"
-                }
-              }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 10,
-          "type": "table",
-          "title": "Outbound deliveries by target/status",
-          "description": "pantry_outbox lifetime mix per dispatch target. completed is delivered; anything else (pending lease-held, retrying, dead_letter) is dispatcher backlog.",
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 18
-          },
-          "datasource": {
-            "type": "postgres",
-            "uid": "${DS_POSTGRES}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "postgres",
-                "uid": "${DS_POSTGRES}"
-              },
-              "format": "table",
-              "rawSql": "SELECT target AS \"target\", status AS \"status\", count(*) AS \"messages\" FROM pantry_outbox GROUP BY 1,2 ORDER BY 3 DESC",
-              "rawQuery": true
-            }
-          ],
-          "options": {
-            "showHeader": true,
-            "cellHeight": "sm",
-            "footer": {
-              "show": false,
-              "reducer": [
-                "sum"
-              ],
-              "countRows": false,
-              "fields": ""
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "auto",
-                "cellOptions": {
-                  "type": "auto"
-                }
-              }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 11,
-          "type": "text",
-          "title": "About this dashboard",
-          "gridPos": {
-            "h": 4,
-            "w": 24,
-            "x": 0,
-            "y": 26
-          },
-          "options": {
-            "mode": "markdown",
-            "content": "Reads the **home standby replica** (`postgres-authority-home-return`, streaming from the Oracle writer), so numbers lag real time by seconds and stay visible while the home app plane is parked. If Oracle fails over, repoint the `PantryPostgres` datasource at the new primary. **Not here on purpose:** Extension requests by route and commands by name have no backing table — they only exist as process-local Prometheus counters in unscraped worker processes, and need the per-role `/metrics` code fix before any dashboard can show them."
-          }
-        }
-      ]
-    }
-  pantry-bot-usage.json: |
-    {
-      "uid": "homelab-pantry-bot-usage",
-      "title": "Pantry Bot — Usage",
-      "description": "Application usage from Pantry Bot's /metrics endpoint: engagement actions, bot messages, commands, Extension requests, boss activity, and outcomes. Prometheus counters are process-local and reset on restart; increase() and rate() handle that reset. Distinct participant and first-time history remains in the bot's SQLite engagement tables.",
-      "tags": [
-        "homelab",
-        "twitch",
-        "pantry-bot",
-        "usage"
-      ],
-      "timezone": "browser",
-      "editable": true,
-      "schemaVersion": 39,
-      "version": 1,
-      "refresh": "15s",
-      "graphTooltip": 1,
-      "time": {
-        "from": "now-24h",
-        "to": "now"
-      },
-      "templating": {
-        "list": [
           {
             "name": "DS_PROMETHEUS",
             "label": "Prometheus",
@@ -4046,7 +2845,7 @@ data:
       "panels": [
         {
           "type": "row",
-          "title": "At a glance — what the community is doing",
+          "title": "At a glance",
           "collapsed": false,
           "gridPos": {
             "h": 1,
@@ -4059,8 +2858,8 @@ data:
         {
           "id": 1,
           "type": "stat",
-          "title": "Successful actions (1h)",
-          "description": "Committed engagement actions across chat, the Twitch Extension, and system events in the last hour. This is action volume, not a distinct participant count.",
+          "title": "Twitch event records (1h)",
+          "description": "EventSub records ingested by the bot. This is not a count of every ordinary chat message.",
           "gridPos": {
             "h": 4,
             "w": 6,
@@ -4068,18 +2867,19 @@ data:
             "y": 1
           },
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
           },
           "targets": [
             {
               "refId": "A",
               "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
               },
-              "expr": "sum(increase(pantry_bot_engagement_actions_total[1h])) or vector(0)",
-              "legendFormat": "actions"
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT count(*) AS \"events\" FROM pantry_events WHERE created_at > now() - interval '1 hour'"
             }
           ],
           "options": {
@@ -4120,8 +2920,8 @@ data:
         {
           "id": 2,
           "type": "stat",
-          "title": "Rejected actions (1h)",
-          "description": "Cooldown, expired, muted, or otherwise rejected engagement actions in the last hour.",
+          "title": "Built-in commands completed (7d)",
+          "description": "Canonical built-in commands that completed successfully in the rolling 7 days. Aliases are counted under the command name.",
           "gridPos": {
             "h": 4,
             "w": 6,
@@ -4139,8 +2939,10 @@ data:
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "sum(increase(pantry_bot_engagement_failures_total[1h])) or vector(0)",
-              "legendFormat": "rejected"
+              "expr": "sum(increase(pantry_bot_commands_total[7d])) or vector(0)",
+              "instant": true,
+              "format": "table",
+              "legendFormat": "value"
             }
           ],
           "options": {
@@ -4165,16 +2967,12 @@ data:
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
+                    "color": "text",
                     "value": null
                   },
                   {
-                    "color": "orange",
-                    "value": 5
-                  },
-                  {
-                    "color": "red",
-                    "value": 20
+                    "color": "green",
+                    "value": 1
                   }
                 ]
               }
@@ -4185,8 +2983,8 @@ data:
         {
           "id": 3,
           "type": "stat",
-          "title": "Boss damage (24h)",
-          "description": "Boss damage recorded by the legacy donation paths in the last 24 hours; community attack activity is shown in the engagement action chart.",
+          "title": "Successful chat game actions (7d)",
+          "description": "Durable successful engagement actions whose source was Twitch chat.",
           "gridPos": {
             "h": 4,
             "w": 6,
@@ -4194,18 +2992,19 @@ data:
             "y": 1
           },
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
           },
           "targets": [
             {
               "refId": "A",
               "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
               },
-              "expr": "sum(increase(pantry_bot_boss_damage_total[24h])) or vector(0)",
-              "legendFormat": "damage"
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT count(*) AS \"actions\" FROM engagement_actions WHERE source = 'chat' AND reason IN ('success','friendly-success') AND to_timestamp(at/1000.0) > now() - interval '7 days'"
             }
           ],
           "options": {
@@ -4225,7 +3024,20 @@ data:
           "fieldConfig": {
             "defaults": {
               "unit": "short",
-              "decimals": 0
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
             },
             "overrides": []
           }
@@ -4233,8 +3045,8 @@ data:
         {
           "id": 4,
           "type": "stat",
-          "title": "Boss outcomes (7d)",
-          "description": "Resolved legacy boss outcomes in the last seven days. Community outcomes are persisted in SQLite; this counter currently reports the legacy defeated/expired paths.",
+          "title": "Enabled custom commands never used",
+          "description": "Lifetime count from PostgreSQL. This is durable across bot restarts.",
           "gridPos": {
             "h": 4,
             "w": 6,
@@ -4242,27 +3054,19 @@ data:
             "y": 1
           },
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
           },
           "targets": [
             {
               "refId": "A",
               "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
               },
-              "expr": "sum(increase(pantry_bot_boss_outcomes_total{outcome=\"defeated\"}[7d]))",
-              "legendFormat": "defeated"
-            },
-            {
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "expr": "sum(increase(pantry_bot_boss_outcomes_total{outcome=\"expired\"}[7d]))",
-              "legendFormat": "expired"
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT count(*) FILTER (WHERE enabled AND use_count = 0) AS \"unused_enabled\" FROM custom_commands"
             }
           ],
           "options": {
@@ -4273,23 +3077,36 @@ data:
               "fields": "",
               "values": false
             },
-            "orientation": "horizontal",
+            "orientation": "auto",
             "textMode": "value_and_name",
-            "colorMode": "none",
+            "colorMode": "background",
             "graphMode": "none",
             "justifyMode": "auto"
           },
           "fieldConfig": {
             "defaults": {
               "unit": "short",
-              "decimals": 0
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
             },
             "overrides": []
           }
         },
         {
           "type": "row",
-          "title": "Participation flow",
+          "title": "Which commands are used?",
           "collapsed": false,
           "gridPos": {
             "h": 1,
@@ -4301,11 +3118,11 @@ data:
         },
         {
           "id": 5,
-          "type": "timeseries",
-          "title": "Engagement actions by source (15m rate)",
-          "description": "Successful actions per second split between chat, the Twitch Extension, and system events. Query SQLite for distinct participants and first-time participation.",
+          "type": "table",
+          "title": "Built-in command usage — last 7 days",
+          "description": "Every registered built-in command is exported, including zero-use commands. Counts aggregate across PantryBot replicas; Prometheus handles counter resets. Aliases count under the canonical name.",
           "gridPos": {
-            "h": 8,
+            "h": 9,
             "w": 12,
             "x": 0,
             "y": 6
@@ -4321,128 +3138,132 @@ data:
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "sum by (source) (rate(pantry_bot_engagement_actions_total[15m]))",
-              "legendFormat": "{{source}}"
+              "expr": "sum by (command) (increase(pantry_bot_commands_total[7d]))",
+              "instant": true,
+              "format": "table",
+              "legendFormat": "{{command}}"
             }
           ],
-          "options": {
-            "legend": {
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "fieldConfig": {
             "defaults": {
-              "unit": "ops",
-              "decimals": 3,
-              "min": 0,
-              "color": {
-                "mode": "palette-classic"
-              },
               "custom": {
-                "drawStyle": "line",
-                "lineWidth": 1,
-                "fillOpacity": 12,
-                "showPoints": "never",
-                "spanNulls": false
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false
               }
             },
             "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
           }
         },
         {
           "id": 6,
-          "type": "timeseries",
-          "title": "Actions by type (15m rate)",
-          "description": "Successful action mix: attacks, braces, rally support, duel actions, and other registered engagement events.",
+          "type": "table",
+          "title": "Custom command inventory — lifetime uses",
+          "description": "PostgreSQL use_count is cumulative for custom commands. Zero means no successful use has been recorded since creation. Disabled commands remain listed.",
           "gridPos": {
-            "h": 8,
+            "h": 9,
             "w": 12,
             "x": 12,
             "y": 6
           },
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
           },
           "targets": [
             {
               "refId": "A",
               "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
               },
-              "expr": "sum by (action) (rate(pantry_bot_engagement_actions_total[15m]))",
-              "legendFormat": "{{action}}"
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT name AS \"command\", enabled, category, permission_level, source, use_count AS \"lifetime uses\", created_at AS \"created\" FROM custom_commands ORDER BY enabled DESC, use_count ASC, name"
             }
           ],
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true,
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "fieldConfig": {
             "defaults": {
-              "unit": "ops",
-              "decimals": 3,
-              "min": 0,
-              "color": {
-                "mode": "palette-classic"
-              },
               "custom": {
-                "drawStyle": "line",
-                "lineWidth": 1,
-                "fillOpacity": 12,
-                "showPoints": "never",
-                "spanNulls": false
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false
               }
             },
             "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
           }
+        },
+        {
+          "type": "row",
+          "title": "What people do in chat",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 15
+          },
+          "panels": []
         },
         {
           "id": 7,
           "type": "timeseries",
-          "title": "Bot messages by status (15m rate)",
-          "description": "Outbound bot messages per second split into sent and failed. Daily totals are also persisted in SQLite.",
+          "title": "Chat engagement actions by action and result",
+          "description": "Durable Twitch-chat engagement actions, grouped by action and result reason.",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 15
+            "y": 16
           },
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
           },
           "targets": [
             {
               "refId": "A",
               "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
               },
-              "expr": "sum by (status) (rate(pantry_bot_messages_total[15m]))",
-              "legendFormat": "{{status}}"
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT date_trunc('hour', to_timestamp(at/1000.0)) AS \"time\", action || ' / ' || reason AS metric, count(*) AS actions FROM engagement_actions WHERE source = 'chat' AND to_timestamp(at/1000.0) BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1,2 ORDER BY 1"
             }
           ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "No recorded activity in this time range"
+            },
+            "overrides": []
+          },
           "options": {
             "legend": {
-              "displayMode": "list",
+              "calcs": [
+                "lastNotNull",
+                "sum"
+              ],
+              "displayMode": "table",
               "placement": "bottom",
               "showLegend": true
             },
@@ -4450,88 +3271,61 @@ data:
               "mode": "multi",
               "sort": "desc"
             }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "decimals": 3,
-              "min": 0,
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 1,
-                "fillOpacity": 12,
-                "showPoints": "never",
-                "spanNulls": false
-              }
-            },
-            "overrides": []
           }
         },
         {
           "id": 8,
           "type": "timeseries",
-          "title": "Extension requests by route (15m rate)",
-          "description": "Requests served by the Twitch Extension API, split by route. This includes state reads and action requests.",
+          "title": "Twitch event intake by source and type",
+          "description": "EventSub and other queued Twitch events. This does not include regular chat text.",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 15
+            "y": 16
           },
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
           },
           "targets": [
             {
               "refId": "A",
               "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
               },
-              "expr": "sum by (route) (rate(pantry_bot_extension_requests_total[15m]))",
-              "legendFormat": "{{route}}"
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT $__timeGroup(created_at, $__interval) AS \"time\", source || ' / ' || event_type AS metric, count(*) AS events FROM pantry_events WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1,2 ORDER BY 1"
             }
           ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "No recorded activity in this time range"
+            },
+            "overrides": []
+          },
           "options": {
             "legend": {
+              "calcs": [
+                "lastNotNull",
+                "sum"
+              ],
               "displayMode": "table",
               "placement": "bottom",
-              "showLegend": true,
-              "calcs": [
-                "lastNotNull"
-              ]
+              "showLegend": true
             },
             "tooltip": {
               "mode": "multi",
               "sort": "desc"
             }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "decimals": 3,
-              "min": 0,
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 1,
-                "fillOpacity": 12,
-                "showPoints": "never",
-                "spanNulls": false
-              }
-            },
-            "overrides": []
           }
         },
         {
           "type": "row",
-          "title": "Chat command activity",
+          "title": "Bot responses and community features",
           "collapsed": false,
           "gridPos": {
             "h": 1,
@@ -4544,60 +3338,122 @@ data:
         {
           "id": 9,
           "type": "timeseries",
-          "title": "Commands by name (15m rate)",
-          "description": "Successfully handled chat commands, split by command name. This measures command activity separately from free engagement actions.",
+          "title": "Bot replies sent and failed (daily)",
+          "description": "Durable count of outbound bot messages by day and delivery status.",
           "gridPos": {
             "h": 8,
-            "w": 24,
+            "w": 12,
             "x": 0,
             "y": 25
           },
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
           },
           "targets": [
             {
               "refId": "A",
               "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
               },
-              "expr": "sum by (command) (rate(pantry_bot_commands_total[15m]))",
-              "legendFormat": "{{command}}"
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT day::timestamptz AS \"time\", status AS metric, sum(count)::bigint AS messages FROM engagement_message_counts WHERE day BETWEEN $__timeFrom()::date AND $__timeTo()::date GROUP BY 1,2 ORDER BY 1"
             }
           ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "No recorded activity in this time range"
+            },
+            "overrides": []
+          },
           "options": {
             "legend": {
+              "calcs": [
+                "lastNotNull",
+                "sum"
+              ],
               "displayMode": "table",
               "placement": "bottom",
-              "showLegend": true,
-              "calcs": [
-                "lastNotNull"
-              ]
+              "showLegend": true
             },
             "tooltip": {
               "mode": "multi",
               "sort": "desc"
             }
+          }
+        },
+        {
+          "id": 10,
+          "type": "timeseries",
+          "title": "Community game actions by type",
+          "description": "Durable actions in community encounters. These are game actions, not all chat messages.",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 25
           },
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
+              },
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT date_trunc('hour', to_timestamp(at/1000.0)) AS \"time\", action AS metric, count(*) AS actions FROM community_actions WHERE to_timestamp(at/1000.0) BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1,2 ORDER BY 1"
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "unit": "ops",
-              "decimals": 3,
-              "min": 0,
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 1,
-                "fillOpacity": 12,
-                "showPoints": "never",
-                "spanNulls": false
-              }
+              "unit": "short",
+              "noValue": "No recorded activity in this time range"
             },
             "overrides": []
+          },
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "sum"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 11,
+          "type": "text",
+          "title": "How to read this dashboard",
+          "description": "What is counted and what is not collected.",
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 33
+          },
+          "options": {
+            "mode": "markdown",
+            "content": "\n**Built-in commands:** completed commands over the rolling 7 days, from Prometheus. Every registered command appears at zero after the updated bot starts exporting its catalog. Aliases count under the canonical command. Data older than Prometheus retention is unavailable.\n\n**Custom commands:** lifetime successful uses from PostgreSQL. This count survives bot restarts. Enabled commands with zero uses are surfaced above; disabled commands remain in the inventory.\n\n**Chat actions and bot replies:** durable PostgreSQL counts. Twitch event intake counts EventSub/queued records, not each ordinary chat line.\n\n**Not measured:** ordinary chat text, unrecognized !commands, and failed/cooldown command attempts are not retained as command usage. A blank signal means no data was collected for it; it does not prove the feature is unused.\n",
+            "code": {
+              "language": "plaintext",
+              "showLineNumbers": false,
+              "showMiniMap": false
+            }
           }
         }
       ]
@@ -6096,7 +4952,1661 @@ data:
         }
       ]
     }
+  site-service-health.json: |
+    {
+      "uid": "homelab-site-service-health",
+      "title": "Site & Service Health \u2014 Home / Oracle / Canada",
+      "description": "Which site is each service at, and is it up. Every service row carries an explicit Site column. HOME is this k3s cluster and is fully instrumented; Kubernetes objects have no site label of their own, so this dashboard stamps site=\"home\" onto them with label_replace \u2014 a definition, not a measurement. ORACLE runs a separate, non-federated Prometheus and CANADA has no scrape target at all, so both are reported as \"unknown from here\" rather than faked. Both of those panels count targets instead of probing a hard-coded job name, so they start working by themselves once the corresponding scrape job is added. Rebuilt 2026-09-21: the previous Canada panel queried up{job=\"canada-pantry-bot-api\"}, a job present in neither the repo nor the live Prometheus config, so it could only ever render No data.",
+      "tags": [
+        "homelab",
+        "sites",
+        "failover",
+        "health",
+        "pantry-bot"
+      ],
+      "timezone": "browser",
+      "editable": true,
+      "schemaVersion": 39,
+      "version": 2,
+      "refresh": "1m",
+      "graphTooltip": 0,
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "links": [
+        {
+          "title": "Per-service dashboards",
+          "type": "dashboards",
+          "tags": [
+            "service"
+          ],
+          "asDropdown": true,
+          "icon": "external link",
+          "includeVars": false,
+          "keepTime": true,
+          "targetBlank": false,
+          "tooltip": "",
+          "url": ""
+        }
+      ],
+      "templating": {
+        "list": [
+          {
+            "name": "DS_PROMETHEUS",
+            "label": "Prometheus",
+            "type": "datasource",
+            "query": "prometheus",
+            "current": {},
+            "hide": 0,
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false
+          }
+        ]
+      },
+      "panels": [
+        {
+          "type": "row",
+          "title": "Site map \u2014 which site is each service at?",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "panels": []
+        },
+        {
+          "id": 1,
+          "type": "text",
+          "title": "How to read this dashboard",
+          "gridPos": {
+            "h": 5,
+            "w": 24,
+            "x": 0,
+            "y": 1
+          },
+          "options": {
+            "mode": "markdown",
+            "content": "Every service row below carries an explicit **Site** column, so no panel here requires you to already know where something runs.\n\n| Site | What it is | How this Prometheus sees it |\n|---|---|---|\n| **HOME** | MinecraftMachine, the single-node k3s cluster on the home LAN (192.168.40.208) | Fully instrumented: kube-state-metrics, cAdvisor, Alloy/Loki, plus per-microservice `/metrics` scrape jobs. Kubernetes objects carry no `site` label, so this dashboard stamps `site=\"home\"` onto them with `label_replace` \u2014 that is a definition, not a measurement. |\n| **ORACLE** | Oracle Cloud failover site | **Not federated into this Prometheus.** `observability/oracle-prometheus-config.yaml` configures a *separate* Prometheus at Oracle; nothing from it is remote-written or federated here, so every Oracle question is answered \"unknown from here\" rather than guessed. |\n| **CANADA** | Last-resort recovery site | **No scrape target exists.** There is no `canada-*` job in `observability/prometheus-config.yaml` and no series carries `site=\"canada\"`. The Canada panel below reports the count of configured Canada targets, so it turns green by itself the day one is added. |\n| **GREENIE'S PC** | Windows/Docker gaming PC (`ThePantry`) | Reaches this Prometheus via Alloy remote-write as `site=\"windows-remote\"`. Detail on the Greenie's Main PC dashboard. |"
+          }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "HOME \u2014 scrape targets up",
+          "description": "Targets this Prometheus scrapes that belong to the home cluster.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(up{site=\"home\"} or up{job!~\".*oracle.*|canada-.*\"} unless up{site!=\"\"})",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "GREENIE'S PC \u2014 remote-write up",
+          "description": "",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(up{site=\"windows-remote\"}) or vector(0)",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "DOWN",
+                      "color": "red",
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "ORACLE \u2014 instrumented here?",
+          "description": "Number of Oracle scrape targets in THIS Prometheus. 0 means Oracle health is unknown from here \u2014 not that Oracle is down.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "count(up{site=\"oracle\"}) or vector(0)",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "NOT INSTRUMENTED",
+                      "color": "text",
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 5,
+          "type": "stat",
+          "title": "CANADA \u2014 targets configured",
+          "description": "Counts Canada scrape targets rather than probing a hard-coded job name, so this panel starts working on its own once a canada-* job is added to observability/prometheus-config.yaml.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 18,
+            "y": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "count(up{site=\"canada\"}) or vector(0)",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "NO TARGET CONFIGURED",
+                      "color": "text",
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 6,
+          "type": "table",
+          "title": "Every service and its site",
+          "description": "Workloads from kube-state-metrics, stamped site=\"home\" because they are objects of the home cluster. Remote sites appear here only once they are scraped into this Prometheus.",
+          "gridPos": {
+            "h": 14,
+            "w": 24,
+            "x": 0,
+            "y": 10
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "label_replace(sum by (namespace, deployment) (kube_deployment_status_replicas_available), \"site\", \"home\", \"\", \"\")",
+              "instant": true,
+              "format": "table"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "label_replace(sum by (namespace, deployment) (kube_deployment_spec_replicas), \"site\", \"home\", \"\", \"\")",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "joinByField",
+              "options": {
+                "byField": "deployment",
+                "mode": "outer"
+              }
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "Time 1": true,
+                  "Time 2": true,
+                  "namespace 2": true,
+                  "site 2": true
+                },
+                "renameByName": {
+                  "site 1": "Site",
+                  "site": "Site",
+                  "namespace 1": "Namespace",
+                  "namespace": "Namespace",
+                  "deployment": "Service",
+                  "Value #A": "Ready",
+                  "Value #B": "Desired"
+                },
+                "indexByName": {
+                  "site 1": 0,
+                  "namespace 1": 1,
+                  "deployment": 2,
+                  "Value #A": 3,
+                  "Value #B": 4
+                }
+              }
+            },
+            {
+              "id": "sortBy",
+              "options": {
+                "fields": {},
+                "sort": [
+                  {
+                    "field": "Site"
+                  },
+                  {
+                    "field": "Namespace"
+                  }
+                ]
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                }
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Site"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 150
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "home": {
+                            "text": "HOME",
+                            "color": "green",
+                            "index": 0
+                          },
+                          "oracle": {
+                            "text": "ORACLE",
+                            "color": "purple",
+                            "index": 1
+                          },
+                          "canada": {
+                            "text": "CANADA",
+                            "color": "blue",
+                            "index": 2
+                          },
+                          "windows-remote": {
+                            "text": "GREENIE'S PC",
+                            "color": "orange",
+                            "index": 3
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background",
+                      "mode": "basic"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Ready"
+                },
+                "properties": [
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-text"
+                    }
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "red",
+                          "value": null
+                        },
+                        {
+                          "color": "green",
+                          "value": 1
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false,
+              "reducer": [
+                "sum"
+              ],
+              "countRows": false,
+              "fields": ""
+            }
+          }
+        },
+        {
+          "type": "row",
+          "title": "Scrape targets by site",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 24
+          },
+          "panels": []
+        },
+        {
+          "id": 7,
+          "type": "table",
+          "title": "Every scrape target, with its site",
+          "description": "Targets with no site label are home-cluster infrastructure; label_replace stamps them site=\"home\" so the column is never blank.",
+          "gridPos": {
+            "h": 12,
+            "w": 24,
+            "x": 0,
+            "y": 25
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "label_replace(up, \"site\", \"home\", \"site\", \"\")",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "role": false
+                },
+                "renameByName": {
+                  "site": "Site",
+                  "job": "Job",
+                  "instance": "Instance",
+                  "role": "Role",
+                  "Value": "Up"
+                },
+                "indexByName": {
+                  "site": 0,
+                  "job": 1,
+                  "instance": 2,
+                  "Value": 3
+                }
+              }
+            },
+            {
+              "id": "sortBy",
+              "options": {
+                "fields": {},
+                "sort": [
+                  {
+                    "field": "Up"
+                  },
+                  {
+                    "field": "Site"
+                  }
+                ]
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                }
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Site"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 150
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "home": {
+                            "text": "HOME",
+                            "color": "green",
+                            "index": 0
+                          },
+                          "oracle": {
+                            "text": "ORACLE",
+                            "color": "purple",
+                            "index": 1
+                          },
+                          "canada": {
+                            "text": "CANADA",
+                            "color": "blue",
+                            "index": 2
+                          },
+                          "windows-remote": {
+                            "text": "GREENIE'S PC",
+                            "color": "orange",
+                            "index": 3
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background",
+                      "mode": "basic"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Up"
+                },
+                "properties": [
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "0": {
+                            "text": "DOWN",
+                            "color": "red",
+                            "index": 0
+                          },
+                          "1": {
+                            "text": "UP",
+                            "color": "green",
+                            "index": 1
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background",
+                      "mode": "basic"
+                    }
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 110
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm"
+          }
+        },
+        {
+          "type": "row",
+          "title": "HOME \u2014 this k3s cluster",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 37
+          },
+          "panels": []
+        },
+        {
+          "id": 8,
+          "type": "stat",
+          "title": "Home Nodes Ready",
+          "description": "A node stuck at condition Ready/status=unknown has stopped heartbeating; its pods keep counting as scheduled while nothing runs.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 38
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(kube_node_status_condition{condition=\"Ready\", status=\"true\"})",
+              "legendFormat": "ready",
+              "instant": true
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "count(kube_node_status_condition{condition=\"Ready\"})",
+              "legendFormat": "total",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 9,
+          "type": "stat",
+          "title": "Home Nodes NOT Ready",
+          "description": "",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 38
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "count(kube_node_status_condition{condition=\"Ready\", status=\"true\"} == 0) or vector(0)",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "ALL READY",
+                      "color": "green",
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 10,
+          "type": "stat",
+          "title": "Ready PantryBot Pods (home)",
+          "description": "",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 38
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(kube_pod_status_ready{namespace=\"pantry-bot\", condition=\"true\"}) or vector(0)",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 11,
+          "type": "stat",
+          "title": "PantryBot Containers CrashLooping (home)",
+          "description": "Non-zero means the home app plane is failing, not parked. A parked plane has its Deployments scaled to 0 and shows nothing here.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 18,
+            "y": 38
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(kube_pod_container_status_waiting_reason{namespace=\"pantry-bot\", reason=\"CrashLoopBackOff\"}) or vector(0)",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "NONE",
+                      "color": "green",
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 12,
+          "type": "table",
+          "title": "PantryBot microservices \u2014 home scrape targets",
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 42
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "up{job=~\"pantry-bot-.*\"}",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true
+                },
+                "renameByName": {
+                  "site": "Site",
+                  "job": "Job",
+                  "instance": "Instance",
+                  "Value": "Up"
+                },
+                "indexByName": {
+                  "site": 0,
+                  "job": 1,
+                  "instance": 2,
+                  "Value": 3
+                }
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Site"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 150
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "home": {
+                            "text": "HOME",
+                            "color": "green",
+                            "index": 0
+                          },
+                          "oracle": {
+                            "text": "ORACLE",
+                            "color": "purple",
+                            "index": 1
+                          },
+                          "canada": {
+                            "text": "CANADA",
+                            "color": "blue",
+                            "index": 2
+                          },
+                          "windows-remote": {
+                            "text": "GREENIE'S PC",
+                            "color": "orange",
+                            "index": 3
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background",
+                      "mode": "basic"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Up"
+                },
+                "properties": [
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "0": {
+                            "text": "DOWN",
+                            "color": "red",
+                            "index": 0
+                          },
+                          "1": {
+                            "text": "UP",
+                            "color": "green",
+                            "index": 1
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background",
+                      "mode": "basic"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm"
+          }
+        },
+        {
+          "type": "row",
+          "title": "ORACLE",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 50
+          },
+          "panels": []
+        },
+        {
+          "id": 13,
+          "type": "text",
+          "title": "Oracle is not instrumented into this Prometheus",
+          "gridPos": {
+            "h": 5,
+            "w": 24,
+            "x": 0,
+            "y": 51
+          },
+          "options": {
+            "mode": "markdown",
+            "content": "No series in this Prometheus carries `site=\"oracle\"`, and there is no Oracle job in `observability/prometheus-config.yaml`. Oracle runs its own Prometheus, configured by `observability/oracle-prometheus-config.yaml`; it is neither federated nor remote-written here.\n\n**So: this dashboard cannot say whether Oracle is up.** The ORACLE stat above counts Oracle targets, so it stops saying NOT INSTRUMENTED the moment federation or remote-write is added \u2014 no dashboard edit needed."
+          }
+        },
+        {
+          "type": "row",
+          "title": "CANADA",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 56
+          },
+          "panels": []
+        },
+        {
+          "id": 14,
+          "type": "text",
+          "title": "Canada has no scrape target in this Prometheus",
+          "gridPos": {
+            "h": 5,
+            "w": 24,
+            "x": 0,
+            "y": 57
+          },
+          "options": {
+            "mode": "markdown",
+            "content": "Canada is a Windows/Docker host outside Kubernetes. `observability/failover-witness/CANADA-METRICS-RELAY.md` describes a relay and says the Prometheus target is enabled, but **no `canada-*` job exists in `observability/prometheus-config.yaml` and no series carries `site=\"canada\"`** \u2014 the document is ahead of the config.\n\nAn earlier version of this dashboard hard-coded `up{job=\"canada-pantry-bot-api\"}`, a job name that exists in neither the repo config nor the live one, so the panel could only ever render \"No data\". The CANADA stat above counts `site=\"canada\"` targets instead, which is truthful today and self-healing later.\n\nHost telemetry for Canada would follow the pattern Greenie's PC already proves: Alloy remote-write with a `site` label."
+          }
+        },
+        {
+          "type": "row",
+          "title": "Cross-site failover signals",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 62
+          },
+          "panels": []
+        },
+        {
+          "id": 15,
+          "type": "stat",
+          "title": "Fencing lease metric scraped?",
+          "description": "absent() returns 1 while the metric has no series, so this panel always renders something instead of going blank. The pantry-postgres-witness job exists in observability/prometheus-config.yaml but is not in the live Prometheus config \u2014 a deploy drift, not a missing exporter.",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 0,
+            "y": 63
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "absent(failover_witness_lease_active)",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "1": {
+                      "text": "NOT SCRAPED",
+                      "color": "orange",
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 16,
+          "type": "table",
+          "title": "Fencing lease holder (once the witness job is live)",
+          "description": "Empty until the pantry-postgres-witness scrape job is applied to the live Prometheus ConfigMap.",
+          "gridPos": {
+            "h": 8,
+            "w": 16,
+            "x": 8,
+            "y": 63
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "failover_witness_lease_active",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "instance": true,
+                  "job": true
+                },
+                "renameByName": {
+                  "resource": "Resource",
+                  "holder": "Holder",
+                  "site": "Site",
+                  "Value": "Active"
+                }
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Site"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 150
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "home": {
+                            "text": "HOME",
+                            "color": "green",
+                            "index": 0
+                          },
+                          "oracle": {
+                            "text": "ORACLE",
+                            "color": "purple",
+                            "index": 1
+                          },
+                          "canada": {
+                            "text": "CANADA",
+                            "color": "blue",
+                            "index": 2
+                          },
+                          "windows-remote": {
+                            "text": "GREENIE'S PC",
+                            "color": "orange",
+                            "index": 3
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background",
+                      "mode": "basic"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm"
+          }
+        }
+      ]
+    }
+  truffles-streaming.json: |
+    {
+      "annotations": {"list": []},
+      "editable": false,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "id": 1,
+          "type": "text",
+          "title": "TRUFFLES collection status",
+          "gridPos": {"h": 4, "w": 24, "x": 0, "y": 0},
+          "options": {
+            "mode": "markdown",
+            "content": "TRUFFLES is intermittently online. No alert is raised merely because it sleeps or shuts down. Panels use the verified Windows exporter and streaming collector metric contract with `instance=\"TRUFFLES\"` and `role=\"streaming-laptop\"`. Custom GPU and OBS values disappear when collection is unsuccessful or the collector heartbeat is older than 45 seconds. Stream-quality panels also require an active stream."
+          }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Collector Health",
+          "description": "The last remote Windows scrape result forwarded by Alloy. No data is expected while TRUFFLES is asleep or powered off.",
+          "gridPos": {"h": 5, "w": 8, "x": 0, "y": 4},
+          "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "targets": [{"refId": "A", "expr": "up{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - timestamp(up{instance=\"TRUFFLES\",role=\"streaming-laptop\"})) < 45)", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [{"type": "value", "options": {"0": {"text": "SCRAPE FAILED"}, "1": {"text": "ONLINE"}}}],
+              "noValue": "OFFLINE / ASLEEP / NO RECENT DATA",
+              "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+            },
+            "overrides": []
+          },
+          "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true}
+        },
+        {
+          "id": 3,
+          "type": "gauge",
+          "title": "CPU Used",
+          "gridPos": {"h": 5, "w": 8, "x": 8, "y": 4},
+          "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "targets": [{"refId": "A", "expr": "100 * (1 - avg(rate(windows_cpu_time_total{instance=\"TRUFFLES\",role=\"streaming-laptop\",mode=\"idle\"}[5m])))", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+          "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent", "noValue": "NO RECENT DATA", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 75}, {"color": "red", "value": 90}]}}, "overrides": []},
+          "options": {"minVizHeight": 75, "minVizWidth": 75, "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showThresholdLabels": false, "showThresholdMarkers": true, "sizing": "auto"}
+        },
+        {
+          "id": 4,
+          "type": "gauge",
+          "title": "Memory Used",
+          "gridPos": {"h": 5, "w": 8, "x": 16, "y": 4},
+          "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "targets": [{"refId": "A", "expr": "100 * (1 - windows_memory_available_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\"} / windows_memory_physical_total_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\"})", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+          "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent", "noValue": "NO RECENT DATA", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 80}, {"color": "red", "value": 92}]}}, "overrides": []},
+          "options": {"minVizHeight": 75, "minVizWidth": 75, "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showThresholdLabels": false, "showThresholdMarkers": true, "sizing": "auto"}
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "CPU by Mode",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 9},
+          "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "targets": [{"refId": "A", "expr": "100 * avg by (mode) (rate(windows_cpu_time_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m]))", "legendFormat": "{{mode}}", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+          "fieldConfig": {"defaults": {"unit": "percent", "noValue": "NO RECENT DATA"}, "overrides": []},
+          "options": {"legend": {"calcs": ["lastNotNull", "mean"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Memory Available vs Total",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 9},
+          "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "targets": [
+            {"refId": "A", "expr": "windows_memory_available_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\"}", "legendFormat": "available", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+            {"refId": "B", "expr": "windows_memory_physical_total_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\"}", "legendFormat": "total", "datasource": {"type": "prometheus", "uid": "Prometheus"}}
+          ],
+          "fieldConfig": {"defaults": {"unit": "bytes", "noValue": "NO RECENT DATA"}, "overrides": []},
+          "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Disk Used by Volume",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 17},
+          "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "targets": [{"refId": "A", "expr": "100 * (1 - windows_logical_disk_free_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\"} / windows_logical_disk_size_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\"})", "legendFormat": "{{volume}}", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+          "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent", "noValue": "NO RECENT DATA"}, "overrides": []},
+          "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Network Throughput",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 17},
+          "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "targets": [
+            {"refId": "A", "expr": "rate(windows_net_bytes_received_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m])", "legendFormat": "{{nic}} receive", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+            {"refId": "B", "expr": "rate(windows_net_bytes_sent_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m])", "legendFormat": "{{nic}} send", "datasource": {"type": "prometheus", "uid": "Prometheus"}}
+          ],
+          "fieldConfig": {"defaults": {"unit": "Bps", "noValue": "NO RECENT DATA"}, "overrides": []},
+          "options": {"legend": {"calcs": ["lastNotNull", "mean"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+        },
+        {
+          "id": 9,
+          "type": "stat",
+          "title": "Custom Collector Age",
+          "description": "Custom GPU/OBS panels disappear when this heartbeat is 45 seconds old or either collector reports failure.",
+          "gridPos": {"h": 5, "w": 8, "x": 0, "y": 25},
+          "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "targets": [{"refId": "A", "expr": "time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+          "fieldConfig": {"defaults": {"unit": "s", "noValue": "OFFLINE / STALE", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 45}]}}, "overrides": []},
+          "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true}
+        },
+        {
+          "id": 10,
+          "type": "timeseries",
+          "title": "GPU and Encoder Load",
+          "gridPos": {"h": 8, "w": 16, "x": 8, "y": 25},
+          "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "targets": [
+            {"refId": "A", "expr": "streaming_gpu_utilization_ratio{instance=\"TRUFFLES\",role=\"streaming-laptop\"} * 100 and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_gpu_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "GPU {{gpu}}", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+            {"refId": "B", "expr": "streaming_gpu_encoder_utilization_ratio{instance=\"TRUFFLES\",role=\"streaming-laptop\"} * 100 and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_gpu_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "Encoder {{gpu}}", "datasource": {"type": "prometheus", "uid": "Prometheus"}}
+          ],
+          "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent", "noValue": "STALE / COLLECTION FAILED"}, "overrides": []},
+          "options": {"legend": {"calcs": ["lastNotNull", "mean"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+        },
+        {
+          "id": 11,
+          "type": "gauge",
+          "title": "VRAM Used",
+          "gridPos": {"h": 5, "w": 8, "x": 0, "y": 30},
+          "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "targets": [{"refId": "A", "expr": "100 * streaming_gpu_memory_used_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\"} / streaming_gpu_memory_total_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_gpu_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+          "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent", "noValue": "STALE / COLLECTION FAILED", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 80}, {"color": "red", "value": 95}]}}, "overrides": []},
+          "options": {"minVizHeight": 75, "minVizWidth": 75, "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showThresholdLabels": false, "showThresholdMarkers": true, "sizing": "auto"}
+        },
+        {
+          "id": 12,
+          "type": "timeseries",
+          "title": "GPU Temperature and Power",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 35},
+          "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "targets": [
+            {"refId": "A", "expr": "streaming_gpu_temperature_celsius{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_gpu_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "Temperature", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+            {"refId": "B", "expr": "streaming_gpu_power_watts{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_gpu_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "Power", "datasource": {"type": "prometheus", "uid": "Prometheus"}}
+          ],
+          "fieldConfig": {"defaults": {"noValue": "STALE / COLLECTION FAILED"}, "overrides": [{"matcher": {"id": "byFrameRefID", "options": "A"}, "properties": [{"id": "unit", "value": "celsius"}]}, {"matcher": {"id": "byFrameRefID", "options": "B"}, "properties": [{"id": "unit", "value": "watt"}]}]},
+          "options": {"legend": {"calcs": ["lastNotNull", "mean"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+        },
+        {
+          "id": 13,
+          "type": "timeseries",
+          "title": "OBS FPS and Render Time",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 35},
+          "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "targets": [
+            {"refId": "A", "expr": "streaming_obs_fps{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "FPS", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+            {"refId": "B", "expr": "streaming_obs_render_time_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "Render time", "datasource": {"type": "prometheus", "uid": "Prometheus"}}
+          ],
+          "fieldConfig": {"defaults": {"noValue": "STALE / COLLECTION FAILED"}, "overrides": [{"matcher": {"id": "byFrameRefID", "options": "A"}, "properties": [{"id": "unit", "value": "fps"}]}, {"matcher": {"id": "byFrameRefID", "options": "B"}, "properties": [{"id": "unit", "value": "s"}]}]},
+          "options": {"legend": {"calcs": ["lastNotNull", "mean"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+        },
+        {
+          "id": 14,
+          "type": "stat",
+          "title": "OBS Output State",
+          "gridPos": {"h": 6, "w": 8, "x": 0, "y": 43},
+          "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "targets": [
+            {"refId": "A", "expr": "streaming_obs_stream_active{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "Streaming", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+            {"refId": "B", "expr": "streaming_obs_record_active{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "Recording", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+            {"refId": "C", "expr": "streaming_obs_reconnecting{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "Reconnecting", "datasource": {"type": "prometheus", "uid": "Prometheus"}}
+          ],
+          "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "NO"}, "1": {"text": "YES"}}}], "noValue": "STALE / COLLECTION FAILED"}, "overrides": []},
+          "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true}
+        },
+        {
+          "id": 15,
+          "type": "timeseries",
+          "title": "Active Stream Quality Loss",
+          "description": "Shown only while OBS reports an active stream with a fresh successful collection. Counters may reset when OBS or an output restarts; encode counters may include recording work.",
+          "gridPos": {"h": 8, "w": 16, "x": 8, "y": 43},
+          "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "targets": [
+            {"refId": "A", "expr": "100 * rate(streaming_obs_render_skipped_frames_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m]) / clamp_min(rate(streaming_obs_render_frames_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m]), 0.001) and on(instance, role) (streaming_obs_stream_active{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1) and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45)", "legendFormat": "Render skipped", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+            {"refId": "B", "expr": "100 * rate(streaming_obs_encode_skipped_frames_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m]) / clamp_min(rate(streaming_obs_encode_frames_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m]), 0.001) and on(instance, role) (streaming_obs_stream_active{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1) and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45)", "legendFormat": "Encode skipped", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+            {"refId": "C", "expr": "100 * rate(streaming_obs_network_dropped_frames_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m]) / clamp_min(rate(streaming_obs_stream_frames_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m]), 0.001) and on(instance, role) (streaming_obs_stream_active{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1) and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45)", "legendFormat": "Network dropped", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+            {"refId": "D", "expr": "streaming_obs_congestion_ratio{instance=\"TRUFFLES\",role=\"streaming-laptop\"} * 100 and on(instance, role) (streaming_obs_stream_active{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1) and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45)", "legendFormat": "Congestion", "datasource": {"type": "prometheus", "uid": "Prometheus"}}
+          ],
+          "fieldConfig": {"defaults": {"min": 0, "unit": "percent", "noValue": "NOT STREAMING / STALE"}, "overrides": []},
+          "options": {"legend": {"calcs": ["lastNotNull", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+        },
+        {
+          "id": 16,
+          "type": "timeseries",
+          "title": "OBS and VTubeControl CPU Cores",
+          "description": "Sum of per-process CPU time rates. Values are CPU cores consumed, not host-normalized percent.",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 51},
+          "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "targets": [{"refId": "A", "expr": "sum by (process) (rate(windows_process_cpu_time_total{instance=\"TRUFFLES\",role=\"streaming-laptop\",process=~\"obs64|VTubeControl\"}[5m]))", "legendFormat": "{{process}}", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+          "fieldConfig": {"defaults": {"unit": "short", "noValue": "PROCESS NOT RUNNING / NO RECENT DATA"}, "overrides": []},
+          "options": {"legend": {"calcs": ["lastNotNull", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+        },
+        {
+          "id": 17,
+          "type": "timeseries",
+          "title": "OBS and VTubeControl Private Working Set",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 51},
+          "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "targets": [{"refId": "A", "expr": "sum by (process) (windows_process_working_set_private_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\",process=~\"obs64|VTubeControl\"})", "legendFormat": "{{process}}", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+          "fieldConfig": {"defaults": {"unit": "bytes", "noValue": "PROCESS NOT RUNNING / NO RECENT DATA"}, "overrides": []},
+          "options": {"legend": {"calcs": ["lastNotNull", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+        }
+      ],
+      "refresh": "15s",
+      "schemaVersion": 39,
+      "tags": ["windows", "streaming", "truffles", "alloy"],
+      "templating": {"list": []},
+      "time": {"from": "now-6h", "to": "now"},
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "TRUFFLES Streaming",
+      "uid": "truffles-streaming",
+      "version": 1,
+      "weekStart": ""
+    }
 kind: ConfigMap
 metadata:
+  labels:
+    app: grafana
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: observability
   name: grafana-dashboards
   namespace: observability

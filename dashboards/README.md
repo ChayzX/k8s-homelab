@@ -40,7 +40,7 @@ Net result, one apply order:
 ```sh
 kubectl apply -f k8s-homelab/observability/namespace.yaml
 kubectl apply -f k8s-homelab/observability/grafana-provisioning.yaml   # datasources + dashboards providers + placeholder grafana-dashboards
-kubectl apply -f k8s-homelab/dashboards/dashboards-configmap.yaml      # REPLACES the placeholder with the real 9 dashboards
+kubectl apply -f k8s-homelab/dashboards/dashboards-configmap.yaml      # REPLACES the placeholder with the real dashboards
 kubectl apply -f k8s-homelab/observability/grafana.yaml                # Deployment/Service/PVC/SA
 ```
 
@@ -51,25 +51,17 @@ edit):
 
 ```sh
 cd /home/chase/k8s-homelab/dashboards
+dashboard_args=()
+for file in *.json; do dashboard_args+=(--from-file="$file=$file"); done
 kubectl create configmap grafana-dashboards -n observability \
-  --from-file=apps.json=apps.json \
-  --from-file=cluster-overview.json=cluster-overview.json \
-  --from-file=host-pc.json=host-pc.json \
-  --from-file=jmusicbot.json=jmusicbot.json \
-  --from-file=logs.json=logs.json \
-  --from-file=overview.json=overview.json \
-  --from-file=pantry-bot.json=pantry-bot.json \
-  --from-file=pantry-bot-postgres.json=pantry-bot-postgres.json \
-  --from-file=pantry-bot-usage.json=pantry-bot-usage.json \
-  --from-file=pods-and-workloads.json=pods-and-workloads.json \
-  --dry-run=client -o yaml
+  "${dashboard_args[@]}" --dry-run=client -o yaml
 ```
 then paste the `data:` block back into `dashboards-configmap.yaml` under
 its existing `metadata:` (labels included), or just `kubectl apply -f -`
 the command's output directly against a live cluster — same object,
 same name, same namespace, it overwrites in place.
 
-**Size**: all twelve dashboards remain comfortably below the 1 MiB ConfigMap
+**Size**: all thirteen dashboards remain comfortably below the 1 MiB ConfigMap
 etcd/API object-size ceiling for a ConfigMap is 1 MiB, so one ConfigMap
 comfortably hold them in one object — no split needed. If more dashboards get
 added later and this approaches ~900 KiB, split by file and add one
@@ -87,31 +79,16 @@ Prometheus and one Loki source configured.
 
 ## The dashboards
 
-### `pantry-bot-usage.json` — Pantry Bot — Usage
+### `pantry-bot-usage.json` — Pantry Bot — Chat Usage
 
-This standalone dashboard reads the bot's Prometheus `/metrics` endpoint. It
-shows successful and rejected engagement actions, damage and outcomes, action
-and source mix, bot message volume, and extension route volume. Counters are
-process-local and reset on a bot restart, so panels use `increase()`/`rate()`;
-participant history and first-time participation remain durable in SQLite.
+The single PantryBot chat-usage dashboard combines:
+- Built-in command use over Prometheus' rolling 7-day retention window.
+- Durable custom-command lifetime counts, including enabled commands with zero uses.
+- Twitch EventSub/queued event intake, recorded chat game actions, and bot reply results.
 
-Open it at `/d/homelab-pantry-bot-usage/pantry-bot-usage` after Grafana loads the
-provisioned dashboard.
+Built-in commands are exported at zero when registered, so the table can show unused commands after the bot rollout. Aliases count under their canonical command. Ordinary chat text, unrecognized commands, and rejected/cooldown attempts are not retained. Panel descriptions distinguish these gaps from zero use.
 
-### `pantry-bot-postgres.json` — Pantry Bot — Usage (Postgres)
-
-Obs-only workaround for the empty Prometheus usage dashboard (no code
-rebuild): reads the bot's PostgreSQL tables through the home standby
-replica instead of `/metrics` scraping. Covers ingest rate, queue depth,
-dead-letter outbox, community game actions, boss damage/outcomes, daily
-bot messages, outbound deliveries by target, and distinct participants.
-Needs the `PantryPostgres` datasource (`observability/grafana-provisioning.yaml`,
-password from the imperative `grafana-postgres-pantry` Secret — see
-`observability/grafana.yaml`). Extension routes and per-command panels
-have no backing table and stay pending the per-role `/metrics` code fix.
-
-Open it at `/d/homelab-pantry-bot-postgres/pantry-bot-usage-postgres` after Grafana loads the
-provisioned dashboard.
+Open it at `/d/homelab-pantry-bot-usage/pantry-bot-chat-usage`; the Overview link points to this stable UID.
 
 ### `host-pc.json` — Main PC — Bare-Metal Health
 
@@ -258,7 +235,7 @@ one app, that app's logs don't disappear — they just stop carrying a
 `level` label and fall into the "unclassified" bucket above, which is
 exactly what panel 4 exists to catch.
 
-### App dashboards — `apps.json`, `jmusicbot.json`, and `pantry-bot.json`
+### App dashboards — `jmusicbot.json` and `pantry-bot.json`
 
 The Overview dashboard links to the workload dashboards, with Pantry Bot health and usage split into separate views.
 

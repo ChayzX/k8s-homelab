@@ -1,0 +1,226 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "TRUFFLES collection status",
+      "gridPos": {"h": 4, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "TRUFFLES is intermittently online. No alert is raised merely because it sleeps or shuts down. Panels use the verified Windows exporter and streaming collector metric contract with `instance=\"TRUFFLES\"` and `role=\"streaming-laptop\"`. Custom GPU and OBS values disappear when collection is unsuccessful or the collector heartbeat is older than 45 seconds. Stream-quality panels also require an active stream."
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Collector Health",
+      "description": "The last remote Windows scrape result forwarded by Alloy. No data is expected while TRUFFLES is asleep or powered off.",
+      "gridPos": {"h": 5, "w": 8, "x": 0, "y": 4},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [{"refId": "A", "expr": "up{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - timestamp(up{instance=\"TRUFFLES\",role=\"streaming-laptop\"})) < 45)", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [{"type": "value", "options": {"0": {"text": "SCRAPE FAILED"}, "1": {"text": "ONLINE"}}}],
+          "noValue": "OFFLINE / ASLEEP / NO RECENT DATA",
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true}
+    },
+    {
+      "id": 3,
+      "type": "gauge",
+      "title": "CPU Used",
+      "gridPos": {"h": 5, "w": 8, "x": 8, "y": 4},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [{"refId": "A", "expr": "100 * (1 - avg(rate(windows_cpu_time_total{instance=\"TRUFFLES\",role=\"streaming-laptop\",mode=\"idle\"}[5m])))", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent", "noValue": "NO RECENT DATA", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 75}, {"color": "red", "value": 90}]}}, "overrides": []},
+      "options": {"minVizHeight": 75, "minVizWidth": 75, "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showThresholdLabels": false, "showThresholdMarkers": true, "sizing": "auto"}
+    },
+    {
+      "id": 4,
+      "type": "gauge",
+      "title": "Memory Used",
+      "gridPos": {"h": 5, "w": 8, "x": 16, "y": 4},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [{"refId": "A", "expr": "100 * (1 - windows_memory_available_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\"} / windows_memory_physical_total_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\"})", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent", "noValue": "NO RECENT DATA", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 80}, {"color": "red", "value": 92}]}}, "overrides": []},
+      "options": {"minVizHeight": 75, "minVizWidth": 75, "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showThresholdLabels": false, "showThresholdMarkers": true, "sizing": "auto"}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "CPU by Mode",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 9},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [{"refId": "A", "expr": "100 * avg by (mode) (rate(windows_cpu_time_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m]))", "legendFormat": "{{mode}}", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+      "fieldConfig": {"defaults": {"unit": "percent", "noValue": "NO RECENT DATA"}, "overrides": []},
+      "options": {"legend": {"calcs": ["lastNotNull", "mean"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Memory Available vs Total",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 9},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "windows_memory_available_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\"}", "legendFormat": "available", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+        {"refId": "B", "expr": "windows_memory_physical_total_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\"}", "legendFormat": "total", "datasource": {"type": "prometheus", "uid": "Prometheus"}}
+      ],
+      "fieldConfig": {"defaults": {"unit": "bytes", "noValue": "NO RECENT DATA"}, "overrides": []},
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Disk Used by Volume",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 17},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [{"refId": "A", "expr": "100 * (1 - windows_logical_disk_free_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\"} / windows_logical_disk_size_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\"})", "legendFormat": "{{volume}}", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent", "noValue": "NO RECENT DATA"}, "overrides": []},
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Network Throughput",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 17},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "rate(windows_net_bytes_received_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m])", "legendFormat": "{{nic}} receive", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+        {"refId": "B", "expr": "rate(windows_net_bytes_sent_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m])", "legendFormat": "{{nic}} send", "datasource": {"type": "prometheus", "uid": "Prometheus"}}
+      ],
+      "fieldConfig": {"defaults": {"unit": "Bps", "noValue": "NO RECENT DATA"}, "overrides": []},
+      "options": {"legend": {"calcs": ["lastNotNull", "mean"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Custom Collector Age",
+      "description": "Custom GPU/OBS panels disappear when this heartbeat is 45 seconds old or either collector reports failure.",
+      "gridPos": {"h": 5, "w": 8, "x": 0, "y": 25},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [{"refId": "A", "expr": "time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+      "fieldConfig": {"defaults": {"unit": "s", "noValue": "OFFLINE / STALE", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 45}]}}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true}
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "GPU and Encoder Load",
+      "gridPos": {"h": 8, "w": 16, "x": 8, "y": 25},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "streaming_gpu_utilization_ratio{instance=\"TRUFFLES\",role=\"streaming-laptop\"} * 100 and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_gpu_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "GPU {{gpu}}", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+        {"refId": "B", "expr": "streaming_gpu_encoder_utilization_ratio{instance=\"TRUFFLES\",role=\"streaming-laptop\"} * 100 and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_gpu_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "Encoder {{gpu}}", "datasource": {"type": "prometheus", "uid": "Prometheus"}}
+      ],
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent", "noValue": "STALE / COLLECTION FAILED"}, "overrides": []},
+      "options": {"legend": {"calcs": ["lastNotNull", "mean"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+    },
+    {
+      "id": 11,
+      "type": "gauge",
+      "title": "VRAM Used",
+      "gridPos": {"h": 5, "w": 8, "x": 0, "y": 30},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [{"refId": "A", "expr": "100 * streaming_gpu_memory_used_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\"} / streaming_gpu_memory_total_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_gpu_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent", "noValue": "STALE / COLLECTION FAILED", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 80}, {"color": "red", "value": 95}]}}, "overrides": []},
+      "options": {"minVizHeight": 75, "minVizWidth": 75, "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showThresholdLabels": false, "showThresholdMarkers": true, "sizing": "auto"}
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "GPU Temperature and Power",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 35},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "streaming_gpu_temperature_celsius{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_gpu_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "Temperature", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+        {"refId": "B", "expr": "streaming_gpu_power_watts{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_gpu_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "Power", "datasource": {"type": "prometheus", "uid": "Prometheus"}}
+      ],
+      "fieldConfig": {"defaults": {"noValue": "STALE / COLLECTION FAILED"}, "overrides": [{"matcher": {"id": "byFrameRefID", "options": "A"}, "properties": [{"id": "unit", "value": "celsius"}]}, {"matcher": {"id": "byFrameRefID", "options": "B"}, "properties": [{"id": "unit", "value": "watt"}]}]},
+      "options": {"legend": {"calcs": ["lastNotNull", "mean"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "OBS FPS and Render Time",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 35},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "streaming_obs_fps{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "FPS", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+        {"refId": "B", "expr": "streaming_obs_render_time_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "Render time", "datasource": {"type": "prometheus", "uid": "Prometheus"}}
+      ],
+      "fieldConfig": {"defaults": {"noValue": "STALE / COLLECTION FAILED"}, "overrides": [{"matcher": {"id": "byFrameRefID", "options": "A"}, "properties": [{"id": "unit", "value": "fps"}]}, {"matcher": {"id": "byFrameRefID", "options": "B"}, "properties": [{"id": "unit", "value": "s"}]}]},
+      "options": {"legend": {"calcs": ["lastNotNull", "mean"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "OBS Output State",
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 43},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "streaming_obs_stream_active{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "Streaming", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+        {"refId": "B", "expr": "streaming_obs_record_active{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "Recording", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+        {"refId": "C", "expr": "streaming_obs_reconnecting{instance=\"TRUFFLES\",role=\"streaming-laptop\"} and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1)", "legendFormat": "Reconnecting", "datasource": {"type": "prometheus", "uid": "Prometheus"}}
+      ],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "NO"}, "1": {"text": "YES"}}}], "noValue": "STALE / COLLECTION FAILED"}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true}
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Active Stream Quality Loss",
+      "description": "Shown only while OBS reports an active stream with a fresh successful collection. Counters may reset when OBS or an output restarts; encode counters may include recording work.",
+      "gridPos": {"h": 8, "w": 16, "x": 8, "y": 43},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "100 * rate(streaming_obs_render_skipped_frames_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m]) / clamp_min(rate(streaming_obs_render_frames_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m]), 0.001) and on(instance, role) (streaming_obs_stream_active{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1) and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45)", "legendFormat": "Render skipped", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+        {"refId": "B", "expr": "100 * rate(streaming_obs_encode_skipped_frames_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m]) / clamp_min(rate(streaming_obs_encode_frames_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m]), 0.001) and on(instance, role) (streaming_obs_stream_active{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1) and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45)", "legendFormat": "Encode skipped", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+        {"refId": "C", "expr": "100 * rate(streaming_obs_network_dropped_frames_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m]) / clamp_min(rate(streaming_obs_stream_frames_total{instance=\"TRUFFLES\",role=\"streaming-laptop\"}[5m]), 0.001) and on(instance, role) (streaming_obs_stream_active{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1) and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45)", "legendFormat": "Network dropped", "datasource": {"type": "prometheus", "uid": "Prometheus"}},
+        {"refId": "D", "expr": "streaming_obs_congestion_ratio{instance=\"TRUFFLES\",role=\"streaming-laptop\"} * 100 and on(instance, role) (streaming_obs_stream_active{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1) and on(instance, role) (streaming_obs_collection_success{instance=\"TRUFFLES\",role=\"streaming-laptop\"} == 1) and on(instance, role) ((time() - streaming_collector_timestamp_seconds{instance=\"TRUFFLES\",role=\"streaming-laptop\"}) < 45)", "legendFormat": "Congestion", "datasource": {"type": "prometheus", "uid": "Prometheus"}}
+      ],
+      "fieldConfig": {"defaults": {"min": 0, "unit": "percent", "noValue": "NOT STREAMING / STALE"}, "overrides": []},
+      "options": {"legend": {"calcs": ["lastNotNull", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "OBS and VTubeControl CPU Cores",
+      "description": "Sum of per-process CPU time rates. Values are CPU cores consumed, not host-normalized percent.",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 51},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [{"refId": "A", "expr": "sum by (process) (rate(windows_process_cpu_time_total{instance=\"TRUFFLES\",role=\"streaming-laptop\",process=~\"obs64|VTubeControl\"}[5m]))", "legendFormat": "{{process}}", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+      "fieldConfig": {"defaults": {"unit": "short", "noValue": "PROCESS NOT RUNNING / NO RECENT DATA"}, "overrides": []},
+      "options": {"legend": {"calcs": ["lastNotNull", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "OBS and VTubeControl Private Working Set",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 51},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [{"refId": "A", "expr": "sum by (process) (windows_process_working_set_private_bytes{instance=\"TRUFFLES\",role=\"streaming-laptop\",process=~\"obs64|VTubeControl\"})", "legendFormat": "{{process}}", "datasource": {"type": "prometheus", "uid": "Prometheus"}}],
+      "fieldConfig": {"defaults": {"unit": "bytes", "noValue": "PROCESS NOT RUNNING / NO RECENT DATA"}, "overrides": []},
+      "options": {"legend": {"calcs": ["lastNotNull", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": ["windows", "streaming", "truffles", "alloy"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "TRUFFLES Streaming",
+  "uid": "truffles-streaming",
+  "version": 1,
+  "weekStart": ""
+}

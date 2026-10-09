@@ -1,25 +1,37 @@
 {
   "uid": "homelab-pantry-bot-usage",
-  "title": "Pantry Bot — Usage",
-  "description": "Application usage from Pantry Bot's /metrics endpoint: engagement actions, bot messages, commands, Extension requests, boss activity, and outcomes. Prometheus counters are process-local and reset on restart; increase() and rate() handle that reset. Distinct participant and first-time history remains in the bot's SQLite engagement tables.",
+  "title": "Pantry Bot — Chat Usage",
+  "description": "A single view of chat command use, durable custom-command counts, Twitch event intake, engagement actions, and bot replies.",
   "tags": [
     "homelab",
     "twitch",
     "pantry-bot",
+    "chat",
     "usage"
   ],
   "timezone": "browser",
   "editable": true,
   "schemaVersion": 39,
   "version": 1,
-  "refresh": "15s",
+  "refresh": "1m",
   "graphTooltip": 1,
   "time": {
-    "from": "now-24h",
+    "from": "now-7d",
     "to": "now"
   },
   "templating": {
     "list": [
+      {
+        "name": "DS_POSTGRES",
+        "label": "Postgres",
+        "type": "datasource",
+        "query": "postgres",
+        "current": {},
+        "hide": 0,
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false
+      },
       {
         "name": "DS_PROMETHEUS",
         "label": "Prometheus",
@@ -36,7 +48,7 @@
   "panels": [
     {
       "type": "row",
-      "title": "At a glance — what the community is doing",
+      "title": "At a glance",
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -49,8 +61,8 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "Successful actions (1h)",
-      "description": "Committed engagement actions across chat, the Twitch Extension, and system events in the last hour. This is action volume, not a distinct participant count.",
+      "title": "Twitch event records (1h)",
+      "description": "EventSub records ingested by the bot. This is not a count of every ordinary chat message.",
       "gridPos": {
         "h": 4,
         "w": 6,
@@ -58,18 +70,19 @@
         "y": 1
       },
       "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
           },
-          "expr": "sum(increase(pantry_bot_engagement_actions_total[1h])) or vector(0)",
-          "legendFormat": "actions"
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS \"events\" FROM pantry_events WHERE created_at > now() - interval '1 hour'"
         }
       ],
       "options": {
@@ -110,8 +123,8 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "Rejected actions (1h)",
-      "description": "Cooldown, expired, muted, or otherwise rejected engagement actions in the last hour.",
+      "title": "Built-in commands completed (7d)",
+      "description": "Canonical built-in commands that completed successfully in the rolling 7 days. Aliases are counted under the command name.",
       "gridPos": {
         "h": 4,
         "w": 6,
@@ -129,8 +142,10 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(increase(pantry_bot_engagement_failures_total[1h])) or vector(0)",
-          "legendFormat": "rejected"
+          "expr": "sum(increase(pantry_bot_commands_total[7d])) or vector(0)",
+          "instant": true,
+          "format": "table",
+          "legendFormat": "value"
         }
       ],
       "options": {
@@ -155,16 +170,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": null
               },
               {
-                "color": "orange",
-                "value": 5
-              },
-              {
-                "color": "red",
-                "value": 20
+                "color": "green",
+                "value": 1
               }
             ]
           }
@@ -175,8 +186,8 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Boss damage (24h)",
-      "description": "Boss damage recorded by the legacy donation paths in the last 24 hours; community attack activity is shown in the engagement action chart.",
+      "title": "Successful chat game actions (7d)",
+      "description": "Durable successful engagement actions whose source was Twitch chat.",
       "gridPos": {
         "h": 4,
         "w": 6,
@@ -184,18 +195,19 @@
         "y": 1
       },
       "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
           },
-          "expr": "sum(increase(pantry_bot_boss_damage_total[24h])) or vector(0)",
-          "legendFormat": "damage"
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS \"actions\" FROM engagement_actions WHERE source = 'chat' AND reason IN ('success','friendly-success') AND to_timestamp(at/1000.0) > now() - interval '7 days'"
         }
       ],
       "options": {
@@ -215,7 +227,20 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "decimals": 0
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
         },
         "overrides": []
       }
@@ -223,8 +248,8 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "Boss outcomes (7d)",
-      "description": "Resolved legacy boss outcomes in the last seven days. Community outcomes are persisted in SQLite; this counter currently reports the legacy defeated/expired paths.",
+      "title": "Enabled custom commands never used",
+      "description": "Lifetime count from PostgreSQL. This is durable across bot restarts.",
       "gridPos": {
         "h": 4,
         "w": 6,
@@ -232,27 +257,19 @@
         "y": 1
       },
       "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
           },
-          "expr": "sum(increase(pantry_bot_boss_outcomes_total{outcome=\"defeated\"}[7d]))",
-          "legendFormat": "defeated"
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(increase(pantry_bot_boss_outcomes_total{outcome=\"expired\"}[7d]))",
-          "legendFormat": "expired"
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) FILTER (WHERE enabled AND use_count = 0) AS \"unused_enabled\" FROM custom_commands"
         }
       ],
       "options": {
@@ -263,23 +280,36 @@
           "fields": "",
           "values": false
         },
-        "orientation": "horizontal",
+        "orientation": "auto",
         "textMode": "value_and_name",
-        "colorMode": "none",
+        "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "auto"
       },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "decimals": 0
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
         },
         "overrides": []
       }
     },
     {
       "type": "row",
-      "title": "Participation flow",
+      "title": "Which commands are used?",
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -291,11 +321,11 @@
     },
     {
       "id": 5,
-      "type": "timeseries",
-      "title": "Engagement actions by source (15m rate)",
-      "description": "Successful actions per second split between chat, the Twitch Extension, and system events. Query SQLite for distinct participants and first-time participation.",
+      "type": "table",
+      "title": "Built-in command usage — last 7 days",
+      "description": "Every registered built-in command is exported, including zero-use commands. Counts aggregate across PantryBot replicas; Prometheus handles counter resets. Aliases count under the canonical name.",
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 12,
         "x": 0,
         "y": 6
@@ -311,128 +341,132 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (source) (rate(pantry_bot_engagement_actions_total[15m]))",
-          "legendFormat": "{{source}}"
+          "expr": "sum by (command) (increase(pantry_bot_commands_total[7d]))",
+          "instant": true,
+          "format": "table",
+          "legendFormat": "{{command}}"
         }
       ],
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
-          "decimals": 3,
-          "min": 0,
-          "color": {
-            "mode": "palette-classic"
-          },
           "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "showPoints": "never",
-            "spanNulls": false
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
           }
         },
         "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
       }
     },
     {
       "id": 6,
-      "type": "timeseries",
-      "title": "Actions by type (15m rate)",
-      "description": "Successful action mix: attacks, braces, rally support, duel actions, and other registered engagement events.",
+      "type": "table",
+      "title": "Custom command inventory — lifetime uses",
+      "description": "PostgreSQL use_count is cumulative for custom commands. Zero means no successful use has been recorded since creation. Disabled commands remain listed.",
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 12,
         "x": 12,
         "y": 6
       },
       "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
           },
-          "expr": "sum by (action) (rate(pantry_bot_engagement_actions_total[15m]))",
-          "legendFormat": "{{action}}"
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT name AS \"command\", enabled, category, permission_level, source, use_count AS \"lifetime uses\", created_at AS \"created\" FROM custom_commands ORDER BY enabled DESC, use_count ASC, name"
         }
       ],
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
-          "decimals": 3,
-          "min": 0,
-          "color": {
-            "mode": "palette-classic"
-          },
           "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "showPoints": "never",
-            "spanNulls": false
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
           }
         },
         "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
       }
+    },
+    {
+      "type": "row",
+      "title": "What people do in chat",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "panels": []
     },
     {
       "id": 7,
       "type": "timeseries",
-      "title": "Bot messages by status (15m rate)",
-      "description": "Outbound bot messages per second split into sent and failed. Daily totals are also persisted in SQLite.",
+      "title": "Chat engagement actions by action and result",
+      "description": "Durable Twitch-chat engagement actions, grouped by action and result reason.",
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 15
+        "y": 16
       },
       "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
           },
-          "expr": "sum by (status) (rate(pantry_bot_messages_total[15m]))",
-          "legendFormat": "{{status}}"
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('hour', to_timestamp(at/1000.0)) AS \"time\", action || ' / ' || reason AS metric, count(*) AS actions FROM engagement_actions WHERE source = 'chat' AND to_timestamp(at/1000.0) BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1,2 ORDER BY 1"
         }
       ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No recorded activity in this time range"
+        },
+        "overrides": []
+      },
       "options": {
         "legend": {
-          "displayMode": "list",
+          "calcs": [
+            "lastNotNull",
+            "sum"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -440,88 +474,61 @@
           "mode": "multi",
           "sort": "desc"
         }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "decimals": 3,
-          "min": 0,
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "showPoints": "never",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
       }
     },
     {
       "id": 8,
       "type": "timeseries",
-      "title": "Extension requests by route (15m rate)",
-      "description": "Requests served by the Twitch Extension API, split by route. This includes state reads and action requests.",
+      "title": "Twitch event intake by source and type",
+      "description": "EventSub and other queued Twitch events. This does not include regular chat text.",
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 15
+        "y": 16
       },
       "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
           },
-          "expr": "sum by (route) (rate(pantry_bot_extension_requests_total[15m]))",
-          "legendFormat": "{{route}}"
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroup(created_at, $__interval) AS \"time\", source || ' / ' || event_type AS metric, count(*) AS events FROM pantry_events WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1,2 ORDER BY 1"
         }
       ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No recorded activity in this time range"
+        },
+        "overrides": []
+      },
       "options": {
         "legend": {
+          "calcs": [
+            "lastNotNull",
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true,
-          "calcs": [
-            "lastNotNull"
-          ]
+          "showLegend": true
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "decimals": 3,
-          "min": 0,
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "showPoints": "never",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
       }
     },
     {
       "type": "row",
-      "title": "Chat command activity",
+      "title": "Bot responses and community features",
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -534,60 +541,122 @@
     {
       "id": 9,
       "type": "timeseries",
-      "title": "Commands by name (15m rate)",
-      "description": "Successfully handled chat commands, split by command name. This measures command activity separately from free engagement actions.",
+      "title": "Bot replies sent and failed (daily)",
+      "description": "Durable count of outbound bot messages by day and delivery status.",
       "gridPos": {
         "h": 8,
-        "w": 24,
+        "w": 12,
         "x": 0,
         "y": 25
       },
       "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
           },
-          "expr": "sum by (command) (rate(pantry_bot_commands_total[15m]))",
-          "legendFormat": "{{command}}"
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS \"time\", status AS metric, sum(count)::bigint AS messages FROM engagement_message_counts WHERE day BETWEEN $__timeFrom()::date AND $__timeTo()::date GROUP BY 1,2 ORDER BY 1"
         }
       ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No recorded activity in this time range"
+        },
+        "overrides": []
+      },
       "options": {
         "legend": {
+          "calcs": [
+            "lastNotNull",
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true,
-          "calcs": [
-            "lastNotNull"
-          ]
+          "showLegend": true
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Community game actions by type",
+      "description": "Durable actions in community encounters. These are game actions, not all chat messages.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 25
       },
+      "datasource": {
+        "type": "postgres",
+        "uid": "${DS_POSTGRES}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('hour', to_timestamp(at/1000.0)) AS \"time\", action AS metric, count(*) AS actions FROM community_actions WHERE to_timestamp(at/1000.0) BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1,2 ORDER BY 1"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
-          "decimals": 3,
-          "min": 0,
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "showPoints": "never",
-            "spanNulls": false
-          }
+          "unit": "short",
+          "noValue": "No recorded activity in this time range"
         },
         "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "text",
+      "title": "How to read this dashboard",
+      "description": "What is counted and what is not collected.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "\n**Built-in commands:** completed commands over the rolling 7 days, from Prometheus. Every registered command appears at zero after the updated bot starts exporting its catalog. Aliases count under the canonical command. Data older than Prometheus retention is unavailable.\n\n**Custom commands:** lifetime successful uses from PostgreSQL. This count survives bot restarts. Enabled commands with zero uses are surfaced above; disabled commands remain in the inventory.\n\n**Chat actions and bot replies:** durable PostgreSQL counts. Twitch event intake counts EventSub/queued records, not each ordinary chat line.\n\n**Not measured:** ordinary chat text, unrecognized !commands, and failed/cooldown command attempts are not retained as command usage. A blank signal means no data was collected for it; it does not prove the feature is unused.\n",
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        }
       }
     }
   ]
