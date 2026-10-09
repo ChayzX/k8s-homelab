@@ -17,6 +17,26 @@ data:
         node: pantry-bot-oracle
         site: oracle
 
+    # Keep Oracle metrics local except for the small series set evaluated by
+    # home Grafana's Oracle health rules. This targets the on-prem receiver,
+    # not Grafana Cloud, and prevents missing cross-site series from being
+    # mistaken for failures.
+    remote_write:
+      - url: https://metrics.greeniespantry.uk/api/v1/write
+        queue_config:
+          capacity: 100
+          max_shards: 1
+          min_shards: 1
+          max_samples_per_send: 100
+          batch_send_deadline: 15s
+        metadata_config:
+          send: false
+        write_relabel_configs:
+          - source_labels: [__name__, job, namespace, cronjob, mountpoint, fstype]
+            separator: ";"
+            regex: '(kube_cronjob_status_last_successful_time;kube-state-metrics-oracle;pantry-bot;postgres-backup;;|(up|pantry_bot_runtime_(claims|failures)_total);pantry-bot-.*-oracle;;;;|node_filesystem_(avail|size)_bytes;node-oracle;;;/;ext4)'
+            action: keep
+
     scrape_configs:
       - job_name: prometheus-oracle
         static_configs:
@@ -29,6 +49,55 @@ data:
       - job_name: kube-state-metrics-oracle
         static_configs:
           - targets: ["kube-state-metrics.observability.svc.cluster.local:8080"]
+
+      - job_name: pantry-bot-api-oracle
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["pantry-private-api.pantry-bot.svc.cluster.local:3000"]
+            labels:
+              site: oracle
+              role: api
+
+      - job_name: pantry-bot-gateway-oracle
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["pantry-twitch-gateway.pantry-bot.svc.cluster.local:3001"]
+            labels:
+              site: oracle
+              role: gateway
+
+      - job_name: pantry-bot-worker-oracle
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["pantry-chat-worker.pantry-bot.svc.cluster.local:3001"]
+            labels:
+              site: oracle
+              role: worker
+
+      - job_name: pantry-bot-dispatcher-oracle
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["pantry-twitch-dispatcher.pantry-bot.svc.cluster.local:3001"]
+            labels:
+              site: oracle
+              role: dispatcher
+
+      # Token-free authority telemetry from the neutral GCP witness, reached
+      # through the existing private tunnel relay.
+      - job_name: pantry-postgres-witness-oracle
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["failover-witness-relay.observability.svc.cluster.local:18765"]
+            labels:
+              site: oracle
+              role: witness
+
+      - job_name: alloy-logs-oracle
+        static_configs:
+          - targets: ["alloy-logs.observability.svc.cluster.local:12345"]
+            labels:
+              site: oracle
+              role: logs
 
       - job_name: kubernetes-kubelet-oracle
         scheme: https
