@@ -124,7 +124,7 @@
       "id": 2,
       "type": "stat",
       "title": "Built-in commands completed (7d)",
-      "description": "Canonical built-in commands that completed successfully in the rolling 7 days. Aliases are counted under the command name.",
+      "description": "Successful canonical command completions during the available part of the rolling 7-day window. Collection began with the Oracle worker metrics rollout; until 7 days have elapsed, zero means no recorded successes since rollout, not no earlier use. Aliases count under the canonical name.",
       "gridPos": {
         "h": 4,
         "w": 6,
@@ -323,7 +323,7 @@
       "id": 5,
       "type": "table",
       "title": "Built-in command usage — last 7 days",
-      "description": "Every registered built-in command is exported, including zero-use commands. Counts aggregate across PantryBot replicas; Prometheus handles counter resets. Aliases count under the canonical name.",
+      "description": "Every registered built-in command is exported, including zero-use commands. Collection began with the Oracle worker metrics rollout, so the 7-day window is partial until 7 days have elapsed. Counts aggregate across PantryBot replicas; Prometheus handles counter resets. Aliases count under the canonical name.",
       "gridPos": {
         "h": 9,
         "w": 12,
@@ -651,7 +651,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "\n**Built-in commands:** completed commands over the rolling 7 days, from Prometheus. Every registered command appears at zero after the updated bot starts exporting its catalog. Aliases count under the canonical command. Data older than Prometheus retention is unavailable.\n\n**Custom commands:** lifetime successful uses from PostgreSQL. This count survives bot restarts. Enabled commands with zero uses are surfaced above; disabled commands remain in the inventory.\n\n**Chat actions and bot replies:** durable PostgreSQL counts. Twitch event intake counts EventSub/queued records, not each ordinary chat line.\n\n**Not measured:** ordinary chat text, unrecognized !commands, and failed/cooldown command attempts are not retained as command usage. A blank signal means no data was collected for it; it does not prove the feature is unused.\n",
+        "content": "\n**Built-in commands:** successful completions over the rolling 7 days, from Prometheus. Collection began with the Oracle worker metrics rollout, so the window is partial until 7 days have elapsed. A zero during this period means no successes recorded since collection started, not no earlier use. Every registered command appears at zero; Prometheus handles counter resets. Aliases count under the canonical command. Data older than Prometheus retention is unavailable.\n\n**Custom commands:** lifetime successful uses from PostgreSQL. This count survives bot restarts. Enabled commands with zero uses are surfaced above; disabled commands remain in the inventory.\n\n**Chat actions and bot replies:** durable PostgreSQL counts. Twitch event intake counts EventSub/queued records, not each ordinary chat line.\n\n**Not measured:** ordinary chat text, unrecognized !commands, and failed/cooldown command attempts are not retained as command usage. A blank signal means no data was collected for it; it does not prove the feature is unused.\n",
         "code": {
           "language": "plaintext",
           "showLineNumbers": false,
