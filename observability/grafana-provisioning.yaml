@@ -88,7 +88,7 @@ data:
         access: proxy
         url: 100.78.181.15:5432
         database: pantry
-        user: pantry
+        user: pantry_grafana
         jsonData:
           sslmode: disable
           postgresVersion: 1600
