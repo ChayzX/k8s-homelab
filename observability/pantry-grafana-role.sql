@@ -20,6 +20,10 @@ ALTER ROLE pantry_grafana SET statement_timeout = '15s';
 REVOKE ALL PRIVILEGES ON DATABASE pantry FROM pantry_grafana;
 REVOKE ALL PRIVILEGES ON SCHEMA public FROM pantry_grafana;
 REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM pantry_grafana;
+-- Remove column grants left by an earlier version of this migration. A
+-- table-level REVOKE does not remove column-level privileges.
+REVOKE SELECT (status) ON public.pantry_outbox FROM pantry_grafana;
+REVOKE SELECT (user_id) ON public.community_participants FROM pantry_grafana;
 
 GRANT CONNECT ON DATABASE pantry TO pantry_grafana;
 GRANT USAGE ON SCHEMA public TO pantry_grafana;
@@ -38,7 +42,3 @@ GRANT SELECT (day, status, "count")
   ON public.engagement_message_counts TO pantry_grafana;
 GRANT SELECT ("at", action)
   ON public.community_actions TO pantry_grafana;
-GRANT SELECT (status)
-  ON public.pantry_outbox TO pantry_grafana;
-GRANT SELECT (user_id)
-  ON public.community_participants TO pantry_grafana;
