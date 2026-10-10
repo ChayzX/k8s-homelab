@@ -23,10 +23,22 @@ REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM pantry_grafana;
 
 GRANT CONNECT ON DATABASE pantry TO pantry_grafana;
 GRANT USAGE ON SCHEMA public TO pantry_grafana;
--- Current PantryBot SQL panels use only these three tables. Do not grant
--- future-table defaults: new panels must receive an explicit privilege review.
-GRANT SELECT ON TABLE
-  public.pantry_events,
-  public.pantry_outbox,
-  public.community_participants
-TO pantry_grafana;
+-- Both live PantryBot dashboards use these columns. Column grants let Grafana
+-- aggregate usage while withholding command responses and actor identifiers
+-- that its panels never need. COUNT(*) works with column-level SELECT on a
+-- table. Review a new panel before adding any table or column privilege.
+-- No future-table default privileges are granted.
+GRANT SELECT (created_at, source, event_type)
+  ON public.pantry_events TO pantry_grafana;
+GRANT SELECT ("at", source, reason, action)
+  ON public.engagement_actions TO pantry_grafana;
+GRANT SELECT (name, enabled, category, permission_level, source, use_count, created_at)
+  ON public.custom_commands TO pantry_grafana;
+GRANT SELECT (day, status, "count")
+  ON public.engagement_message_counts TO pantry_grafana;
+GRANT SELECT ("at", action)
+  ON public.community_actions TO pantry_grafana;
+GRANT SELECT (status)
+  ON public.pantry_outbox TO pantry_grafana;
+GRANT SELECT (user_id)
+  ON public.community_participants TO pantry_grafana;

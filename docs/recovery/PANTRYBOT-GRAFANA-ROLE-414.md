@@ -7,12 +7,33 @@ runtime away from Oracle.
 ## Observed state and required order
 
 On 2026-10-10 the `PantryPostgres` datasource connected from
-`100.84.89.87/32` as `pantry`, which is a database superuser. The dashboard's
-SQL panels read only `public.pantry_events`, `public.pantry_outbox`, and
-`public.community_participants`. All three tables belong to `pantry`; row
-security is disabled. The new role has SELECT only on those three tables.
+`100.84.89.87/32` as `pantry`, which is a database superuser. The checked-in
+`pantry-bot.json` has five SQL targets. The **live** Home ConfigMap has
+`pantry-bot-usage.json` with eight SQL targets, which is not in the checked-in
+dashboard sources at this commit. Its live `pantry-bot.json` differs from the
+checked-in health dashboard and currently has no SQL targets. The eight live
+usage queries and five checked-in health queries together need seven `public`
+tables:
+
+| Table | Columns required by live SQL |
+| --- | --- |
+| `pantry_events` | `created_at`, `source`, `event_type` |
+| `engagement_actions` | `at`, `source`, `reason`, `action` |
+| `custom_commands` | `name`, `enabled`, `category`, `permission_level`, `source`, `use_count`, `created_at` |
+| `engagement_message_counts` | `day`, `status`, `count` |
+| `community_actions` | `at`, `action` |
+| `pantry_outbox` | `status` |
+| `community_participants` | `user_id` |
+
+All seven are ordinary tables without row security. The role gets column
+SELECT grants only. It does **not** get `custom_commands.response_template`,
+`community_actions.user_id`, `engagement_actions.user_id`, or event payloads.
 There are no future-table default grants; review privileges whenever a panel
-adds a table.
+adds a table or column. Before deployment, confirm the live Grafana ConfigMap
+has not gained another SQL dashboard or query since this inventory.
+Import the live usage dashboard into the release's dashboard source and
+generated ConfigMap before running `grafana-deploy.yml`; otherwise that
+workflow's dashboard ConfigMap apply can lose or drift the usage view.
 
 Before switching Grafana, merge this line into #412's candidate
 `pantry-bot/31-postgres-pg-hba.conf`, immediately next to the temporary
@@ -62,15 +83,22 @@ ssh -o BatchMode=yes oracle \
   'sudo -n k3s kubectl -n pantry-bot exec -i pantry-postgres-0 -- psql -X -At -U pantry -d pantry' <<'SQL'
 SELECT rolname,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolcanlogin
 FROM pg_roles WHERE rolname='pantry_grafana';
-SELECT has_table_privilege('pantry_grafana','public.pantry_events','SELECT'),
-       has_table_privilege('pantry_grafana','public.pantry_outbox','SELECT'),
-       has_table_privilege('pantry_grafana','public.community_participants','SELECT');
+SELECT table_name,column_name,privilege_type
+FROM information_schema.column_privileges
+WHERE table_schema='public' AND grantee='pantry_grafana'
+ORDER BY table_name,column_name,privilege_type;
+SELECT has_table_privilege('pantry_grafana','public.custom_commands','SELECT'),
+       has_column_privilege('pantry_grafana','public.custom_commands','name','SELECT'),
+       has_column_privilege('pantry_grafana','public.custom_commands','response_template','SELECT'),
+       has_column_privilege('pantry_grafana','public.community_actions','user_id','SELECT');
 SQL
 ```
 
 The last verification command must show a login role with all elevated flags
-false and all three SELECT checks true. If it cannot be verified, stop before
-updating the Grafana Secret. The SQL grant migration is safe to rerun; the
+false, exactly 21 direct column SELECT grants matching the table above, and
+booleans `f|t|f|f` for table-wide SELECT, required column, and two forbidden
+columns. If it cannot be verified, stop before updating the Grafana Secret.
+The SQL grant migration is safe to rerun; the
 credential update is a rotation and needs coordinated Secret replacement.
 Keep both mode-600 temporary credential files until success or rollback is
 confirmed. Clean them explicitly at the end.
@@ -107,14 +135,21 @@ Have the QA agent query the datasource from Grafana, not just PostgreSQL:
 1. Datasource health returns OK. A SQL query through the datasource returns
    `current_user = pantry_grafana`, `inet_client_addr() = 100.84.89.87`, and
    `current_database() = pantry`.
-2. Execute every SQL panel in `dashboards/pantry-bot.json`: connection test,
-   events last hour, dead-letter count, participant count, and events over
-   time. Check the rendered panel for database errors, including a zero-result
-   period.
-3. In a session as `pantry_grafana`, confirm `SELECT` works on the three
-   tables, while `INSERT` into `pantry_events`, `CREATE TABLE` in `public`,
-   and a superuser-only operation fail. Use a transaction with rollback for
-   the write attempt. Confirm no other application table can be selected.
+2. Execute **all 13 SQL targets** in the checked-in `pantry-bot.json` and the
+   **live** `pantry-bot-usage.json`: connection test, events last hour,
+   dead-letter count, participant count, events over time, chat actions over
+   time, engagement message counts, usage events by source/type, community
+   actions over time, command inventory, unused enabled commands, successful
+   chat actions in seven days, and usage events last hour. Check rendered
+   panels for database errors, including a zero-result period. Also inspect
+   all live ConfigMap dashboard SQL for new tables/columns before changing
+   credentials; a new target needs an explicit grant review.
+3. In a session as `pantry_grafana`, confirm required column `SELECT` works
+   while `custom_commands.response_template`, `community_actions.user_id`,
+   `engagement_actions.user_id`, and `pantry_events.payload` cannot be read.
+   Confirm `INSERT` into `pantry_events`, `CREATE TABLE` in `public`, and a
+   superuser-only operation fail. Use a transaction with rollback for the
+   write attempt. Confirm no other application table can be selected.
 4. Confirm Oracle application pods and fresh backup/ANALYZE Jobs retain their
    connections as `pantry` through the pod-CIDR rule.
 
