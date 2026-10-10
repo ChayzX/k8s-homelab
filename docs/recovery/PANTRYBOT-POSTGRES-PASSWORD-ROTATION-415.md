@@ -1,13 +1,10 @@
 # Oracle PantryBot superuser password rotation (issue #415)
 
-**Do not run this during the proposed 04:00 Central window on 2026-10-10.**
-At inventory time, Home Grafana still authenticates as `pantry`, the
-`pantry_grafana` role does not exist, and the current 2026-10-10 R2 dump has
-not had a fresh isolated restore rehearsal. The rotation requires two
-controlled application rollouts, a temporary PostgreSQL role, both CronJob
-checks, Grafana verification, and cleanup of retired Secret copies. Schedule
-a later window after #414 is live and verified. No Home PantryBot runtime or
-replication should be brought back for this procedure.
+Run only in a dedicated maintenance window with enough time for two sequential
+application rollouts and both backup/ANALYZE checks in each phase. Avoid the
+daily 05:10 UTC backup and Sunday 04:23 UTC ANALYZE. #414 is now live and
+verified; do not restore Home PantryBot runtime or retired replication for
+this procedure.
 
 ## Credential and client inventory (2026-10-10, values omitted)
 
@@ -15,7 +12,7 @@ replication should be brought back for this procedure.
 | --- | --- | --- |
 | Oracle `pantry-bot/pantry-bot-platform`, key `PANTRY_DATABASE_URL` | Database URL for worker (2), gateway, dispatcher, maintenance responder, overlay (2), private API (2), backup init container, and ANALYZE CronJob | Stage alternate URL, replace this one key, restart six deployments; new Job pods read the latest Secret |
 | Oracle `pantry-bot/pantry-bot-postgres-standby`, key `POSTGRES_PASSWORD` | StatefulSet `envFrom`; historical bootstrap value differs from the working application URL password | Align with the final new `pantry` password only after `ALTER ROLE`; changing this Secret alone does **not** change the role on the existing PVC |
-| Home `observability/grafana-postgres-pantry`, key `password` | Current Grafana datasource uses `pantry` superuser; value matched the Oracle application URL during inventory | #414 must replace it with a separate `pantry_grafana` credential and verify the datasource before this rotation |
+| Home `observability/grafana-postgres-pantry`, key `password` | Grafana datasource uses dedicated non-superuser role `pantry_grafana`; fresh health check passed after #412 | Keep unchanged; it is independent of the `pantry` superuser password |
 | Home `pantry-bot/pantry-bot-platform`, key `PANTRY_DATABASE_URL` | Retired Secret with the same current password and an obsolete Home database hostname; no live Home workload references found | Delete only after rechecking no consumers and confirming Oracle-only recovery policy |
 | PostgreSQL `pantry` role | Current superuser; the password verifier lives in the database | Rotate through the local Unix socket after all serving clients move to a temporary role |
 
@@ -25,8 +22,8 @@ Secret, and the Home Grafana Secret also have
 encoded Secret data snapshots. The Oracle application's annotation differs
 from its current URL. Treat those annotations as additional historical
 credential copies. The helper below removes the annotation when it replaces
-Oracle Secrets. #414 must remove it from the Home Grafana Secret, and deleting
-the retired Home Secret removes its snapshot.
+Oracle Secrets. #414 removed it from the Home Grafana Secret; deleting the
+retired Home Secret removes its snapshot.
 
 The scan compared decoded values **in memory** across Kubernetes Secrets on
 both clusters and emitted only matching object/key names. It cannot account
@@ -39,9 +36,20 @@ from an operator's environment; they are not running Kubernetes workloads,
 but any scheduled copy or operator vault entry must be inventoried and
 updated. A `pg_stat_activity` snapshot showed only the six serving role
 Deployments and local `psql`, but transient/admin clients may be absent from
-one snapshot. **Treat the caller inventory as incomplete until the operator
-checks external schedules, local files, vault entries, and recent connection
-records.** Defer the rotation if any holder cannot be accounted for.
+one snapshot. The local user's crontab, system cron files, and user systemd
+units were checked; no PantryBot database URL holder was found. Oracle has no
+active PantryBot promoter service or PantryBot-specific scheduled unit. The
+user environment has no detected command-line password manager, so external
+password-manager entries still require an operator-side inventory before
+rotation. **Treat the caller inventory as incomplete until all external
+schedules, local files, vault entries, and recent connection records are
+accounted for.** Defer the rotation if any holder cannot be accounted for.
+
+The `PANTRYBOT_POSTGRES_PASSWORD` Actions secret in `ChayzX/k8s-homelab` had
+no references in current workflows or repository files and was deleted after
+that check. Do not recreate it unless a reviewed workflow needs it; any new
+workflow must receive the final value through the approved secret-management
+path. `ChayzX/pantry-bot` has no Actions database password secret.
 
 The six database-consuming Deployments are `pantry-chat-worker`,
 `pantry-twitch-gateway`, `pantry-twitch-dispatcher`,
@@ -94,9 +102,11 @@ python3 /tmp/pantrybot-secret-update-415.py snapshot-old
 ```
 
 `snapshot-old` creates `pantry-bot-db-url-old-415` inside Oracle Kubernetes,
-without exporting the old URL. Keep it only until the old role password is
-changed. Preserve a secure vault recovery copy under the normal operator
-procedure; do not use this temporary Secret as long-term storage.
+without exporting the old URL. Keep it until `stage-final` and the final
+credential probe succeed; the helper reads this Secret to reject password
+reuse. Delete it immediately before promoting the final URL. Preserve a secure
+vault recovery copy under the normal operator procedure; do not use this
+temporary Secret as long-term storage.
 
 Generate two distinct new passwords in the approved password manager. Use
 one for a short-lived `pantry_rotation_415` superuser and the other for the
@@ -145,11 +155,12 @@ sudo k3s kubectl -n pantry-bot delete job pantry-db-probe-temp-415
    missing or if the temporary role cannot do normal app work.
 3. Through the Oracle PostgreSQL container's local `psql` socket, run
    `\password pantry` and enter the final password twice at the hidden
-   prompt. Delete the now-useless `pantry-bot-db-url-old-415` Secret immediately
-   with `sudo k3s kubectl -n pantry-bot delete secret pantry-bot-db-url-old-415`.
-   Existing sessions do not prove the new password; use
-   `stage-final` with the new percent-encoded `pantry` URL, run the final
-   one-shot probe below, and require success before changing app Secrets.
+   prompt. Existing sessions do not prove the new password; use `stage-final`
+   with the new percent-encoded `pantry` URL, run the final one-shot probe
+   below, and require success before changing app Secrets. **Keep
+   `pantry-bot-db-url-old-415` until `stage-final` has succeeded.** The helper
+   reads that Secret to reject password reuse. Delete it only after the final
+   probe succeeds and immediately before promoting the final URL.
 4. Promote the final URL with `promote-final`, restart the same six
    Deployments sequentially, and verify fresh connections from every
    replica. Run fresh backup and ANALYZE Jobs again, verify the new R2

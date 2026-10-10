@@ -1,11 +1,11 @@
 # Oracle PantryBot PostgreSQL access (issue #412)
 
-This is a **staged maintenance procedure**, not an automatic deployment. The
-primary runs on Oracle from a retained local-path PVC. Its `pg_hba.conf` lives
-inside that PVC; `kubectl apply` of `30-postgres-primary.yaml` cannot update it.
-Do not change the live primary until a recent R2 dump has restored into an
-isolated PostgreSQL 16 instance and the operator has scheduled a rollback
-window. Do not use any retired Home/Canada replication procedure.
+The primary runs on Oracle from a retained local-path PVC. Its `pg_hba.conf`
+lives inside that PVC; `kubectl apply` of `30-postgres-primary.yaml` cannot
+update it. On 2026-10-10 UTC, the broad network rule and retired
+replication allowances were replaced with the candidate below. The prior file
+is retained on the PVC as `pg_hba.conf.pre-412` for rollback. Do not use any
+retired Home/Canada replication procedure.
 
 ## Verified client inventory (2026-10-10 UTC)
 
@@ -14,25 +14,25 @@ window. Do not use any retired Home/Canada replication procedure.
 | Worker (2), gateway, dispatcher, responder, overlay (2), private API (2) | `pantry-postgres.pantry-bot.svc.cluster.local:5432`; active connections from Oracle pod IPs `10.42.0.142` through `.177` | Yes; allow Oracle node pod CIDR `10.42.0.0/24` |
 | Commands site, private site, Cloudflare tunnels | These deployment specs have no `PANTRY_DATABASE_URL` | No direct database path |
 | Backup and ANALYZE CronJobs | Same `PANTRY_DATABASE_URL` Secret and Service; most recent backup pod was `10.42.0.164` | Yes; allow Oracle pod CIDR |
-| Home Grafana `PantryPostgres` datasource | Direct to Oracle tailnet `100.78.181.15:5432`. A live Grafana query returned `inet_client_addr() = 100.84.89.87/32`, user/database `pantry`, and the datasource health endpoint returned OK. Dashboard queries are read-only, but `pantry` is a database **superuser** | Yes; allow MinecraftMachine `100.84.89.87/32` until this monitoring path and database role are migrated |
+| Home Grafana `PantryPostgres` datasource | Direct to Oracle tailnet `100.78.181.15:5432`; the fresh datasource health check after the HBA reload returned `Database Connection OK`. Provisioning uses dedicated role `pantry_grafana` from `100.84.89.87/32` | Yes; allow only `pantry_grafana` from MinecraftMachine `100.84.89.87/32` |
 | Database readiness and operator `kubectl exec` | Unix socket as `pantry` in the database container | Yes; retain local `pantry` trust |
 | Admin via Oracle SSH | Operator can use `kubectl exec` and the local socket. Direct tailnet admin clients have not been inventoried and are **not** in the proposed allowlist | Use the documented local path; check for any needed external client before rollout |
 | Monitoring other than Grafana | Oracle Prometheus scrapes Kubernetes/job metrics; no direct PostgreSQL query path found | No database allowlist entry |
 | Home/Canada replication | `pg_stat_replication` and replication slots empty; PantryBot is Oracle-only | No; remove old HBA entries |
 
-Grafana's use of the `pantry` superuser is tracked separately in
-[issue #414](https://github.com/ChayzX/k8s-homelab/issues/414). The candidate
-HBA temporarily allows both `pantry` and `pantry_grafana` from Home. After
-Grafana has been verified as `pantry_grafana`, remove only the Home `pantry`
-rule and reload HBA before the superuser password rotation in
+Grafana's move to the dedicated `pantry_grafana` role is complete under
+[issue #414](https://github.com/ChayzX/k8s-homelab/issues/414). The live HBA
+allows no Home access as `pantry`; the successful datasource health check
+confirms the remaining role and route. Superuser rotation remains tracked in
 [issue #415](https://github.com/ChayzX/k8s-homelab/issues/415).
 
 Oracle's single k3s node reports `podCIDR=10.42.0.0/24`. The current primary is
 `hostNetwork: true`, listens on IPv4/IPv6 wildcard addresses, and has
-`host all all all scram-sha-256`. The old replication HBA entries follow that
-broad rule. Last successful backup was 2026-10-09 05:10 UTC, and the upload
-job confirmed the R2 object exists. No recent PantryBot PostgreSQL dump
-restore was found in the recovery records before this issue's rehearsal.
+the prior HBA included `host all all all scram-sha-256` and five replication
+allowances. They are now replaced by the exact candidate below. A fresh backup
+created at 2026-10-10 20:52 UTC uploaded to R2 and restored in isolation at
+20:58 UTC: 64 public tables, 41,778,199 database bytes, PostgreSQL 16.15. The
+scratch namespace and its copied R2 credential Secret were deleted.
 
 ## Gate 1: prove the current dump restores
 
@@ -82,12 +82,11 @@ small restore blocks that change.
 
 ## Gate 2: narrow `pg_hba.conf` during a coordinated window
 
-Review [the candidate HBA file](../../pantry-bot/31-postgres-pg-hba.conf) with
-the current `pg_hba_file_rules` view and all expected client paths. Recheck
-the node pod CIDR and Grafana source address immediately before rollout. The
-candidate allows the database container's Unix socket, Oracle pod CIDR, and
-Home Grafana tailnet IP. It rejects all remote replication and other TCP
-connections, including localhost TCP on the host-networked Oracle node.
+The live [candidate HBA file](../../pantry-bot/31-postgres-pg-hba.conf) allows
+the local `pantry` socket, `pantry` from the Oracle pod CIDR, and
+`pantry_grafana` from MinecraftMachine. It rejects all remote replication and
+all other TCP connections, including localhost TCP on the host-networked
+Oracle node. The current `pg_hba_file_rules` error count is zero.
 
 From a workstation with this checkout, copy the candidate to Oracle, then run
 the remaining commands on Oracle. Preserve the original file on the retained
@@ -114,11 +113,27 @@ sudo k3s kubectl -n pantry-bot exec pantry-postgres-0 -- psql -U pantry -d pantr
 sudo k3s kubectl -n pantry-bot exec pantry-postgres-0 -- psql -U pantry -d pantry -AtX -c 'SELECT pg_reload_conf()'
 ```
 
-The error count must be zero and `pg_reload_conf()` must return `t`. Check
-PostgreSQL logs for an HBA reload error. Existing sessions may continue, so
-verify **new** connections from each path:
+The rollout preserved `/var/lib/postgresql/data/pg_hba.conf.pre-412` with
+owner `postgres:root`, mode `600`; the replacement has the same owner/mode.
+The pre-reload parser error count was zero, `pg_reload_conf()` returned `t`,
+and a post-reload parser query also returned zero. Existing sessions may
+continue, so verify **new** connections from each path:
 
-1. Run `SELECT 1` through each pod of the six database-using deployments:
+1. All nine serving pods across the six DB-using deployments made a fresh
+   connection and returned `current_user=pantry`, `current_database=pantry`,
+   and `pg_is_in_recovery=false`.
+2. A fresh backup Job completed, wrote and verified
+   `pantry-20261010T205241Z.dump.gz` in R2 (3,734,553 bytes). A fresh ANALYZE
+   Job completed with zero tables lacking statistics.
+3. Home Grafana's fresh `PantryPostgres` health check returned
+   `Database Connection OK` using `pantry_grafana`. A denied non-allowlisted
+   PostgreSQL client test was not performed.
+4. Local socket `SELECT 1` succeeded. A denied tailnet PostgreSQL client test
+   was not performed.
+5. Prometheus queries and the Grafana dashboard query checks remain covered
+   by the release QA report. The dashboard visual browser check is separate.
+
+For future validation, run `SELECT 1` through each pod of the six DB-using deployments:
    `pantry-chat-worker`, `pantry-twitch-gateway`, `pantry-twitch-dispatcher`,
    `pantry-maintenance-responder`, `pantry-overlay-delivery`, and
    `pantry-private-api`. An example for one pod is below. Repeat for both
@@ -128,7 +143,7 @@ verify **new** connections from each path:
    confirm success and the new R2 object. This verifies their transient pod
    addresses, which may differ from inventory time.
 3. Query the Home Grafana `PantryPostgres` datasource and its PantryBot SQL
-   panels; confirm connection source remains `100.84.89.87/32`.
+   panels; confirm role `pantry_grafana` and source `100.84.89.87/32`.
 4. Verify operator local-socket access and confirm a non-allowlisted tailnet
    host cannot authenticate. Observe `pg_stat_activity` and database logs.
 
