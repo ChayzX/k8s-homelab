@@ -35,6 +35,15 @@ data:
 
           max_backoff: 30s
 
+        # Send only PantryBot service health/usage and the Home dashboards'
+        # existing backup/filesystem signals. Raw application and host series
+        # stay on Oracle. Keep this allowlist aligned with Home Grafana queries.
+        write_relabel_configs:
+          - source_labels: [__name__, job, namespace, cronjob, mountpoint, fstype]
+            separator: ";"
+            regex: '(kube_cronjob_status_last_successful_time;kube-state-metrics-oracle;pantry-bot;postgres-backup;;|(up|pantry_bot_runtime_(claims|completions|failures)_total);pantry-bot-.*-oracle;;;;|pantry_bot_commands_total;pantry-bot-worker-oracle;;;;|node_filesystem_(avail|size)_bytes;node-oracle;;;/;ext4)'
+            action: keep
+
 
     scrape_configs:
       - job_name: prometheus-oracle
@@ -67,11 +76,23 @@ data:
 
       - job_name: pantry-bot-worker-oracle
         metrics_path: /metrics
-        static_configs:
-          - targets: ["pantry-chat-worker.pantry-bot.svc.cluster.local:3001"]
-            labels:
-              site: oracle
-              role: worker
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [pantry-bot]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            action: keep
+            regex: pantry-chat-worker
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            action: keep
+            regex: health
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - target_label: site
+            replacement: oracle
+          - target_label: role
+            replacement: worker
 
       - job_name: pantry-bot-dispatcher-oracle
         metrics_path: /metrics
