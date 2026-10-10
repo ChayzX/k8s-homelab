@@ -54,16 +54,19 @@ From a trusted checkout, use a shell with tracing disabled. Do not print the
 password or paste it into a command argument, issue, log, or Git file.
 
 ```sh
-set -eu
+set -euo pipefail
 umask 077
 secret_file=$(mktemp)
 old_secret_file=$(mktemp)
 openssl rand -hex 32 | tr -d '\n' > "$secret_file"
 
-# Preserve the existing Home Secret for immediate rollback. Treat this file
-# as a credential even though its data field is base64 encoded.
+# Preserve only the current Home Secret's identity, type, and data for
+# rollback. Do not copy metadata annotations into the backup: the live Secret
+# currently has a client-side last-applied annotation containing an older
+# encoded credential snapshot. Treat this file as a credential.
 ssh -o BatchMode=yes minecraftmachine \
   'sudo -n k3s kubectl -n observability get secret grafana-postgres-pantry -o json' \
+  | python3 -c 'import json,sys; s=json.load(sys.stdin); print(json.dumps({"apiVersion":"v1","kind":"Secret","metadata":{"name":s["metadata"]["name"],"namespace":s["metadata"]["namespace"]},"type":s["type"],"data":s["data"]}))' \
   > "$old_secret_file"
 
 # Migration is idempotent and leaves a newly created role without LOGIN.
@@ -110,10 +113,17 @@ Grafana connection while the old credential still works. Then, from the same
 shell (with `secret_file` and `old_secret_file` still present):
 
 ```sh
-# Server-side apply avoids a last-applied annotation containing Secret data.
+# Server-side apply does not create a last-applied annotation, but it also
+# does not delete an annotation left by older client-side applies.
 ssh -o BatchMode=yes minecraftmachine \
   'sudo -n k3s kubectl -n observability create secret generic grafana-postgres-pantry --from-file=password=/dev/stdin --dry-run=client -o yaml | sudo -n k3s kubectl apply --server-side --force-conflicts -f -' \
   < "$secret_file" > /dev/null
+ssh -o BatchMode=yes minecraftmachine \
+  'sudo -n k3s kubectl -n observability annotate secret grafana-postgres-pantry kubectl.kubernetes.io/last-applied-configuration- >/dev/null'
+# Check only for key presence. Do not display the annotation or Secret data.
+ssh -o BatchMode=yes minecraftmachine \
+  'sudo -n k3s kubectl -n observability get secret grafana-postgres-pantry -o json' \
+  | python3 -c 'import json,sys; s=json.load(sys.stdin); assert "kubectl.kubernetes.io/last-applied-configuration" not in s.get("metadata",{}).get("annotations",{})'
 
 scp -o BatchMode=yes observability/grafana-provisioning.yaml \
   minecraftmachine:/tmp/pantry-grafana-provisioning-414.yaml
@@ -127,6 +137,9 @@ The committed datasource config must say `user: pantry_grafana`. The
 `grafana.yaml` Deployment continues reading password from the same Secret key;
 Grafana needs the restart because Kubernetes environment variables do not
 update in a running pod.
+If the annotation removal or absence assertion fails, stop before the
+Grafana restart. The Secret may still carry an older encoded superuser
+credential in metadata even when its `password` data has been replaced.
 
 ## Post-switch gates
 
@@ -170,6 +183,11 @@ restore `old_secret_file` through this command, and restart Grafana:
 ssh -o BatchMode=yes minecraftmachine \
   'sudo -n k3s kubectl apply --server-side --force-conflicts -f -' \
   < "$old_secret_file" > /dev/null
+ssh -o BatchMode=yes minecraftmachine \
+  'sudo -n k3s kubectl -n observability annotate secret grafana-postgres-pantry kubectl.kubernetes.io/last-applied-configuration- >/dev/null'
+ssh -o BatchMode=yes minecraftmachine \
+  'sudo -n k3s kubectl -n observability get secret grafana-postgres-pantry -o json' \
+  | python3 -c 'import json,sys; s=json.load(sys.stdin); assert "kubectl.kubernetes.io/last-applied-configuration" not in s.get("metadata",{}).get("annotations",{})'
 # Reapply the pre-change grafana-provisioning.yaml via MinecraftMachine,
 # then restart the deployment as in the switch step.
 ```
