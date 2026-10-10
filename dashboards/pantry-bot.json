@@ -179,7 +179,7 @@
       "type": "prometheus",
       "uid": "${DS_PROMETHEUS}"
      },
-     "expr": "count(up{job=~\"pantry-bot-(api|gateway|worker|dispatcher)-oracle\"} == 1)",
+     "expr": "count(up{job=~\"pantry-bot-(api|gateway|worker|dispatcher|responder)-oracle\"} == 1)",
      "legendFormat": "targets up",
      "instant": true,
      "range": false
@@ -190,7 +190,7 @@
       "type": "prometheus",
       "uid": "${DS_PROMETHEUS}"
      },
-     "expr": "count(up{job=~\"pantry-bot-(api|gateway|worker|dispatcher)-oracle\"})",
+     "expr": "count(up{job=~\"pantry-bot-(api|gateway|worker|dispatcher|responder)-oracle\"})",
      "legendFormat": "targets discovered",
      "instant": true,
      "range": false
@@ -251,7 +251,7 @@
       "type": "prometheus",
       "uid": "${DS_PROMETHEUS}"
      },
-     "expr": "sum(1 - up{job=~\"pantry-bot-(api|gateway|worker|dispatcher)-oracle\"})",
+     "expr": "sum(1 - up{job=~\"pantry-bot-(api|gateway|worker|dispatcher|responder)-oracle\"})",
      "instant": true,
      "range": false
     }
@@ -466,7 +466,7 @@
       "type": "prometheus",
       "uid": "${DS_PROMETHEUS}"
      },
-     "expr": "up{job=~\"pantry-bot-(api|gateway|worker|dispatcher)-oracle\"}",
+     "expr": "up{job=~\"pantry-bot-(api|gateway|worker|dispatcher|responder)-oracle\"}",
      "instant": true,
      "range": false,
      "format": "table"
