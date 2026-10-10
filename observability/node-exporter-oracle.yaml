@@ -36,7 +36,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: node-exporter
-          image: prom/node-exporter:v1.9.1
+          image: prom/node-exporter:v1.12.0@sha256:9b0ade5e607f9dbedb0a8e11151b6011ae5bd79304c261804cfdd2cadf200a80
           imagePullPolicy: IfNotPresent
           args:
             - --path.rootfs=/host

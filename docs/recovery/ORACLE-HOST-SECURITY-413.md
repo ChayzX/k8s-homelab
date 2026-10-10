@@ -30,6 +30,18 @@ after. A fresh Prometheus query after the rule returned `up{job="node-oracle"}
 only its own table. Stopping the unit intentionally leaves the guard installed
 so a service stop cannot silently reopen node-exporter.
 
+PostgreSQL listens on wildcard addresses because the pod and Grafana clients
+use different interfaces. The same early input chain now permits TCP/5432 only
+from the Oracle pod CIDR (`10.42.0.0/24`) and MinecraftMachine's verified
+Tailscale IPv4 address (`100.84.89.87`); other IPv4 sources and non-loopback
+IPv6 sources are dropped before kube-router and Tailscale accept rules. The
+PostgreSQL HBA remains the second control and still requires the `pantry`
+or `pantry_grafana` SCRAM role on their documented sources. The guard is live:
+fresh connections from a PantryBot worker and MinecraftMachine succeeded; an
+Oracle loopback TCP probe was dropped and incremented the nftables counter.
+MinecraftMachine's TCP/5432 connection was verified. Retest the actual Grafana
+datasource after any firewall or HBA change.
+
 Install or refresh from a checkout containing these files:
 
 ```sh
@@ -48,12 +60,45 @@ sudo systemctl enable --now pantrybot-node-exporter-guard.service
 
 After each change, query Prometheus at `http://localhost:9090/api/v1/query?query=up%7Bjob%3D%22node-oracle%22%7D` from the Oracle Prometheus pod and require value `1`. Probe `http://100.78.181.15:9100/metrics` from MinecraftMachine and require the connection to fail. If the Prometheus target is down, restore only this table with `sudo nft delete table inet pantrybot_guard`, then verify Prometheus returns to `up=1`. To permanently remove the guard, explicitly run `sudo nft delete table inet pantrybot_guard`, then disable the unit and delete its three files; do not flush the global nftables/iptables ruleset.
 
-Package updates applied on 2026-10-10:
+Package and host changes verified on 2026-10-10:
 
-- `libnetplan0`, `netplan-generator`, `netplan.io`, and `python3-netplan` advanced from Ubuntu Jammy `0.107.1-3ubuntu0.22.04.4` to `0.107.1-3ubuntu0.22.04.5`.
-- `tailscale` remains `1.102.3` with `1.104.1` available; it was not upgraded because SSH recovery currently depends on that same Tailscale path and there is no verified out-of-band console.
-- `dnsmasq-base` remains held back by apt; it was not forced through the solver.
-- After package changes, a new SSH connection succeeded, systemd-networkd and Tailscale were active, and the k3s node remained `Ready` on `v1.36.5+k3s1`.
+- `tailscale` advanced from `1.102.3` to stable `1.104.1`; `dnsmasq-base`
+  advanced from `2.91-0ubuntu0.22.04.1` to `.2`. A direct public SSH path was
+  verified using the same host key as the Tailscale path before the Tailscale
+  update. Both direct and normal `ssh oracle` connections now work, and
+  `tailscaled`, SSH, the guard, and k3s are active.
+- `oracle-cloud-agent` advanced from snap `1.61.0-6` to stable `1.63.0-9`;
+  both its service and updater service are active. The prior snap auto-refresh
+  hold remains in place.
+- The Oracle maintenance tools were Gitleaks `8.18.4` and Semgrep `1.177.0`.
+  The revised installer was exercised in a temporary directory and installed
+  Gitleaks `8.30.1`, uv `0.13.0`, Semgrep `1.180.0`, and pip `26.2.1`; Trivy
+  found no high or critical advisories in that test directory. Apply the
+  installer update after its PR is merged.
+- The Oracle Actions runner is `2.337.0`; GitHub's latest release is `2.338.0`.
+  It stayed on `2.337.0` after successful CI jobs, so recheck and perform a
+  controlled runner update during the maintenance window.
+- `python3-pip` was removed after confirming it had no runtime consumer or
+  dependent packages. It carried the Ubuntu Pro-only fix for CVE-2025-66471.
+- `pro security-status` reports no outstanding Ubuntu security updates; the
+  host is not attached to Ubuntu Pro. The installed Oracle kernel is
+  `6.8.0-1062-oracle`, and apt reports no newer kernel package. Trivy's
+  package-only scan still reports kernel/header/tool CVEs without fixed
+  versions in its Ubuntu 22.04 feed. Keep this as an open vendor-feed review,
+  not as evidence that every finding is exploitable or fixed.
+- k3s remains `v1.36.5+k3s1`. At the time of this audit, upstream had released
+  `v1.37.1+k3s1` but not a `v1.36.6+k3s1` patch. The 1.37 release is a minor
+  upgrade and is outside the patch-only maintenance step; recheck for a 1.36
+  patch before the maintenance window.
+- K3s Secrets Encryption is enabled and all 23 live SQLite Secret rows carry
+  the `k8s:enc:` marker. A root-only encrypted-state recovery copy passed
+  SQLite integrity checks; it has not been restored into a disposable K3s
+  instance.
+- Oracle monitoring image updates are prepared in manifests: Prometheus
+  `v3.15.0`, node-exporter `v1.12.0`, Alloy `v1.20.1`, and
+  kube-state-metrics `v2.20.0`, each pinned by the multiarch digest. Apply
+  these from a merged checkout and verify the Prometheus scrape targets and
+  Grafana datasource after rollout.
 
 Keep host SSH, tailnet policy, and API port 6443 restrictions out of this
 procedure until an independent OCI recovery route and live route inventory

@@ -66,7 +66,7 @@ Rollback instructions are retained. No rollback was needed because every require
 
 - [ ] **Step 1: Review helper and establish secure credential storage**
 
-Review the helper for secret-safe stdin handling, role/database/host validation, annotation removal, and idempotent cleanup. The user confirmed there is no password vault, and Oracle K3s reports secret encryption at rest is disabled. Establish a secure credential store with a tested recovery path before rotation; do not treat current Kubernetes Secrets as the human recovery vault. Workload, local schedule, and external vault-holder checks found no unaccounted holder. Recheck recent database connection records after an observation window and verify the restore/local-socket rollback gate before rotating.
+**Historical snapshot recorded 2026-10-10, before the shared vault and K3s encryption were established.** At that time, no password vault was available and Oracle K3s Secret encryption was disabled. Since then, a KeePassXC vault has been established and synced to the PC, MinecraftMachine, and Oracle; K3s Secret encryption is enabled and encrypted-state backup evidence is recorded in `docs/recovery/ORACLE-HOST-SECURITY-413.md`. Credential rotation and a full restore test remain open; do not infer their completion from these later controls. Before rotation, review secret-safe stdin handling, role/database/host validation, annotation removal, idempotent cleanup, recent DB connection records, and the restore/local-socket rollback gate.
 
 - [ ] **Step 2: Stage and probe a temporary superuser**
 
@@ -106,7 +106,7 @@ Installed `ops/oracle/pantrybot-node-exporter-guard.nft` as the independent `ine
 
 - [ ] **Step 3: Upgrade selected packages with access checks**
 
-Updated `libnetplan0`, `netplan-generator`, `netplan.io`, and `python3-netplan` to Ubuntu `0.107.1-3ubuntu0.22.04.5`; a new SSH connection succeeded and networkd, Tailscale, and k3s remained active. `tailscale` (`1.104.1` candidate) and held-back `dnsmasq-base` remain pending. Do not modify OCI SSH ingress, tailnet-wide policy, or port 6443 without a proven independent recovery path and confirmed live routes.
+**Historical snapshot recorded 2026-10-10 before the package follow-up.** The `libnetplan0`, `netplan-generator`, `netplan.io`, and `python3-netplan` update completed, then `tailscale` (`1.104.1`) and `dnsmasq-base` were still pending. The subsequent host closeout records Tailscale 1.104.1 and dnsmasq-base updates complete. Do not modify OCI SSH ingress, tailnet-wide policy, or port 6443 without a proven independent recovery path and confirmed live routes.
 
 ---
 
