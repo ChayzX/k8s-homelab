@@ -17,24 +17,18 @@ data:
         node: pantry-bot-oracle
         site: oracle
 
-    # Push everything to Home Prometheus (#191) so Home's Grafana keeps showing
-
-    # PantryBot data while Oracle is the active site. The gateway on Home accepts
-
-    # only POST /api/v1/write. Samples queue in the WAL through outages.
-
+    # Keep Oracle metrics local except for the small series set evaluated by
+    # Home Grafana. Preserve the working on-prem remote-write endpoint.
     remote_write:
-
-      - url: http://100.84.89.87:31090/api/v1/write
-
+      - url: https://metrics.greeniespantry.uk/api/v1/write
         queue_config:
-
-          max_samples_per_send: 2000
-
-          batch_send_deadline: 10s
-
-          max_backoff: 30s
-
+          capacity: 100
+          max_shards: 1
+          min_shards: 1
+          max_samples_per_send: 100
+          batch_send_deadline: 15s
+        metadata_config:
+          send: false
         # Send only PantryBot service health/usage and the Home dashboards'
         # existing backup/filesystem signals. Raw application and host series
         # stay on Oracle. Keep this allowlist aligned with Home Grafana queries.
@@ -43,7 +37,6 @@ data:
             separator: ";"
             regex: '(kube_cronjob_status_last_successful_time;kube-state-metrics-oracle;pantry-bot;postgres-backup;;|(up|pantry_bot_runtime_(claims|completions|failures)_total);pantry-bot-.*-oracle;;;;|pantry_bot_commands_total;pantry-bot-worker-oracle;;;;|node_filesystem_(avail|size)_bytes;node-oracle;;;/;ext4)'
             action: keep
-
 
     scrape_configs:
       - job_name: prometheus-oracle
@@ -102,8 +95,6 @@ data:
               site: oracle
               role: dispatcher
 
-      # Token-free authority telemetry from the neutral GCP witness, reached
-      # through the existing private tunnel relay.
       - job_name: alloy-logs-oracle
         static_configs:
           - targets: ["alloy-logs.observability.svc.cluster.local:12345"]
