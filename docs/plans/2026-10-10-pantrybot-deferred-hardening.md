@@ -45,7 +45,7 @@ On the PostgreSQL PVC, save current `pg_hba.conf` as `pg_hba.conf.pre-412`, copy
 
 - [ ] **Step 4: Verify every allowed path and reject an unapproved source (allow paths verified; negative peer probe pending)**
 
-Create fresh DB connections from every DB-using app pod and one new backup and ANALYZE Job. Query Grafana's live datasource as `pantry_grafana`; verify all PantryBot dashboard queries return without datasource errors. Verify local socket operator access. Done: all nine serving pods connected, backup uploaded and verified in R2, ANALYZE completed, Grafana health was OK, and local socket query succeeded. No separate nonallowlisted peer was available for a negative PostgreSQL network probe.
+Create fresh DB connections from every DB-using app pod and one new backup and ANALYZE Job. Query Grafana's live datasource as `pantry_grafana`; verify all PantryBot dashboard queries return without datasource errors. Verify local socket operator access. Done: all nine serving pods connected, backup uploaded and verified in R2, ANALYZE completed, Grafana health was OK, and local socket query succeeded. A credential-free PostgreSQL startup probe from MinecraftMachine using disallowed role `pantry` received `pg_hba.conf rejects connection`; a separate nonallowlisted host was unavailable for a source-network negative probe.
 
 - [x] **Step 5: Roll back immediately on any required-path failure**
 
