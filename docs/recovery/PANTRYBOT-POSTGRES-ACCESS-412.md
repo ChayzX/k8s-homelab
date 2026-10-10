@@ -128,8 +128,11 @@ continue, so verify **new** connections from each path:
 3. Home Grafana's fresh `PantryPostgres` health check returned
    `Database Connection OK` using `pantry_grafana`. A credential-free
    PostgreSQL startup probe from MinecraftMachine using the disallowed
-   `pantry` role received `pg_hba.conf rejects connection`. A separate probe
-   from a non-allowlisted host was not available.
+   `pantry` role received `pg_hba.conf rejects connection`. A second
+   credential-free startup probe over Oracle host TCP loopback
+   (`127.0.0.1:5432`) as `pantry` also received `pg_hba.conf rejects
+   connection`, confirming localhost TCP is denied while Unix-socket recovery
+   remains available. No separate external non-allowlisted host was available.
 4. Local socket `SELECT 1` succeeded. A denied tailnet PostgreSQL client test
    was not performed.
 5. Prometheus queries and the Grafana dashboard query checks remain covered
