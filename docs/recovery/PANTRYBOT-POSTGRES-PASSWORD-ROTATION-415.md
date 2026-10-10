@@ -39,11 +39,13 @@ Deployments and local `psql`, but transient/admin clients may be absent from
 one snapshot. The local user's crontab, system cron files, and user systemd
 units were checked; no PantryBot database URL holder was found. Oracle has no
 active PantryBot promoter service or PantryBot-specific scheduled unit. The
-user environment has no detected command-line password manager, so external
-password-manager entries still require an operator-side inventory before
-rotation. **Treat the caller inventory as incomplete until all external
-schedules, local files, vault entries, and recent connection records are
-accounted for.** Defer the rotation if any holder cannot be accounted for.
+operator confirmed there is no password vault, and no command-line password
+manager was found. Oracle K3s reports `Encryption Status: Disabled, no
+configuration file found`; Kubernetes Secret data therefore is not an
+approved encrypted vault for a human recovery copy. The external vault-holder
+inventory is complete (none), but **do not rotate until a secure, recoverable
+credential store is established and the new value can be retained there
+without exposing it in a transcript or repository.**
 
 The `PANTRYBOT_POSTGRES_PASSWORD` Actions secret in `ChayzX/k8s-homelab` had
 no references in current workflows or repository files and was deleted after
@@ -62,6 +64,9 @@ it restarts. Gateway and dispatcher use surge rollouts with database leases.
 
 ## Gates before opening a rotation window
 
+0. Establish an approved secure credential store with a tested recovery path.
+   Do not treat the current unencrypted-at-rest Kubernetes Secrets as a human
+   password vault. The operator confirmed there is no external vault today.
 1. Complete #414: a live Grafana query must report `current_user =
    pantry_grafana`, the datasource must be healthy, all PantryBot panels must
    work, and the Home `pantry` HBA rule must have been removed. The #412 HBA
@@ -104,8 +109,8 @@ python3 /tmp/pantrybot-secret-update-415.py snapshot-old
 `snapshot-old` creates `pantry-bot-db-url-old-415` inside Oracle Kubernetes,
 without exporting the old URL. Keep it until `stage-final` and the final
 credential probe succeed; the helper reads this Secret to reject password
-reuse. Delete it immediately before promoting the final URL. Preserve a secure
-vault recovery copy under the normal operator procedure; do not use this
+reuse. Delete it immediately before promoting the final URL. Preserve a
+recovery copy only in the approved secure credential store; do not use this
 temporary Secret as long-term storage.
 
 Generate two distinct new passwords in the approved password manager. Use
