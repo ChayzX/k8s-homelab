@@ -26,12 +26,14 @@ EXPECTED_USERS = {"old": "pantry", "temp": "pantry_rotation_415", "final": "pant
 
 
 def kubectl(*args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["sudo", "-n", "k3s", "kubectl", "-n", NAMESPACE, *args],
+    # Fixed executable and argv; credential manifests travel only on stdin.
+    return subprocess.run(["sudo", "-n", "k3s", "kubectl", "-n", NAMESPACE, *args],
         input=input_text,
         text=True,
         capture_output=True,
         check=False,
+        shell=False,
+        timeout=60,
     )
 
 
@@ -164,6 +166,9 @@ def main() -> int:
             if encoded != get_secret(STAGED["final"])["data"]["PGPASSWORD"]:
                 raise RuntimeError("Password does not match staged final URL; Secret unchanged.")
             replace_key("pantry-bot-postgres-standby", "POSTGRES_PASSWORD", encoded)
+    except subprocess.TimeoutExpired:
+        print("Kubernetes operation timed out; inspect state before retrying.", file=sys.stderr)
+        return 1
     except (KeyError, RuntimeError) as error:
         print(str(error), file=sys.stderr)
         return 1
