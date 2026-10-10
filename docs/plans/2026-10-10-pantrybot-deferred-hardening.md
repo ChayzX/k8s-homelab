@@ -43,9 +43,9 @@ Run the tracked restore rehearsal from `docs/recovery/pantrybot-postgres-restore
 
 On the PostgreSQL PVC, save current `pg_hba.conf` as `pg_hba.conf.pre-412`, copy the reviewed candidate through a temporary file, set owner `postgres:root` and mode `600`, atomically rename, and check `pg_hba_file_rules` before `SELECT pg_reload_conf()`. Do not restart PostgreSQL. Done; previous file retained and parser reports zero errors.
 
-- [ ] **Step 4: Verify every allowed path and reject an unapproved source (allow paths verified; negative peer probe pending)**
+- [x] **Step 4: Verify every allowed path and reject an unapproved source (external peer unavailable; host loopback TCP denied)**
 
-Create fresh DB connections from every DB-using app pod and one new backup and ANALYZE Job. Query Grafana's live datasource as `pantry_grafana`; verify all PantryBot dashboard queries return without datasource errors. Verify local socket operator access. Done: all nine serving pods connected, backup uploaded and verified in R2, ANALYZE completed, Grafana health was OK, and local socket query succeeded. A credential-free PostgreSQL startup probe from MinecraftMachine using disallowed role `pantry` received `pg_hba.conf rejects connection`; a separate nonallowlisted host was unavailable for a source-network negative probe.
+Create fresh DB connections from every DB-using app pod and one new backup and ANALYZE Job. Query Grafana's live datasource as `pantry_grafana`; verify all PantryBot dashboard queries return without datasource errors. Verify local socket operator access. Done: all nine serving pods connected, backup uploaded and verified in R2, ANALYZE completed, Grafana health was OK, and local socket query succeeded. Credential-free PostgreSQL startup probes received `pg_hba.conf rejects connection` for the disallowed `pantry` role from MinecraftMachine and for TCP loopback `127.0.0.1` on Oracle. No external nonallowlisted host was available.
 
 - [x] **Step 5: Roll back immediately on any required-path failure**
 
