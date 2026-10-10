@@ -577,10 +577,22 @@ data:
        "tooltip": ""
       },
       {
-       "title": "PantryBot",
+       "title": "PantryBot Health",
        "url": "/d/homelab-pantry-bot",
        "type": "link",
        "icon": "bolt",
+       "asDropdown": false,
+       "includeVars": false,
+       "keepTime": true,
+       "targetBlank": false,
+       "tags": [],
+       "tooltip": ""
+      },
+      {
+       "title": "PantryBot Chat Usage",
+       "url": "/d/homelab-pantry-bot-usage",
+       "type": "link",
+       "icon": "comment-alt",
        "asDropdown": false,
        "includeVars": false,
        "keepTime": true,
@@ -1510,14 +1522,17 @@ data:
         { "id": 11, "type": "logs", "title": "Minecraft Server Logs", "description": "Paper/Log4j logs with severity extracted by Alloy. Use the Logs dashboard for full cross-workload filtering. FIXED 2026-09-21: Alloy's current log pipeline does not promote a `namespace` Loki label -- verified live, only __stream_shard__/instance/job/level/service_name exist. Pod identity now lives entirely in `instance` = \"namespace/podname:container\", so this matches an instance prefix instead.", "gridPos": { "h": 10, "w": 18, "x": 6, "y": 27 }, "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "targets": [{ "refId": "A", "datasource": { "type": "loki", "uid": "${DS_LOKI}" }, "expr": "{instance=~\"minecraft/.*\"}", "maxLines": 1000 }], "options": { "showTime": true, "showLabels": false, "showCommonLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" }, "fieldConfig": { "defaults": {}, "overrides": [] } }
       ]
     }
-  pantry-bot.json: |
+  pantry-bot-usage.json: |
     {
-      "uid": "homelab-pantry-bot",
-      "title": "PantryBot \u2014 Health & Usage",
-      "description": "Is PantryBot working, and is anyone using it. Replaces the three separate PantryBot dashboards (health, usage, usage-from-Postgres).",
+      "uid": "homelab-pantry-bot-usage",
+      "title": "Pantry Bot — Chat Usage",
+      "description": "A single view of chat command use, durable custom-command counts, Twitch event intake, engagement actions, and bot replies.",
       "tags": [
         "homelab",
-        "pantry-bot"
+        "twitch",
+        "pantry-bot",
+        "chat",
+        "usage"
       ],
       "timezone": "browser",
       "editable": true,
@@ -1526,311 +1541,73 @@ data:
       "refresh": "1m",
       "graphTooltip": 1,
       "time": {
-        "from": "now-6h",
+        "from": "now-7d",
         "to": "now"
       },
-      "links": [
-        {
-          "title": "Start Here",
-          "url": "/d/home",
-          "type": "link",
-          "icon": "dashboard",
-          "asDropdown": false,
-          "includeVars": false,
-          "keepTime": true,
-          "targetBlank": false,
-          "tags": [],
-          "tooltip": ""
-        },
-        {
-          "title": "Services",
-          "url": "/d/services",
-          "type": "link",
-          "icon": "apps",
-          "asDropdown": false,
-          "includeVars": false,
-          "keepTime": true,
-          "targetBlank": false,
-          "tags": [],
-          "tooltip": ""
-        },
-        {
-          "title": "Machines",
-          "url": "/d/machines",
-          "type": "link",
-          "icon": "monitor",
-          "asDropdown": false,
-          "includeVars": false,
-          "keepTime": true,
-          "targetBlank": false,
-          "tags": [],
-          "tooltip": ""
-        },
-        {
-          "title": "PantryBot",
-          "url": "/d/homelab-pantry-bot",
-          "type": "link",
-          "icon": "bolt",
-          "asDropdown": false,
-          "includeVars": false,
-          "keepTime": true,
-          "targetBlank": false,
-          "tags": [],
-          "tooltip": ""
-        },
-        {
-          "title": "Minecraft",
-          "url": "/d/homelab-minecraft",
-          "type": "link",
-          "icon": "cube",
-          "asDropdown": false,
-          "includeVars": false,
-          "keepTime": true,
-          "targetBlank": false,
-          "tags": [],
-          "tooltip": ""
-        },
-        {
-          "title": "Logs",
-          "url": "/d/homelab-logs",
-          "type": "link",
-          "icon": "doc",
-          "asDropdown": false,
-          "includeVars": false,
-          "keepTime": true,
-          "targetBlank": false,
-          "tags": [],
-          "tooltip": ""
-        },
-        {
-          "title": "Sites",
-          "url": "/d/homelab-site-service-health",
-          "type": "link",
-          "icon": "sitemap",
-          "asDropdown": false,
-          "includeVars": false,
-          "keepTime": true,
-          "targetBlank": false,
-          "tags": [],
-          "tooltip": ""
-        }
-      ],
       "templating": {
         "list": [
+          {
+            "name": "DS_POSTGRES",
+            "label": "Postgres",
+            "type": "datasource",
+            "query": "postgres",
+            "current": {},
+            "hide": 0,
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false
+          },
           {
             "name": "DS_PROMETHEUS",
             "label": "Prometheus",
             "type": "datasource",
             "query": "prometheus",
             "current": {},
-            "hide": 2,
+            "hide": 0,
             "refresh": 1,
-            "regex": ""
-          },
-          {
-            "name": "DS_LOKI",
-            "label": "Loki",
-            "type": "datasource",
-            "query": "loki",
-            "current": {},
-            "hide": 2,
-            "refresh": 1,
-            "regex": ""
-          },
-          {
-            "name": "DS_POSTGRES",
-            "label": "Postgres",
-            "type": "datasource",
-            "query": "grafana-postgresql-datasource",
-            "current": {},
-            "hide": 2,
-            "refresh": 1,
-            "regex": ""
+            "regex": "",
+            "skipUrlSync": false
           }
         ]
       },
       "panels": [
         {
-          "id": 1,
-          "type": "text",
-          "title": "",
+          "type": "row",
+          "title": "At a glance",
+          "collapsed": false,
           "gridPos": {
-            "h": 3,
+            "h": 1,
             "w": 24,
             "x": 0,
             "y": 0
           },
-          "options": {
-            "mode": "markdown",
-            "content": "## PantryBot\nTop half: **is it working?** Bottom half: **is anyone using it?** If the top is red, the bottom will be empty \u2014 fix the top first. For one part in detail, open Services and pick Area `pantry-bot`."
-          }
+          "panels": []
         },
         {
+          "id": 1,
           "type": "stat",
-          "title": "Parts running",
-          "description": "PantryBot roles (api, gateway, worker, dispatcher) answering on Oracle, vs the 4 there should be. PantryBot has run single-site on Oracle since 2026-09-25; there is no longer a failover to follow.",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "expr": "count(up{job=~\"pantry-bot-(api|gateway|worker|dispatcher)(-oracle)?\"} == 1) or vector(0)",
-              "legendFormat": "running",
-              "instant": true,
-              "range": false
-            },
-            {
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "expr": "vector(4)",
-              "legendFormat": "should be",
-              "instant": true,
-              "range": false
-            }
-          ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "colorMode": "value",
-            "graphMode": "none",
-            "textMode": "value_and_name",
-            "justifyMode": "center",
-            "orientation": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0,
-              "mappings": [],
-              "noValue": "no data",
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "blue",
-                    "value": null
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "id": 2,
+          "title": "Twitch event records (1h)",
+          "description": "EventSub records ingested by the bot. This is not a count of every ordinary chat message.",
           "gridPos": {
-            "h": 5,
-            "w": 5,
+            "h": 4,
+            "w": 6,
             "x": 0,
-            "y": 3
-          }
-        },
-        {
-          "type": "stat",
-          "title": "Parts crashing",
-          "description": "Parts stuck in a crash-restart loop.",
+            "y": 1
+          },
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "expr": "sum(kube_pod_container_status_waiting_reason{namespace=\"pantry-bot\", reason=\"CrashLoopBackOff\"}) or vector(0)",
-              "instant": true,
-              "range": false
-            }
-          ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "colorMode": "background",
-            "graphMode": "none",
-            "textMode": "auto",
-            "justifyMode": "center",
-            "orientation": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0,
-              "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "0": {
-                      "text": "NONE",
-                      "color": "green",
-                      "index": 0
-                    }
-                  }
-                }
-              ],
-              "noValue": "no data",
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 1
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "id": 3,
-          "gridPos": {
-            "h": 5,
-            "w": 4,
-            "x": 5,
-            "y": 3
-          }
-        },
-        {
-          "type": "stat",
-          "title": "Database reachable?",
-          "description": "The PantryBot database on Oracle is up and answering. This is the database every panel below reads. Note Grafana runs on Home and reaches it over Tailscale, so this panel can go red for a link problem rather than a database one.",
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
+            "type": "postgres",
             "uid": "${DS_POSTGRES}"
           },
           "targets": [
             {
               "refId": "A",
               "datasource": {
-                "type": "grafana-postgresql-datasource",
+                "type": "postgres",
                 "uid": "${DS_POSTGRES}"
               },
-              "rawQuery": true,
-              "editorMode": "code",
               "format": "table",
-              "rawSql": "SELECT 1 AS reachable"
+              "rawQuery": true,
+              "rawSql": "SELECT count(*) AS \"events\" FROM pantry_events WHERE created_at > now() - interval '1 hour'"
             }
           ],
           "options": {
@@ -1841,34 +1618,21 @@ data:
               "fields": "",
               "values": false
             },
+            "orientation": "auto",
+            "textMode": "value_and_name",
             "colorMode": "background",
             "graphMode": "none",
-            "textMode": "auto",
-            "justifyMode": "center",
-            "orientation": "auto"
+            "justifyMode": "auto"
           },
           "fieldConfig": {
             "defaults": {
               "unit": "short",
               "decimals": 0,
-              "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "0": {
-                      "text": "NO",
-                      "color": "red",
-                      "index": 0
-                    }
-                  }
-                }
-              ],
-              "noValue": "no data",
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "red",
+                    "color": "text",
                     "value": null
                   },
                   {
@@ -1879,19 +1643,19 @@ data:
               }
             },
             "overrides": []
-          },
-          "id": 4,
-          "gridPos": {
-            "h": 5,
-            "w": 5,
-            "x": 9,
-            "y": 3
           }
         },
         {
+          "id": 2,
           "type": "stat",
-          "title": "Restarts today",
-          "description": "",
+          "title": "Built-in commands completed (7d)",
+          "description": "Successful canonical command completions during the available part of the rolling 7-day window. Collection began with the Oracle worker metrics rollout; until 7 days have elapsed, zero means no recorded successes since rollout, not no earlier use. Aliases count under the canonical name.",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 1
+          },
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
@@ -1903,9 +1667,10 @@ data:
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"pantry-bot\"}[24h])) or vector(0)",
+              "expr": "sum(increase(pantry_bot_commands_total{pod!=\"\"}[7d])) or vector(0)",
               "instant": true,
-              "range": false
+              "format": "table",
+              "legendFormat": "value"
             }
           ],
           "options": {
@@ -1916,82 +1681,120 @@ data:
               "fields": "",
               "values": false
             },
+            "orientation": "auto",
+            "textMode": "value_and_name",
             "colorMode": "background",
             "graphMode": "none",
-            "textMode": "auto",
-            "justifyMode": "center",
-            "orientation": "auto"
+            "justifyMode": "auto"
           },
           "fieldConfig": {
             "defaults": {
               "unit": "short",
               "decimals": 0,
-              "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "0": {
-                      "text": "NONE",
-                      "color": "green",
-                      "index": 0
-                    }
-                  }
-                }
-              ],
-              "noValue": "no data",
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
+                    "color": "text",
                     "value": null
                   },
                   {
-                    "color": "orange",
+                    "color": "green",
                     "value": 1
-                  },
-                  {
-                    "color": "red",
-                    "value": 10
                   }
                 ]
               }
             },
             "overrides": []
-          },
-          "id": 5,
-          "gridPos": {
-            "h": 5,
-            "w": 4,
-            "x": 14,
-            "y": 3
           }
         },
         {
-          "id": 17,
+          "id": 3,
           "type": "stat",
-          "title": "Serving site",
-          "description": "Which site PantryBot is serving from. Since 2026-09-25 that is always Oracle; Home keeps Minecraft and Authentik only and is a cold restore target, not an automatic failover.",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "title": "Successful chat game actions (7d)",
+          "description": "Durable successful engagement actions whose source was Twitch chat.",
           "gridPos": {
-            "h": 5,
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 1
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT count(*) AS \"actions\" FROM engagement_actions WHERE source = 'chat' AND reason IN ('success','friendly-success') AND to_timestamp(at/1000.0) > now() - interval '7 days'"
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "orientation": "auto",
+            "textMode": "value_and_name",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Enabled custom commands never used",
+          "description": "Lifetime count from PostgreSQL. This is durable across bot restarts.",
+          "gridPos": {
+            "h": 4,
             "w": 6,
             "x": 18,
-            "y": 3
+            "y": 1
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
           },
           "targets": [
             {
               "refId": "A",
               "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
               },
-              "expr": "max by (site) (up{job=~\"pantry-bot-api(-oracle)?\"}) == 1",
-              "legendFormat": "{{site}}",
-              "instant": true
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT count(*) FILTER (WHERE enabled AND use_count = 0) AS \"unused_enabled\" FROM custom_commands"
             }
           ],
           "options": {
@@ -2002,27 +1805,56 @@ data:
               "fields": "",
               "values": false
             },
-            "textMode": "name",
+            "orientation": "auto",
+            "textMode": "value_and_name",
             "colorMode": "background",
             "graphMode": "none",
-            "justifyMode": "center",
-            "orientation": "auto"
+            "justifyMode": "auto"
           },
           "fieldConfig": {
             "defaults": {
-              "noValue": "NONE - PantryBot is down",
-              "color": {
-                "mode": "fixed",
-                "fixedColor": "green"
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
               }
             },
             "overrides": []
           }
         },
         {
+          "type": "row",
+          "title": "Which commands are used?",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 5
+          },
+          "panels": []
+        },
+        {
+          "id": 5,
           "type": "table",
-          "title": "Every PantryBot part",
-          "description": "Parts deliberately switched off (0 copies) are not listed.",
+          "title": "Built-in command usage — last 7 days",
+          "description": "Every registered built-in command is exported, including zero-use commands. Collection began with the Oracle worker metrics rollout, so the 7-day window is partial until 7 days have elapsed. Counts aggregate across PantryBot replicas; Prometheus handles counter resets. Aliases count under the canonical name.",
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 6
+          },
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
@@ -2034,221 +1866,132 @@ data:
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "sum by (deployment) (kube_deployment_spec_replicas{namespace=\"pantry-bot\"}) > 0",
+              "expr": "sum by (command) (increase(pantry_bot_commands_total{pod!=\"\"}[7d]))",
               "instant": true,
-              "range": false,
-              "format": "table"
-            },
-            {
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "expr": "sum by (deployment) (kube_deployment_status_replicas_available{namespace=\"pantry-bot\"}) and on (deployment) (kube_deployment_spec_replicas{namespace=\"pantry-bot\"} > 0)",
-              "instant": true,
-              "range": false,
-              "format": "table"
+              "format": "table",
+              "legendFormat": "{{command}}"
             }
           ],
-          "transformations": [
-            {
-              "id": "merge",
-              "options": {}
-            },
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Time": true,
-                  "__name__": true,
-                  "job": true,
-                  "instance": true,
-                  "uid": true,
-                  "endpoint": true,
-                  "service": true
-                },
-                "renameByName": {
-                  "deployment": "Part",
-                  "Value #A": "Should have",
-                  "Value #B": "Running"
-                },
-                "indexByName": {
-                  "deployment": 0,
-                  "Value #A": 1,
-                  "Value #B": 2
-                }
-              }
-            }
-          ],
-          "options": {
-            "showHeader": true,
-            "cellHeight": "sm",
-            "footer": {
-              "show": false,
-              "reducer": [
-                "sum"
-              ],
-              "fields": ""
-            }
-          },
           "fieldConfig": {
             "defaults": {
               "custom": {
                 "align": "auto",
                 "cellOptions": {
                   "type": "auto"
-                }
-              },
-              "noValue": "Nothing here \u2014 good."
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Running"
                 },
-                "properties": [
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "color-background",
-                      "mode": "basic"
-                    }
-                  },
-                  {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "red",
-                          "value": null
-                        },
-                        {
-                          "color": "green",
-                          "value": 1
-                        }
-                      ]
-                    }
-                  }
-                ]
+                "inspect": false
               }
-            ]
+            },
+            "overrides": []
           },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          }
+        },
+        {
           "id": 6,
+          "type": "table",
+          "title": "Custom command inventory — lifetime uses",
+          "description": "PostgreSQL use_count is cumulative for custom commands. Zero means no successful use has been recorded since creation. Disabled commands remain listed.",
           "gridPos": {
-            "h": 8,
-            "w": 24,
-            "x": 0,
-            "y": 8
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 6
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT name AS \"command\", enabled, category, permission_level, source, use_count AS \"lifetime uses\", created_at AS \"created\" FROM custom_commands ORDER BY enabled DESC, use_count ASC, name"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
           }
         },
         {
           "type": "row",
-          "title": "Is anyone using it?",
+          "title": "What people do in chat",
           "collapsed": false,
           "gridPos": {
             "h": 1,
             "w": 24,
             "x": 0,
-            "y": 16
+            "y": 15
           },
-          "panels": [],
-          "id": 7
+          "panels": []
         },
         {
+          "id": 7,
           "type": "timeseries",
-          "title": "Commands used (per 15 min)",
-          "description": "Chat commands people ran. Empty while the bot is down.",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "expr": "sum by (command) (increase(pantry_bot_commands_total[15m]))",
-              "legendFormat": "{{command}}"
-            }
-          ],
-          "options": {
-            "legend": {
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "custom": {
-                "drawStyle": "bars",
-                "lineWidth": 1,
-                "fillOpacity": 60,
-                "showPoints": "never",
-                "spanNulls": true,
-                "gradientMode": "opacity",
-                "stacking": {
-                  "mode": "normal",
-                  "group": "A"
-                }
-              },
-              "color": {
-                "mode": "palette-classic"
-              },
-              "noValue": "nothing to show",
-              "min": 0
-            },
-            "overrides": []
-          },
-          "id": 8,
+          "title": "Chat engagement actions by action and result",
+          "description": "Durable Twitch-chat engagement actions, grouped by action and result reason.",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 17
-          }
-        },
-        {
-          "type": "timeseries",
-          "title": "Work picked up vs finished (per 15 min)",
-          "description": "The two lines should track each other. \"Picked up\" pulling away from \"finished\" means work is getting stuck.",
+            "y": 16
+          },
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
           },
           "targets": [
             {
               "refId": "A",
               "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
               },
-              "expr": "sum(increase(pantry_bot_runtime_claims_total[15m]))",
-              "legendFormat": "picked up"
-            },
-            {
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "expr": "sum(increase(pantry_bot_runtime_completions_total[15m]))",
-              "legendFormat": "finished"
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT date_trunc('hour', to_timestamp(at/1000.0)) AS \"time\", action || ' / ' || reason AS metric, count(*) AS actions FROM engagement_actions WHERE source = 'chat' AND to_timestamp(at/1000.0) BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1,2 ORDER BY 1"
             }
           ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "No recorded activity in this time range"
+            },
+            "overrides": []
+          },
           "options": {
             "legend": {
-              "displayMode": "list",
+              "calcs": [
+                "lastNotNull",
+                "sum"
+              ],
+              "displayMode": "table",
               "placement": "bottom",
               "showLegend": true
             },
@@ -2256,312 +1999,814 @@ data:
               "mode": "multi",
               "sort": "desc"
             }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 2,
-                "fillOpacity": 12,
-                "showPoints": "never",
-                "spanNulls": true,
-                "gradientMode": "opacity"
-              },
-              "color": {
-                "mode": "palette-classic"
-              },
-              "noValue": "nothing to show",
-              "min": 0
-            },
-            "overrides": []
-          },
-          "id": 9,
+          }
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Twitch event intake by source and type",
+          "description": "EventSub and other queued Twitch events. This does not include regular chat text.",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 17
+            "y": 16
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
+              },
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT $__timeGroup(created_at, $__interval) AS \"time\", source || ' / ' || event_type AS metric, count(*) AS events FROM pantry_events WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1,2 ORDER BY 1"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "No recorded activity in this time range"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "sum"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
           }
         },
         {
           "type": "row",
-          "title": "From the database  (keeps working even when the bot is down, as long as the database is up)",
+          "title": "Bot responses and community features",
           "collapsed": false,
           "gridPos": {
             "h": 1,
             "w": 24,
             "x": 0,
+            "y": 24
+          },
+          "panels": []
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Bot replies sent and failed (daily)",
+          "description": "Durable count of outbound bot messages by day and delivery status.",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
             "y": 25
           },
-          "panels": [],
-          "id": 10
-        },
-        {
-          "type": "stat",
-          "title": "Events received (last hour)",
           "datasource": {
-            "type": "grafana-postgresql-datasource",
+            "type": "postgres",
             "uid": "${DS_POSTGRES}"
           },
           "targets": [
             {
               "refId": "A",
               "datasource": {
-                "type": "grafana-postgresql-datasource",
-                "uid": "${DS_POSTGRES}"
-              },
-              "format": "table",
-              "rawSql": "SELECT count(*) AS events FROM pantry_events WHERE created_at > now() - interval '1 hour'"
-            }
-          ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "colorMode": "value",
-            "graphMode": "none",
-            "textMode": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "noValue": "database unreachable",
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "blue",
-                    "value": null
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "id": 11,
-          "gridPos": {
-            "h": 5,
-            "w": 8,
-            "x": 0,
-            "y": 26
-          }
-        },
-        {
-          "type": "stat",
-          "title": "Messages stuck undelivered",
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${DS_POSTGRES}"
-          },
-          "description": "Outgoing messages that failed and were set aside. Should be 0.",
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "grafana-postgresql-datasource",
-                "uid": "${DS_POSTGRES}"
-              },
-              "format": "table",
-              "rawSql": "SELECT count(*) AS dead_letter FROM pantry_outbox WHERE status = 'dead_letter'"
-            }
-          ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "colorMode": "background",
-            "graphMode": "none",
-            "textMode": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "noValue": "database unreachable",
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 1
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "id": 12,
-          "gridPos": {
-            "h": 5,
-            "w": 8,
-            "x": 8,
-            "y": 26
-          }
-        },
-        {
-          "type": "stat",
-          "title": "Different people who have taken part",
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${DS_POSTGRES}"
-          },
-          "description": "Everyone who has ever joined in, all time.",
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "grafana-postgresql-datasource",
-                "uid": "${DS_POSTGRES}"
-              },
-              "format": "table",
-              "rawSql": "SELECT count(DISTINCT user_id) AS participants FROM community_participants"
-            }
-          ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "colorMode": "value",
-            "graphMode": "none",
-            "textMode": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "noValue": "database unreachable",
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "blue",
-                    "value": null
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "id": 13,
-          "gridPos": {
-            "h": 5,
-            "w": 8,
-            "x": 16,
-            "y": 26
-          }
-        },
-        {
-          "type": "timeseries",
-          "title": "Events received over time",
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${DS_POSTGRES}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "grafana-postgresql-datasource",
+                "type": "postgres",
                 "uid": "${DS_POSTGRES}"
               },
               "format": "time_series",
-              "rawSql": "SELECT $__timeGroup(created_at, $__interval) AS \"time\", source AS metric, count(*) AS events FROM pantry_events WHERE $__timeFilter(created_at) GROUP BY 1, 2 ORDER BY 1"
+              "rawQuery": true,
+              "rawSql": "SELECT day::timestamptz AS \"time\", status AS metric, sum(count)::bigint AS messages FROM engagement_message_counts WHERE day BETWEEN $__timeFrom()::date AND $__timeTo()::date GROUP BY 1,2 ORDER BY 1"
             }
           ],
-          "options": {
-            "legend": {
-              "displayMode": "list",
-              "placement": "bottom"
-            },
-            "tooltip": {
-              "mode": "multi"
-            }
-          },
           "fieldConfig": {
             "defaults": {
-              "custom": {
-                "drawStyle": "bars",
-                "fillOpacity": 60,
-                "stacking": {
-                  "mode": "normal",
-                  "group": "A"
-                }
-              },
-              "noValue": "database unreachable"
+              "unit": "short",
+              "noValue": "No recorded activity in this time range"
             },
             "overrides": []
           },
-          "id": 14,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "sum"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 10,
+          "type": "timeseries",
+          "title": "Community game actions by type",
+          "description": "Durable actions in community encounters. These are game actions, not all chat messages.",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 25
+          },
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRES}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "${DS_POSTGRES}"
+              },
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT date_trunc('hour', to_timestamp(at/1000.0)) AS \"time\", action AS metric, count(*) AS actions FROM community_actions WHERE to_timestamp(at/1000.0) BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1,2 ORDER BY 1"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "No recorded activity in this time range"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "sum"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 11,
+          "type": "text",
+          "title": "How to read this dashboard",
+          "description": "What is counted and what is not collected.",
           "gridPos": {
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 31
-          }
-        },
-        {
-          "type": "row",
-          "title": "What is it saying?  (logs)",
-          "collapsed": false,
-          "gridPos": {
-            "h": 1,
-            "w": 24,
-            "x": 0,
-            "y": 39
+            "y": 33
           },
-          "panels": [],
-          "id": 15
-        },
-        {
-          "type": "logs",
-          "title": "PantryBot errors and warnings",
-          "description": "Only errors and warnings, newest first.",
-          "datasource": {
-            "type": "loki",
-            "uid": "${DS_LOKI}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "loki",
-                "uid": "${DS_LOKI}"
-              },
-              "expr": "{instance=~\"pantry-bot/.*\", level=~\"error|warn\"}",
-              "maxLines": 500
-            }
-          ],
           "options": {
-            "showTime": true,
-            "wrapLogMessage": true,
-            "sortOrder": "Descending",
-            "enableLogDetails": true,
-            "dedupStrategy": "exact",
-            "prettifyLogMessage": false,
-            "showLabels": false,
-            "showCommonLabels": false
-          },
-          "id": 16,
-          "gridPos": {
-            "h": 12,
-            "w": 24,
-            "x": 0,
-            "y": 40
+            "mode": "markdown",
+            "content": "\n**Built-in commands:** successful completions over the rolling 7 days, from Prometheus. Collection began with the Oracle worker metrics rollout, so the window is partial until 7 days have elapsed. A zero during this period means no successes recorded since collection started, not no earlier use. Every registered command appears at zero; Prometheus handles counter resets. Aliases count under the canonical command. Data older than Prometheus retention is unavailable.\n\n**Custom commands:** lifetime successful uses from PostgreSQL. This count survives bot restarts. Enabled commands with zero uses are surfaced above; disabled commands remain in the inventory.\n\n**Chat actions and bot replies:** durable PostgreSQL counts. Twitch event intake counts EventSub/queued records, not each ordinary chat line.\n\n**Not measured:** ordinary chat text, unrecognized !commands, and failed/cooldown command attempts are not retained as command usage. A blank signal means no data was collected for it; it does not prove the feature is unused.\n",
+            "code": {
+              "language": "plaintext",
+              "showLineNumbers": false,
+              "showMiniMap": false
+            }
           }
         }
       ]
+    }
+  pantry-bot.json: |
+    {
+     "uid": "homelab-pantry-bot",
+     "title": "PantryBot — Health",
+     "description": "Oracle PantryBot health from live service scrape targets, database reachability, and logs. See PantryBot Chat Usage for feature and command activity.",
+     "tags": [
+      "homelab",
+      "pantry-bot"
+     ],
+     "timezone": "browser",
+     "editable": true,
+     "schemaVersion": 39,
+     "version": 1,
+     "refresh": "1m",
+     "graphTooltip": 1,
+     "time": {
+      "from": "now-6h",
+      "to": "now"
+     },
+     "links": [
+      {
+       "title": "Start Here",
+       "url": "/d/home",
+       "type": "link",
+       "icon": "dashboard",
+       "asDropdown": false,
+       "includeVars": false,
+       "keepTime": true,
+       "targetBlank": false,
+       "tags": [],
+       "tooltip": ""
+      },
+      {
+       "title": "Services",
+       "url": "/d/services",
+       "type": "link",
+       "icon": "apps",
+       "asDropdown": false,
+       "includeVars": false,
+       "keepTime": true,
+       "targetBlank": false,
+       "tags": [],
+       "tooltip": ""
+      },
+      {
+       "title": "Machines",
+       "url": "/d/machines",
+       "type": "link",
+       "icon": "monitor",
+       "asDropdown": false,
+       "includeVars": false,
+       "keepTime": true,
+       "targetBlank": false,
+       "tags": [],
+       "tooltip": ""
+      },
+      {
+       "title": "PantryBot Health",
+       "url": "/d/homelab-pantry-bot",
+       "type": "link",
+       "icon": "bolt",
+       "asDropdown": false,
+       "includeVars": false,
+       "keepTime": true,
+       "targetBlank": false,
+       "tags": [],
+       "tooltip": ""
+      },
+      {
+       "title": "PantryBot Chat Usage",
+       "url": "/d/homelab-pantry-bot-usage",
+       "type": "link",
+       "icon": "comment-alt",
+       "asDropdown": false,
+       "includeVars": false,
+       "keepTime": true,
+       "targetBlank": false,
+       "tags": [],
+       "tooltip": ""
+      },
+      {
+       "title": "Minecraft",
+       "url": "/d/homelab-minecraft",
+       "type": "link",
+       "icon": "cube",
+       "asDropdown": false,
+       "includeVars": false,
+       "keepTime": true,
+       "targetBlank": false,
+       "tags": [],
+       "tooltip": ""
+      },
+      {
+       "title": "Logs",
+       "url": "/d/homelab-logs",
+       "type": "link",
+       "icon": "doc",
+       "asDropdown": false,
+       "includeVars": false,
+       "keepTime": true,
+       "targetBlank": false,
+       "tags": [],
+       "tooltip": ""
+      },
+      {
+       "title": "Sites",
+       "url": "/d/homelab-site-service-health",
+       "type": "link",
+       "icon": "sitemap",
+       "asDropdown": false,
+       "includeVars": false,
+       "keepTime": true,
+       "targetBlank": false,
+       "tags": [],
+       "tooltip": ""
+      }
+     ],
+     "templating": {
+      "list": [
+       {
+        "name": "DS_PROMETHEUS",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 2,
+        "refresh": 1,
+        "regex": ""
+       },
+       {
+        "name": "DS_LOKI",
+        "label": "Loki",
+        "type": "datasource",
+        "query": "loki",
+        "current": {},
+        "hide": 2,
+        "refresh": 1,
+        "regex": ""
+       },
+       {
+        "name": "DS_POSTGRES",
+        "label": "Postgres",
+        "type": "datasource",
+        "query": "grafana-postgresql-datasource",
+        "current": {},
+        "hide": 2,
+        "refresh": 1,
+        "regex": ""
+       }
+      ]
+     },
+     "panels": [
+      {
+       "id": 1,
+       "type": "text",
+       "title": "",
+       "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 0
+       },
+       "options": {
+        "mode": "markdown",
+        "content": "## PantryBot on Oracle\nThis page checks live application scrape targets, PostgreSQL reachability, and logs. Chat command and feature usage is on **PantryBot Chat Usage**. A missing scrape target means telemetry is unavailable; it does not mean that feature was unused."
+       }
+      },
+      {
+       "type": "stat",
+       "title": "Parts running",
+       "description": "Oracle API, gateway, dispatcher, and each worker pod scraped successfully.",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+       },
+       "targets": [
+        {
+         "refId": "A",
+         "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+         },
+         "expr": "count(up{job=~\"pantry-bot-(api|gateway|worker|dispatcher)-oracle\"} == 1)",
+         "legendFormat": "targets up",
+         "instant": true,
+         "range": false
+        },
+        {
+         "refId": "B",
+         "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+         },
+         "expr": "count(up{job=~\"pantry-bot-(api|gateway|worker|dispatcher)-oracle\"})",
+         "legendFormat": "targets discovered",
+         "instant": true,
+         "range": false
+        }
+       ],
+       "options": {
+        "reduceOptions": {
+         "calcs": [
+          "lastNotNull"
+         ],
+         "fields": "",
+         "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "orientation": "auto"
+       },
+       "fieldConfig": {
+        "defaults": {
+         "unit": "short",
+         "decimals": 0,
+         "mappings": [],
+         "noValue": "no data",
+         "thresholds": {
+          "mode": "absolute",
+          "steps": [
+           {
+            "color": "blue",
+            "value": null
+           }
+          ]
+         }
+        },
+        "overrides": []
+       },
+       "id": 2,
+       "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 3
+       }
+      },
+      {
+       "type": "stat",
+       "title": "Scrape targets down",
+       "description": "A failed target means Prometheus cannot collect its telemetry. This is not a Kubernetes restart count.",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+       },
+       "targets": [
+        {
+         "refId": "A",
+         "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+         },
+         "expr": "sum(1 - up{job=~\"pantry-bot-(api|gateway|worker|dispatcher)-oracle\"})",
+         "instant": true,
+         "range": false
+        }
+       ],
+       "options": {
+        "reduceOptions": {
+         "calcs": [
+          "lastNotNull"
+         ],
+         "fields": "",
+         "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center",
+        "orientation": "auto"
+       },
+       "fieldConfig": {
+        "defaults": {
+         "unit": "short",
+         "decimals": 0,
+         "mappings": [
+          {
+           "type": "value",
+           "options": {
+            "0": {
+             "text": "NONE",
+             "color": "green",
+             "index": 0
+            }
+           }
+          }
+         ],
+         "noValue": "no data",
+         "thresholds": {
+          "mode": "absolute",
+          "steps": [
+           {
+            "color": "green",
+            "value": null
+           },
+           {
+            "color": "red",
+            "value": 1
+           }
+          ]
+         }
+        },
+        "overrides": []
+       },
+       "id": 3,
+       "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 3
+       }
+      },
+      {
+       "type": "stat",
+       "title": "Database reachable?",
+       "description": "A fresh read-only connection from Grafana to the Oracle PantryBot database.",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+       },
+       "targets": [
+        {
+         "refId": "A",
+         "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${DS_POSTGRES}"
+         },
+         "format": "table",
+         "rawQuery": true,
+         "rawSql": "SELECT 1 AS reachable"
+        }
+       ],
+       "options": {
+        "reduceOptions": {
+         "calcs": [
+          "lastNotNull"
+         ],
+         "fields": "",
+         "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center",
+        "orientation": "auto"
+       },
+       "fieldConfig": {
+        "defaults": {
+         "unit": "short",
+         "decimals": 0,
+         "mappings": [
+          {
+           "type": "value",
+           "options": {
+            "0": {
+             "text": "NO",
+             "color": "red",
+             "index": 0
+            },
+            "1": {
+             "text": "YES",
+             "color": "green",
+             "index": 1
+            }
+           }
+          }
+         ],
+         "noValue": "no data",
+         "thresholds": {
+          "mode": "absolute",
+          "steps": [
+           {
+            "color": "red",
+            "value": null
+           },
+           {
+            "color": "green",
+            "value": 1
+           }
+          ]
+         }
+        },
+        "overrides": []
+       },
+       "id": 4,
+       "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 3
+       }
+      },
+      {
+       "type": "stat",
+       "title": "Runtime work completed (24h)",
+       "description": "Completed durable runtime jobs. Kubernetes restart counts are not available from this Prometheus datasource.",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+       },
+       "targets": [
+        {
+         "refId": "A",
+         "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+         },
+         "expr": "sum(increase(pantry_bot_runtime_completions_total[24h])) or vector(0)",
+         "instant": true,
+         "range": false
+        }
+       ],
+       "options": {
+        "reduceOptions": {
+         "calcs": [
+          "lastNotNull"
+         ],
+         "fields": "",
+         "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center",
+        "orientation": "auto"
+       },
+       "fieldConfig": {
+        "defaults": {
+         "unit": "short",
+         "decimals": 0,
+         "mappings": [],
+         "noValue": "no data",
+         "thresholds": {
+          "mode": "absolute",
+          "steps": [
+           {
+            "color": "blue",
+            "value": null
+           }
+          ]
+         }
+        },
+        "overrides": []
+       },
+       "id": 5,
+       "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 3
+       }
+      },
+      {
+       "type": "table",
+       "title": "Oracle scrape targets",
+       "description": "One row per scraped target, including each worker pod. 1 means telemetry is arriving; 0 or a missing row means telemetry is unavailable.",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+       },
+       "targets": [
+        {
+         "refId": "A",
+         "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+         },
+         "expr": "up{job=~\"pantry-bot-(api|gateway|worker|dispatcher)-oracle\"}",
+         "instant": true,
+         "range": false,
+         "format": "table"
+        }
+       ],
+       "transformations": [
+        {
+         "id": "merge",
+         "options": {}
+        },
+        {
+         "id": "organize",
+         "options": {
+          "excludeByName": {
+           "Time": true,
+           "__name__": true,
+           "job": true,
+           "instance": true,
+           "uid": true,
+           "endpoint": true,
+           "service": true
+          },
+          "renameByName": {
+           "role": "Role",
+           "site": "Site",
+           "pod": "Pod",
+           "Value": "Scrape up"
+          },
+          "indexByName": {
+           "role": 0,
+           "site": 1,
+           "pod": 2,
+           "Value": 3
+          }
+         }
+        }
+       ],
+       "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+         "show": false,
+         "reducer": [
+          "sum"
+         ],
+         "fields": ""
+        }
+       },
+       "fieldConfig": {
+        "defaults": {
+         "custom": {
+          "align": "auto",
+          "cellOptions": {
+           "type": "auto"
+          }
+         },
+         "noValue": "Nothing here — good."
+        },
+        "overrides": [
+         {
+          "matcher": {
+           "id": "byName",
+           "options": "Scrape up"
+          },
+          "properties": [
+           {
+            "id": "custom.cellOptions",
+            "value": {
+             "type": "color-background",
+             "mode": "basic"
+            }
+           },
+           {
+            "id": "thresholds",
+            "value": {
+             "mode": "absolute",
+             "steps": [
+              {
+               "color": "red",
+               "value": null
+              },
+              {
+               "color": "green",
+               "value": 1
+              }
+             ]
+            }
+           }
+          ]
+         }
+        ]
+       },
+       "id": 6,
+       "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 8
+       }
+      },
+      {
+       "type": "row",
+       "title": "What is it saying?  (logs)",
+       "collapsed": false,
+       "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 16
+       },
+       "panels": [],
+       "id": 7
+      },
+      {
+       "type": "logs",
+       "title": "PantryBot errors and warnings",
+       "description": "Only errors and warnings, newest first.",
+       "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+       },
+       "targets": [
+        {
+         "refId": "A",
+         "datasource": {
+          "type": "loki",
+          "uid": "${DS_LOKI}"
+         },
+         "expr": "{instance=~\"pantry-bot/.*\", level=~\"error|warn\"}",
+         "maxLines": 500
+        }
+       ],
+       "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "exact",
+        "prettifyLogMessage": false,
+        "showLabels": false,
+        "showCommonLabels": false
+       },
+       "id": 8,
+       "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 17
+       }
+      }
+     ]
     }
   services.json: |
     {
@@ -2620,10 +2865,22 @@ data:
        "tooltip": ""
       },
       {
-       "title": "PantryBot",
+       "title": "PantryBot Health",
        "url": "/d/homelab-pantry-bot",
        "type": "link",
        "icon": "bolt",
+       "asDropdown": false,
+       "includeVars": false,
+       "keepTime": true,
+       "targetBlank": false,
+       "tags": [],
+       "tooltip": ""
+      },
+      {
+       "title": "PantryBot Chat Usage",
+       "url": "/d/homelab-pantry-bot-usage",
+       "type": "link",
+       "icon": "comment-alt",
        "asDropdown": false,
        "includeVars": false,
        "keepTime": true,
@@ -4688,10 +4945,22 @@ data:
        "tooltip": ""
       },
       {
-       "title": "PantryBot",
+       "title": "PantryBot Health",
        "url": "/d/homelab-pantry-bot",
        "type": "link",
        "icon": "bolt",
+       "asDropdown": false,
+       "includeVars": false,
+       "keepTime": true,
+       "targetBlank": false,
+       "tags": [],
+       "tooltip": ""
+      },
+      {
+       "title": "PantryBot Chat Usage",
+       "url": "/d/homelab-pantry-bot-usage",
+       "type": "link",
+       "icon": "comment-alt",
        "asDropdown": false,
        "includeVars": false,
        "keepTime": true,

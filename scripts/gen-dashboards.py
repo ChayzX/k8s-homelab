@@ -6,7 +6,8 @@ The set is deliberately small. Every dashboard answers one plain question:
   start-here.json          Is anything broken right now?        (open this first)
   services.json            How is <one service> doing?           (pick from a list)
   machines.json            How is <one machine> doing?           (pick from a list)
-  pantry-bot.json          Is PantryBot healthy, and is it used?
+  pantry-bot.json          Are PantryBot's Oracle services healthy?
+  pantry-bot-usage.json    What chat activity is used, and what remains unused?
   site-service-health.json Which site is each thing running at?
 
 logs.json and minecraft.json are hand-written and are not produced here.
@@ -41,7 +42,8 @@ NAV = [
     {'title': 'Start Here', 'url': '/d/home', 'type': 'link', 'icon': 'dashboard'},
     {'title': 'Services', 'url': '/d/services', 'type': 'link', 'icon': 'apps'},
     {'title': 'Machines', 'url': '/d/machines', 'type': 'link', 'icon': 'monitor'},
-    {'title': 'PantryBot', 'url': '/d/homelab-pantry-bot', 'type': 'link', 'icon': 'bolt'},
+    {'title': 'PantryBot Health', 'url': '/d/homelab-pantry-bot', 'type': 'link', 'icon': 'bolt'},
+    {'title': 'PantryBot Chat Usage', 'url': '/d/homelab-pantry-bot-usage', 'type': 'link', 'icon': 'comment-alt'},
     {'title': 'Minecraft', 'url': '/d/homelab-minecraft', 'type': 'link', 'icon': 'cube'},
     {'title': 'Logs', 'url': '/d/homelab-logs', 'type': 'link', 'icon': 'doc'},
     {'title': 'Sites', 'url': '/d/homelab-site-service-health', 'type': 'link',
@@ -556,126 +558,58 @@ def machines():
 
 
 # ================================================================= PANTRY BOT
-PB = 'namespace="pantry-bot"'
+PB = 'job=~"pantry-bot-(api|gateway|worker|dispatcher)-oracle"'
 
 
 def pantry_bot():
     b = Board()
     b.text('', (
-        '## PantryBot\n'
-        'Top half: **is it working?** Bottom half: **is anyone using it?** If the top is red, '
-        'the bottom will be empty — fix the top first. For one part in detail, open '
-        'Services and pick Area `pantry-bot`.'), h=3)
+        '## PantryBot on Oracle\n'
+        'This page checks live application scrape targets, PostgreSQL reachability, and logs. '
+        'Chat command and feature usage is on **PantryBot Chat Usage**. A missing scrape target '
+        'means telemetry is unavailable; it does not mean that feature was unused.'), h=3)
 
     b.add(stat('Parts running',
-               [t('sum(kube_deployment_status_replicas_available{%s})' % PB, 'A',
-                  'running', instant=True),
-                t('sum(kube_deployment_spec_replicas{%s})' % PB, 'B', 'should be',
-                  instant=True)],
+               [t('count(up{%s} == 1)' % PB, 'A', 'targets up', instant=True),
+                t('count(up{%s})' % PB, 'B', 'targets discovered', instant=True)],
                steps((None, BLUE)), color_mode='value', text_mode='value_and_name',
-               desc='Parts of PantryBot running vs how many should be.'), 5, 6, 0, False)
-    b.add(stat('Parts crashing',
-               [t('sum(kube_pod_container_status_waiting_reason{%s, reason="CrashLoopBackOff"}) '
-                  'or vector(0)' % PB, instant=True)],
+               desc='Oracle API, gateway, dispatcher, and each worker pod scraped successfully.'), 5, 6, 0, False)
+    b.add(stat('Scrape targets down',
+               [t('sum(1 - up{%s})' % PB, instant=True)],
                steps((None, GREEN), (1, RED)), mappings=words({0: ('NONE', GREEN)}),
-               desc='Parts stuck in a crash-restart loop.'), 5, 6, 6, False)
+               desc='A failed target means Prometheus cannot collect its telemetry. This is not a Kubernetes restart count.'), 5, 6, 6, False)
     b.add(stat('Database reachable?',
-               [t('max(kube_endpoint_address_available{%s, endpoint=~"postgres-authority.*"}) '
-                  'or vector(0)' % PB, instant=True)],
+               [{'refId': 'A', 'datasource': PG, 'format': 'table', 'rawQuery': True,
+                 'rawSql': 'SELECT 1 AS reachable'}],
                steps((None, RED), (1, GREEN)),
-               mappings=words({0: ('NO', RED)}),
-               desc='Whether any PantryBot database copy is up and accepting connections. '
-                    'Everything else depends on this — if it says NO, fix it first.'),
+               mappings=words({0: ('NO', RED), 1: ('YES', GREEN)}),
+               desc='A fresh read-only connection from Grafana to the Oracle PantryBot database.'),
           5, 6, 12, False)
-    b.add(stat('Restarts today',
-               [t('sum(increase(kube_pod_container_status_restarts_total{%s}[24h])) '
-                  'or vector(0)' % PB, instant=True)],
-               steps((None, GREEN), (1, ORANGE), (10, RED)),
-               mappings=words({0: ('NONE', GREEN)})), 5, 6, 18, True)
+    b.add(stat('Runtime work completed (24h)',
+               [t('sum(increase(pantry_bot_runtime_completions_total[24h])) or vector(0)', instant=True)],
+               steps((None, BLUE)),
+               desc='Completed durable runtime jobs. Kubernetes restart counts are not available from this Prometheus datasource.'), 5, 6, 18, True)
 
-    b.add(table('Every PantryBot part',
-                [t('sum by (deployment) (kube_deployment_spec_replicas{%s}) > 0' % PB, 'A',
-                   instant=True, fmt='table'),
-                 t('sum by (deployment) (kube_deployment_status_replicas_available{%s}) '
-                   'and on (deployment) (kube_deployment_spec_replicas{%s} > 0)' % (PB, PB),
-                   'B', instant=True, fmt='table')],
-                {'deployment': 'Part', 'Value #A': 'Should have', 'Value #B': 'Running'},
-                desc='Parts deliberately switched off (0 copies) are not listed.',
-                overrides=[{'matcher': {'id': 'byName', 'options': 'Running'},
+    b.add(table('Oracle scrape targets',
+                [t('up{%s}' % PB, 'A', instant=True, fmt='table')],
+                {'role': 'Role', 'site': 'Site', 'pod': 'Pod', 'Value': 'Scrape up'},
+                hide=('instance', 'job'),
+                desc='One row per scraped target, including each worker pod. 1 means telemetry is arriving; 0 or a missing row means telemetry is unavailable.',
+                overrides=[{'matcher': {'id': 'byName', 'options': 'Scrape up'},
                             'properties': [
                                 {'id': 'custom.cellOptions',
                                  'value': {'type': 'color-background', 'mode': 'basic'}},
                                 {'id': 'thresholds', 'value': steps((None, RED), (1, GREEN))}]}]),
           8, 24, 0, True)
 
-    b.row('Is anyone using it?')
-    b.add(ts('Commands used (per 15 min)',
-             [t('sum by (command) (increase(pantry_bot_commands_total[15m]))', 'A',
-                '{{command}}')],
-             bars=True, stack=True, minv=0,
-             desc='Chat commands people ran. Empty while the bot is down.'), 8, 12, 0, False)
-    b.add(ts('Work picked up vs finished (per 15 min)',
-             [t('sum(increase(pantry_bot_runtime_claims_total[15m]))', 'A', 'picked up'),
-              t('sum(increase(pantry_bot_runtime_completions_total[15m]))', 'B', 'finished')],
-             minv=0,
-             desc='The two lines should track each other. "Picked up" pulling away from '
-                  '"finished" means work is getting stuck.'), 8, 12, 12, True)
-
-    b.row('From the database  (keeps working even when the bot is down, as long as the '
-          'database is up)')
-    b.add({'type': 'stat', 'title': 'Events received (last hour)', 'datasource': PG,
-           'targets': [{'refId': 'A', 'datasource': PG, 'format': 'table',
-                        'rawSql': "SELECT count(*) AS events FROM pantry_events "
-                                  "WHERE created_at > now() - interval '1 hour'"}],
-           'options': {'reduceOptions': {'calcs': ['lastNotNull'], 'fields': '',
-                                         'values': False},
-                       'colorMode': 'value', 'graphMode': 'none', 'textMode': 'auto'},
-           'fieldConfig': {'defaults': {'noValue': 'database unreachable',
-                                        'thresholds': steps((None, BLUE))},
-                           'overrides': []}}, 5, 8, 0, False)
-    b.add({'type': 'stat', 'title': 'Messages stuck undelivered', 'datasource': PG,
-           'description': 'Outgoing messages that failed and were set aside. Should be 0.',
-           'targets': [{'refId': 'A', 'datasource': PG, 'format': 'table',
-                        'rawSql': "SELECT count(*) AS dead_letter FROM pantry_outbox "
-                                  "WHERE status = 'dead_letter'"}],
-           'options': {'reduceOptions': {'calcs': ['lastNotNull'], 'fields': '',
-                                         'values': False},
-                       'colorMode': 'background', 'graphMode': 'none', 'textMode': 'auto'},
-           'fieldConfig': {'defaults': {'noValue': 'database unreachable',
-                                        'thresholds': steps((None, GREEN), (1, RED))},
-                           'overrides': []}}, 5, 8, 8, False)
-    b.add({'type': 'stat', 'title': 'Different people who have taken part', 'datasource': PG,
-           'description': 'Everyone who has ever joined in, all time.',
-           'targets': [{'refId': 'A', 'datasource': PG, 'format': 'table',
-                        'rawSql': "SELECT count(DISTINCT user_id) AS participants "
-                                  "FROM community_participants"}],
-           'options': {'reduceOptions': {'calcs': ['lastNotNull'], 'fields': '',
-                                         'values': False},
-                       'colorMode': 'value', 'graphMode': 'none', 'textMode': 'auto'},
-           'fieldConfig': {'defaults': {'noValue': 'database unreachable',
-                                        'thresholds': steps((None, BLUE))},
-                           'overrides': []}}, 5, 8, 16, True)
-    b.add({'type': 'timeseries', 'title': 'Events received over time', 'datasource': PG,
-           'targets': [{'refId': 'A', 'datasource': PG, 'format': 'time_series',
-                        'rawSql': 'SELECT $__timeGroup(created_at, $__interval) AS "time", '
-                                  'source AS metric, count(*) AS events FROM pantry_events '
-                                  'WHERE $__timeFilter(created_at) GROUP BY 1, 2 ORDER BY 1'}],
-           'options': {'legend': {'displayMode': 'list', 'placement': 'bottom'},
-                       'tooltip': {'mode': 'multi'}},
-           'fieldConfig': {'defaults': {'custom': {'drawStyle': 'bars', 'fillOpacity': 60,
-                                                   'stacking': {'mode': 'normal',
-                                                                'group': 'A'}},
-                                        'noValue': 'database unreachable'},
-                           'overrides': []}}, 8, 24, 0, True)
-
     b.row('What is it saying?  (logs)')
     b.add(logs('PantryBot errors and warnings',
                '{instance=~"pantry-bot/.*", level=~"error|warn"}',
                desc='Only errors and warnings, newest first.'), 12, 24, 0, True)
 
-    return dash('homelab-pantry-bot', 'PantryBot — Health & Usage',
-                'Is PantryBot working, and is anyone using it. Replaces the three separate '
-                'PantryBot dashboards (health, usage, usage-from-Postgres).',
+    return dash('homelab-pantry-bot', 'PantryBot — Health',
+                'Oracle PantryBot health from live service scrape targets, database reachability, and logs. '
+                'See PantryBot Chat Usage for feature and command activity.',
                 ['homelab', 'pantry-bot'], b,
                 [DS_VARS['prom'], DS_VARS['loki'], DS_VARS['pg']])
 

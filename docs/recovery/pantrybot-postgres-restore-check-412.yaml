@@ -1,0 +1,97 @@
+# Manual, disposable restore rehearsal for issue #412. This Job never mounts
+# or connects to the production database. Run only during the approved access
+# rollout preflight; see PANTRYBOT-POSTGRES-ACCESS-412.md.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pantry-postgres-restore-check-412
+  namespace: pantry-bot-restore-412
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: download
+          image: rclone/rclone:1.75.2@sha256:2687085f718d3c628f7fdfb77c52a1d344332aed543110bb88088f2c70d43eb5
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              prefix="r2:pantry-bot-backups/recovery/pantry-bot"
+              latest=$(rclone lsf "$prefix" --files-only | grep '^pantry-[0-9]\{8\}T[0-9]\{6\}Z\.dump\.gz$' | sort | tail -n 1)
+              test -n "$latest"
+              echo "restoring $latest into an isolated emptyDir"
+              rclone copyto "$prefix/$latest" /work/latest.dump.gz --s3-no-head
+              gzip -t /work/latest.dump.gz
+          env:
+            - name: RCLONE_CONFIG_R2_TYPE
+              value: s3
+            - name: RCLONE_CONFIG_R2_PROVIDER
+              value: Cloudflare
+            - name: RCLONE_CONFIG_R2_ENDPOINT
+              value: https://0d22ee71e5473142b1678cb7005f80f8.r2.cloudflarestorage.com
+            - name: RCLONE_CONFIG_R2_NO_CHECK_BUCKET
+              value: "true"
+            - name: RCLONE_CONFIG_R2_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: pantry-bot-litestream
+                  key: LITESTREAM_ACCESS_KEY_ID
+            - name: RCLONE_CONFIG_R2_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pantry-bot-litestream
+                  key: LITESTREAM_SECRET_ACCESS_KEY
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: work
+              mountPath: /work
+      containers:
+        - name: restore
+          image: postgres:16-alpine
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              gzip -dc /work/latest.dump.gz > /work/latest.dump
+              pg_restore --list /work/latest.dump > /work/toc
+              test -s /work/toc
+              initdb -D /work/data -U pantry --auth-local=trust >/dev/null
+              pg_ctl -D /work/data -o "-c listen_addresses='' -c unix_socket_directories=/work" -w start
+              trap 'pg_ctl -D /work/data -m immediate -w stop' EXIT
+              createdb -h /work -U pantry pantry_restore
+              pg_restore -h /work -U pantry -d pantry_restore --no-owner --no-privileges --single-transaction --exit-on-error /work/latest.dump
+              psql -h /work -U pantry -d pantry_restore -AtX -v ON_ERROR_STOP=1 -c "SELECT 'tables=' || count(*) FROM pg_class WHERE relkind IN ('r','p') AND relnamespace='public'::regnamespace;"
+              psql -h /work -U pantry -d pantry_restore -AtX -v ON_ERROR_STOP=1 -c "SELECT 'database_bytes=' || pg_database_size(current_database());"
+              echo "isolated PostgreSQL restore succeeded"
+          securityContext:
+            runAsUser: 70
+            runAsGroup: 70
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 768Mi
+          volumeMounts:
+            - name: work
+              mountPath: /work
+      volumes:
+        - name: work
+          emptyDir:
+            sizeLimit: 1Gi

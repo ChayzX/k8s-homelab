@@ -54,10 +54,22 @@
    "tooltip": ""
   },
   {
-   "title": "PantryBot",
+   "title": "PantryBot Health",
    "url": "/d/homelab-pantry-bot",
    "type": "link",
    "icon": "bolt",
+   "asDropdown": false,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "tags": [],
+   "tooltip": ""
+  },
+  {
+   "title": "PantryBot Chat Usage",
+   "url": "/d/homelab-pantry-bot-usage",
+   "type": "link",
+   "icon": "comment-alt",
    "asDropdown": false,
    "includeVars": false,
    "keepTime": true,
