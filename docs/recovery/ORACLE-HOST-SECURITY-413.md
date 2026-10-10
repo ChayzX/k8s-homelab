@@ -70,6 +70,14 @@ Package and host changes verified on 2026-10-10:
 - `oracle-cloud-agent` advanced from snap `1.61.0-6` to stable `1.63.0-9`;
   both its service and updater service are active. The prior snap auto-refresh
   hold remains in place.
+- The Oracle maintenance tools were Gitleaks `8.18.4` and Semgrep `1.177.0`.
+  The revised installer was exercised in a temporary directory and installed
+  Gitleaks `8.30.1`, uv `0.13.0`, Semgrep `1.180.0`, and pip `26.2.1`; Trivy
+  found no high or critical advisories in that test directory. Apply the
+  installer update after its PR is merged.
+- The Oracle Actions runner is `2.337.0`; GitHub's latest release is `2.338.0`.
+  It stayed on `2.337.0` after successful CI jobs, so recheck and perform a
+  controlled runner update during the maintenance window.
 - `python3-pip` was removed after confirming it had no runtime consumer or
   dependent packages. It carried the Ubuntu Pro-only fix for CVE-2025-66471.
 - `pro security-status` reports no outstanding Ubuntu security updates; the
