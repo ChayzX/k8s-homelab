@@ -67,6 +67,9 @@ Package and host changes verified on 2026-10-10:
   verified using the same host key as the Tailscale path before the Tailscale
   update. Both direct and normal `ssh oracle` connections now work, and
   `tailscaled`, SSH, the guard, and k3s are active.
+- `oracle-cloud-agent` advanced from snap `1.61.0-6` to stable `1.63.0-9`;
+  both its service and updater service are active. The prior snap auto-refresh
+  hold remains in place.
 - `python3-pip` was removed after confirming it had no runtime consumer or
   dependent packages. It carried the Ubuntu Pro-only fix for CVE-2025-66471.
 - `pro security-status` reports no outstanding Ubuntu security updates; the
