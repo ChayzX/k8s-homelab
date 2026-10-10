@@ -142,7 +142,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(increase(pantry_bot_commands_total{pod!=\"\"}[7d])) or vector(0)",
+          "expr": "round(sum(increase(pantry_bot_commands_total{pod!=\"\"}[7d]))) or vector(0)",
           "instant": true,
           "format": "table",
           "legendFormat": "value"
@@ -341,7 +341,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (command) (increase(pantry_bot_commands_total{pod!=\"\"}[7d]))",
+          "expr": "round(sum by (command) (increase(pantry_bot_commands_total{pod!=\"\"}[7d])))",
           "instant": true,
           "format": "table",
           "legendFormat": "{{command}}"
