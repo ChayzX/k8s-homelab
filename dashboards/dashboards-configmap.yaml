@@ -4430,7 +4430,7 @@ data:
           },
           "options": {
             "mode": "markdown",
-            "content": "\n**Built-in commands:** successful completions over the rolling 7 days, from Prometheus. Collection began with the Oracle worker metrics rollout, so the window is partial until 7 days have elapsed. A zero during this period means no successes recorded since collection started, not no earlier use. Every registered command appears at zero; Prometheus handles counter resets. Aliases count under the canonical command. Data older than Prometheus retention is unavailable.\n\n**Custom commands:** lifetime successful uses from PostgreSQL. This count survives bot restarts. Enabled commands with zero uses are surfaced above; disabled commands remain in the inventory.\n\n**Chat actions and bot replies:** durable PostgreSQL counts. Twitch event intake counts EventSub/queued records, not each ordinary chat line.\n\n**Not measured:** ordinary chat text, unrecognized !commands, and failed/cooldown command attempts are not retained as command usage. A blank signal means no data was collected for it; it does not prove the feature is unused.\n",
+            "content": "\n**Built-in commands:** successful completions over the rolling 7 days, from Prometheus. Collection began with the Oracle worker metrics rollout, so the window is partial until 7 days have elapsed. A zero during this period means no successes recorded since collection started, not no earlier use. Every registered command appears at zero; Prometheus handles counter resets. Aliases count under the canonical command. Data older than Prometheus retention is unavailable.\n\n**Custom commands:** lifetime successful uses from PostgreSQL. This count survives bot restarts. Enabled commands with zero uses are surfaced above; disabled commands remain in the inventory.\n\n**Chat actions and bot replies:** durable PostgreSQL counts. Oracle bot reply sent/failed accounting began with the 2026-10-10 rollout; earlier Oracle replies were not counted and cannot be reconstructed. Until a new reply is sent or fails, the replies chart can be empty even when the bot is healthy. Twitch event intake counts EventSub/queued records, not each ordinary chat line.\n\n**Not measured:** ordinary chat text, unrecognized !commands, and failed/cooldown command attempts are not retained as command usage. A blank signal means no data was collected for it; it does not prove the feature is unused.\n",
             "code": {
               "language": "plaintext",
               "showLineNumbers": false,
@@ -4622,7 +4622,7 @@ data:
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
          },
-         "expr": "count(up{job=~\"pantry-bot-(api|gateway|worker|dispatcher)-oracle\"} == 1)",
+         "expr": "count(up{job=~\"pantry-bot-(api|gateway|worker|dispatcher|responder)-oracle\"} == 1)",
          "legendFormat": "targets up",
          "instant": true,
          "range": false
@@ -4633,7 +4633,7 @@ data:
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
          },
-         "expr": "count(up{job=~\"pantry-bot-(api|gateway|worker|dispatcher)-oracle\"})",
+         "expr": "count(up{job=~\"pantry-bot-(api|gateway|worker|dispatcher|responder)-oracle\"})",
          "legendFormat": "targets discovered",
          "instant": true,
          "range": false
@@ -4694,7 +4694,7 @@ data:
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
          },
-         "expr": "sum(1 - up{job=~\"pantry-bot-(api|gateway|worker|dispatcher)-oracle\"})",
+         "expr": "sum(1 - up{job=~\"pantry-bot-(api|gateway|worker|dispatcher|responder)-oracle\"})",
          "instant": true,
          "range": false
         }
@@ -4909,7 +4909,7 @@ data:
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
          },
-         "expr": "up{job=~\"pantry-bot-(api|gateway|worker|dispatcher)-oracle\"}",
+         "expr": "up{job=~\"pantry-bot-(api|gateway|worker|dispatcher|responder)-oracle\"}",
          "instant": true,
          "range": false,
          "format": "table"
