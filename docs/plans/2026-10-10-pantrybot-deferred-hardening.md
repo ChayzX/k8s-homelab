@@ -64,9 +64,9 @@ Rollback instructions are retained. No rollback was needed because every require
 - Consumes: hidden-prompt helper, two distinct generated credentials, Oracle serving Secret, StatefulSet bootstrap Secret, six DB-consuming Deployments, CronJobs.
 - Produces: staged temporary and final connection URLs, verified fresh connections, retired old credential copies removed after use.
 
-- [ ] **Step 1: Review helper and close holder inventory**
+- [ ] **Step 1: Review helper and establish secure credential storage**
 
-Review the helper for secret-safe stdin handling, role/database/host validation, annotation removal, and idempotent cleanup. Recheck all Kubernetes workload references in Oracle and Home, local files, operator vault/password manager, external schedules, and database connection records after enabling `log_connections` for an observation window. Verify the restore and local-socket rollback gate. Do not rotate until every holder has a disposition.
+Review the helper for secret-safe stdin handling, role/database/host validation, annotation removal, and idempotent cleanup. The user confirmed there is no password vault, and Oracle K3s reports secret encryption at rest is disabled. Establish a secure credential store with a tested recovery path before rotation; do not treat current Kubernetes Secrets as the human recovery vault. Workload, local schedule, and external vault-holder checks found no unaccounted holder. Recheck recent database connection records after an observation window and verify the restore/local-socket rollback gate before rotating.
 
 - [ ] **Step 2: Stage and probe a temporary superuser**
 
