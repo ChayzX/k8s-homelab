@@ -22,7 +22,7 @@ Node LAN IP: `192.168.40.208`. StorageClass: `local-path`.
 | `node-exporter-oracle.yaml` | Oracle host metrics DaemonSet and Service. |
 | `prometheus-config.yaml` | ConfigMap: Prometheus' `prometheus.yml`, rewritten scrape config. |
 | `grafana.yaml` | Grafana SA, PVC (2Gi), Deployment, primary `LoadBalancer` Service (3002). |
-| `grafana-provisioning.yaml` | ConfigMaps: `grafana-provisioning-datasources`, `grafana-provisioning-dashboards`, and the retained `grafana-provisioning-alerting` definition. **See "Grafana dashboard ConfigMap" below before applying.** |
+| `grafana-provisioning.yaml` | Active Grafana datasource, dashboard, and alerting provisioning ConfigMaps. |
 | `grafana-verify-nodeport.yaml` | **Verification only.** NodePort 30002. |
 | `promtail.yaml` | promtail SA, ClusterRole/Binding (API access for pod discovery), DaemonSet, ClusterIP Service (9080, metrics only). |
 | `promtail-config.yaml` | ConfigMap: promtail's config, incl. severity-extraction `pipeline_stages`. |
@@ -67,13 +67,10 @@ explicit about the split, since it's easy to end up with two conflicting
   `grafana-provisioning-dashboards`, and `grafana-provisioning-alerting`,
   all defined in `grafana-provisioning.yaml`. These are mounted by
   `grafana.yaml` at
-  `/etc/grafana/provisioning/{datasources,dashboards}`; the alerting definition
-  is retained but currently not mounted until its Secret is restored. This is the
-  wiring the migration plan calls out explicitly (rev. 2, "Grafana
-  manifest dropped the `dashboards` mount that the provisioning config
-  references") -- getting it wrong yields a Grafana with zero
-  dashboards and no obvious error, so treat these ConfigMaps as
-  authoritative and don't duplicate them elsewhere.
+  `/etc/grafana/provisioning/{datasources,dashboards,alerting}`. Keep
+  alerting routes, contact points, and rule groups in this file so a Grafana
+  restart reapplies the same configuration. The Opsbot token is supplied
+  through the `opsbot-alert-token` Kubernetes Secret; no token is committed.
 
 - **The dashboard content is owned by `/home/chase/k8s-homelab/dashboards/`.**
   That directory contains the raw dashboard JSON and the generated
@@ -130,8 +127,8 @@ kubectl apply -f promtail-config.yaml
 kubectl apply -f loki.yaml
 kubectl apply -f prometheus.yaml
 
-# Local Discord alerting provisioning is disabled until its real Secret is
-# restored; see SECRETS.md before re-enabling the mount and env var.
+# Active alerting provisioning uses the required opsbot-alert-token Secret.
+# Its provisioning file is read at Grafana startup.
 kubectl apply -f grafana.yaml
 
 # Cluster-facing collectors/exporters. No PVCs, no data migration.
@@ -150,10 +147,10 @@ contract in `SECRETS.md`, then apply `node-exporter-oracle.yaml`,
 `cluster=pantry-bot-oracle` labels so its metrics are distinguishable from
 home in Grafana Cloud. It has no local Grafana or Loki dependency.
 
-`grafana.yaml` contains the Grafana Deployment/PVC/SA block and a **primary
-Service** on port 3002 that will sit `EXTERNAL-IP <pending>` until the
-matching old Docker container is stopped -- see "Verification-only
-files" below for the actual cutover sequence for those two ports.
+`grafana.yaml` contains the active Grafana Deployment/PVC/SA block and its
+**LoadBalancer Service** on port 3002. The deployment includes the live
+Authentik OAuth configuration, the alerting provisioning mount, and Secret
+references for its database and Opsbot credentials.
 
 ## Pantry-bot / Twitch alerting to a Discord DM
 
@@ -196,44 +193,30 @@ but cannot safely implement or deploy it; the next watcher-source change
 should add unit tests for healthy and unhealthy `/ready` responses plus a
 fail-open timeout case.
 
-`grafana-provisioning.yaml` carries a retained `grafana-provisioning-alerting`
-ConfigMap that can provision when the real webhook Secret and mount are
-restored:
+### Grafana alerting configuration
 
-- a **Discord contact point** (`discord-pantry-twitch-dm`) whose webhook URL
-  is interpolated from the `PANTY_TWITCH_DISCORD_WEBHOOK_URL` env var (never
-  committed here) and whose message pings `<@204282471506771971>`;
-- a **notification policy** that routes pantry-bot/Twitch alert rules to that
-  contact point **in addition to** the existing root receiver
-  (`continue: true`), matching rules either in a `pantry-bot`/`twitch`-named
-  folder (the `grafana_folder` label) or carrying an `app` label matching
-  `pantry-bot|pantry|twitch`.
+`grafana-provisioning.yaml` is the source for the live Grafana alerting
+configuration. The `PC Health` folder contains CPU, C: capacity, and available
+memory rules for Greenie's main PC and the Truffles stream PC, plus OBS render,
+encoder, and network dropped-frame rules. The Windows CPU, disk-capacity, and
+memory thresholds follow Windows Admin Center server defaults; they are not
+universal desktop-PC danger limits. OBS alerts use an operational threshold
+of more than 5% dropped frames in a rolling minute and evaluate only while OBS
+streaming is active and metrics are fresh. PC Health rules treat missing data
+as normal and do not alert on computers being offline.
 
-Facts that shape how you use this:
+PC Health notifications route to both `opsbot-dm` and `grafana-default-email`.
+The default email receiver is `hyperaimz28@gmail.com`; email delivery also
+requires SMTP configuration in Grafana. The live Grafana instance currently
+has no SMTP host configured, so setting this address alone does not enable
+email delivery. Opsbot's bearer token is interpolated from the required
+`opsbot-alert-token` Secret and must never be committed.
 
-- **Grafana ships no alert rules today.** The live grafana.db (inspected
-  2026-08-12) has zero alert rules and only the stock placeholder contact
-  point (`grafana-default-email`). There were no Twitch rules to reproduce,
-  so the provisioning file deliberately provisions no rules. Create rules in
-  the UI and keep them in a pantry-bot/Twitch folder (or add an
-  `app="pantry-bot"` label) and this policy DMs 204282471506771971.
-- **The current Pantry Twitch-bot alerts come from elsewhere.** The host
-  `k3s-watcher` systemd service
-  (`/home/chase/.config/systemd/user/k3s-watcher.service` →
-  `/home/chase/docker/observability/monitoring/k3s-watcher/watcher.py`)
-  polls Loki and DMs log-error/restart-loop alerts to user
-  `929216447723499562`. It is untouched by this change, so the existing
-  recipient keeps receiving alerts; Grafana is the *additional* channel to
-  `204282471506771971`. Do not expect this provisioning to make Grafana
-  duplicate k3s-watcher's messages.
-- **Restart required to apply changes.** Alerting provisioning is read once
-  at Grafana startup, not watched. After changing either this provisioning
-  file or the `grafana-discord-webhooks` Secret, `kubectl -n observability
-  rollout restart deploy/grafana`.
-- **Policy tree is replaced wholesale.** The `policies` block in
-  `alerting.yaml` is the complete tree; any policy you later create in the UI
-  is overwritten at the next Grafana restart. Keep editing the provisioning
-  file, not the UI.
+The complete notification policy tree is provisioned from this file. Grafana
+reads alerting provisioning at startup, so changes to this file or its Secret
+require `kubectl -n observability rollout restart deploy/grafana`. The checked-in
+Deployment manifest now includes the live Grafana image, OAuth settings,
+alerting mount, and secret references; it contains no secret values.
 
 ## Verification-only files -- when to apply, when to delete
 
