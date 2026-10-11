@@ -58,6 +58,8 @@ jobs:
       previous_pod_server: ${{ steps.restart.outputs.previous_pod_server }}
       previous_pod_tunnel: ${{ steps.restart.outputs.previous_pod_tunnel }}
     steps:
+      # scripts/assert-kube-target.sh lives in the repo; every job needs its own checkout.
+      - uses: actions/checkout@v5
       - name: Connect and restart pods
         id: restart
         env:
@@ -89,6 +91,8 @@ jobs:
     needs: restart
     runs-on: ubuntu-latest
     steps:
+      # scripts/assert-kube-target.sh lives in the repo; every job needs its own checkout.
+      - uses: actions/checkout@v5
       - name: Connect and verify
         env:
           TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
