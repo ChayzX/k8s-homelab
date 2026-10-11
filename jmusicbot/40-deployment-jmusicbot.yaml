@@ -96,7 +96,7 @@ spec:
       # standalone value.
       initContainers:
         - name: restore-state
-          image: rclone/rclone:1.69.1
+          image: rclone/rclone:1.75.2@sha256:2687085f718d3c628f7fdfb77c52a1d344332aed543110bb88088f2c70d43eb5
           # A first-ever deploy has nothing at this R2 prefix yet -- `rclone
           # copy` against a path that doesn't exist on the remote just
           # copies zero files and exits 0, so this is safe on a fresh
@@ -241,7 +241,7 @@ spec:
               subPath: config.txt
               readOnly: true
         - name: r2-sync
-          image: rclone/rclone:1.69.1
+          image: rclone/rclone:1.75.2@sha256:2687085f718d3c628f7fdfb77c52a1d344332aed543110bb88088f2c70d43eb5
           # Periodic, not continuous: unlike pantry-bot's SQLite (which
           # Litestream streams change-by-change), these are plain files that
           # change rarely (serversettings.json on a config change,
