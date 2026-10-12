@@ -1,129 +1,54 @@
-# JMusicBot recovery and single-owner runbook
+# JMusicBot runbook
 
-This runbook covers the Kubernetes JMusicBot deployment in the `jmusicbot`
-namespace. It does not cover Minecraft. Home and Oracle may both have process
-capacity, but exactly one site may hold the resource-scoped witness lease and
-open a Discord session or write mutable R2 state.
+JMusicBot runs only on minecraftmachine (home k3s, amd64) in the `jmusicbot`
+namespace. There is no standby site and no witness lease: the Oracle standby
+was retired on 2026-10-11. This runbook does not cover Minecraft.
 
-## Safety contract
+- The Deployment uses `Recreate` and is pinned to minecraftmachine, so at most
+  one pod connects to Discord and writes the R2 prefix.
+- State lives in an `emptyDir`. The `restore-state` init container copies it
+  from `r2:pantry-bot-backups/jmusicbot/` on start, and the `r2-sync` sidecar
+  syncs it back every 5 minutes.
+- `.jmusicbot-r2-heartbeat` is rewritten after each completed sync. It is a
+  freshness signal only and is never restored into bot state.
 
-- The witness resource is independent of PantryBot and Opsbot leases.
-- A lease holder is identified by the witness response (`site`, positive
-  `epoch`, opaque token, and expiry). Never copy or print the token.
-- A non-holder must remain running only as a standby: it must not connect to
-  Discord and its `jmusicbot-health` endpoint must remain not ready (`503`).
-- The `r2-sync` sidecar may write only when the lease marker exists; it excludes
-  `.jmusicbot-lease-owner` from restore and sync. The marker is not authority.
-- After a successful state sync, the owner publishes the small
-  `.jmusicbot-r2-heartbeat` object under the same R2 prefix. It is written from
-  the sidecar's temporary filesystem, never restored into bot state, and is
-  excluded from `rclone sync` deletion. Its object `LastModified` is the
-  freshness signal for the sync loop; the heartbeat is not a lease or fencing
-  authority.
-- `Recreate` is required for a site-local rollout. Do not use a rolling update
-  for the Discord writer.
-- Never scale or restart both sites as a handoff mechanism. Fencing and a
-  witnessed lease transition come first.
-
-## Read-only baseline
-
-Run from the cluster's administrative path. These commands intentionally avoid
-secret values:
+## Health check
 
 ```bash
 kubectl -n jmusicbot get deploy,pod,svc -o wide
 kubectl -n jmusicbot get endpoints jmusicbot-health -o yaml
 kubectl -n jmusicbot logs deploy/jmusicbot -c jmusicbot --since=15m \
-  | grep -E 'lease|owner|witness|Discord|WebSocket|R2' | tail -50
-kubectl -n jmusicbot get pod -l app.kubernetes.io/name=jmusicbot \
-  -o custom-columns=NAME:.metadata.name,READY:.status.containerStatuses[0].ready,RESTARTS:.status.containerStatuses[0].restartCount,CREATED:.metadata.creationTimestamp
+  | grep -E 'Discord|WebSocket|ERROR' | tail -50
 ```
 
-Record UTC timestamps, site, pod image digest, readiness, restart count, and
-whether the health Service has a ready endpoint in Issue #262 and parent issue
-#191. A `Running` pod is not an owner proof; readiness and the witness log are
-the relevant signals.
+`/health` returns 200 only after the bot has logged into Discord; `/live`
+returns 200 while the JVM is alive.
 
-### R2 freshness baseline
+### R2 freshness
 
-Use the existing site-local `r2-sync` logs or the approved operator-side R2
-listing command. Do not print credentials, signed URLs, or file contents:
+Do not print credentials, signed URLs, or file contents:
 
 ```bash
-kubectl -n jmusicbot logs deploy/jmusicbot -c r2-sync --since=30m \
-  | grep -E 'sync|generation|timestamp|completed|skipped' | tail -50
+kubectl -n jmusicbot logs deploy/jmusicbot -c r2-sync --since=30m | tail -50
 ```
 
-Record the `.jmusicbot-r2-heartbeat` object timestamp together with the newest
-mutable-state object and observed lag as metadata only. A fresh heartbeat proves
-that the current lease holder completed a sync cycle; it does not prove that a
-particular state file changed or that RPO is zero. The acceptable RPO is the
-measured lag at the handoff boundary.
+A heartbeat older than ~10 minutes means the sync loop is failing.
 
-## Controlled Oracle -> home return
+## Restore after losing the node
 
-Use this only after an explicit maintenance checkpoint in Issue #262. The
-normal owner must be stated before starting; current live state may differ.
-
-1. Capture the read-only baseline above for both sites, including R2 freshness,
-   lease epoch, and health endpoints.
-2. Confirm Oracle is the sole effective owner and that no home Discord session
-   exists. Observe Discord-side session identity and any R2 side-effect
-   counters without changing state.
-3. Stop or fence Oracle through the approved site-specific fence procedure.
-   Confirm the old process is stopped, its health endpoint is not ready, and a
-   stale lease renewal is rejected. Do not substitute `kubectl scale` for the
-   fence check.
-4. Verify the witness has expired/rejected the Oracle lease and record the next
-   epoch. Do not manually edit R2 ownership markers.
-5. Allow home to acquire the lease through its normal startup loop. Confirm the
-   response site is home and the epoch increased; keep the opaque token out of
-   logs and issue comments.
-6. Confirm home health is ready (`200`) and Oracle remains not ready (`503`).
-7. Observe one controlled Discord action and one R2 sync interval. Verify no
-   duplicate Discord session or duplicate side effect occurred.
-8. Record detection time, fencing time, acquisition time, route convergence,
-   RTO, measured RPO, and rollback result. If any check fails, fence home and
-   restore Oracle using the documented rollback path.
-
-## Controlled home -> Oracle promotion
-
-Use the same checkpoints in reverse:
-
-1. Verify home is the sole owner and Oracle has current restored state.
-2. Capture lease epoch, R2 generation/timestamp, egress/headroom baseline, and
-   health status.
-3. Fence home and prove stale renewal and stale side effects are rejected.
-4. Wait for witness expiry, then allow Oracle to acquire the next epoch.
-5. Verify Oracle readiness, one Discord session, and one R2 side-effect stream.
-6. Route external traffic only after health and ownership checks pass.
-7. Record RTO/RPO, duplicate checks, rollback, and return-home evidence.
+1. Rebuild k3s on minecraftmachine and recreate the Secrets in
+   `jmusicbot/SECRETS.md` (`jmusicbot-config-txt`, `jmusicbot-notifier-secrets`,
+   `jmusicbot-r2`).
+2. `kubectl apply -k jmusicbot/`, then set the current image with the
+   GitHub Actions workflow (or `kubectl set image` to the last known-good tag).
+3. The init container restores state from R2; confirm `/health` turns ready.
 
 ## Validation and rollback
 
-Run repository contracts before any rehearsal:
-
 ```bash
-bash tests/jmusicbot-oracle-standby-test.sh
 bash tests/jmusicbot-secret-restore-rbac-test.sh
-kubectl kustomize docs/recovery/jmusicbot-oracle-standby >/dev/null
 ```
 
-The standby overlay must retain one live process, `Recreate` strategy, witness
-environment variables under the JMusicBot container, `/health` readiness,
-`/live` liveness, and lease-marker-gated R2 sync. The secret-restore identity
-must remain restricted to the named secrets and `get/update/patch` verbs.
-
-Rollback is operator-controlled: fence the newly promoted owner, restore the
-last known-good image/configuration through the dedicated workflow, verify the
-old owner is still fenced, and only then reacquire the next witness epoch.
-Never delete PVCs or R2 generations as part of a rehearsal.
-
-## Current evidence boundary
-
-Repository contracts and disposable promotion tests prove lease/fencing logic,
-but do not prove a live Discord handoff, R2 freshness/RPO, egress capacity,
-duplicate-side-effect exclusion, or measured RTO. Keep Issue #262 open until
-those live acceptance checks are recorded. If a site is currently failing
-closed while the other site owns the lease, treat that as production state and
-do not restart either site without a planned handoff.
+Roll back a bad release with `kubectl -n jmusicbot rollout undo
+deployment/jmusicbot` (the deploy workflow does this automatically when
+verification fails). Never delete R2 generations while recovering.

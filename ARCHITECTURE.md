@@ -116,10 +116,10 @@ Every stateful app uses `Deployment` + `strategy: Recreate` + a `ReadWriteOnce` 
 
 | Workload | Image | Ports | Requests/Limits | UID | SA (API access?) | PVC |
 |---|---|---|---|---|---|---|
-| `jmusicbot` (Deployment, Recreate) | `ghcr.io/chayzx/jmusicbot:upstream-0.7.0-3e3116039c64` — published multi-arch image; GitHub Actions updates the immutable release tag. | none (outbound Discord gateway only) | 500m/2000m CPU, 512Mi/1Gi mem | `10001:10001` | `jmusicbot-sa`, no API access | `emptyDir` restored/synced through R2 |
+| `jmusicbot` (Deployment, Recreate) | `ghcr.io/chayzx/jmusicbot:upstream-0.7.0-3e3116039c64` — published amd64 image; GitHub Actions updates the immutable release tag. | none (outbound Discord gateway only) | 500m/2000m CPU, 512Mi/1Gi mem | `10001:10001` | `jmusicbot-sa`, no API access | `emptyDir` restored/synced through R2 |
 | `jmusicbot-release-notifier` (Deployment, Recreate) | `ghcr.io/chayzx/jmusicbot-release-notifier:latest` (public image, no pull secret needed) | none | 50m/100m CPU, 64Mi/128Mi mem | root (image default, not forced) | `jmusicbot-release-notifier-sa`, no API access | `jmusicbot-notifier-data` (256Mi) |
 
-**jmusicbot is managed by the GitHub Actions release workflow.** The workflow builds the patched multi-arch image, publishes it to GHCR, applies the immutable release tag, and verifies the health endpoint. The former cron-driven local `scripts/auto-update.sh` authority was retired 2026-09-09 so a local image cannot overwrite a cloud-recoverable deployment.
+**jmusicbot is managed by the GitHub Actions release workflow.** The workflow builds the patched amd64 image, publishes it to GHCR, applies the immutable release tag, and verifies the health endpoint. The former cron-driven local `scripts/auto-update.sh` authority was retired 2026-09-09 so a local image cannot overwrite a cloud-recoverable deployment.
 
 ### `pantry-bot` namespace
 
