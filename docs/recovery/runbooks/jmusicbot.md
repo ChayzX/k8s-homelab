@@ -24,6 +24,12 @@ kubectl -n jmusicbot logs deploy/jmusicbot -c jmusicbot --since=15m \
 `/health` returns 200 only after the bot has logged into Discord; `/live`
 returns 200 while the JVM is alive.
 
+Expected at every start, and harmless:
+`[ConfigUpdater]: Failed to update config file: /musicbot/config.txt: Read-only file system`.
+Upstream MusicBot tries to rewrite `config.txt`, but that file is mounted
+read-only from the `jmusicbot-config-txt` Secret. Change configuration by
+updating the Secret, not inside the pod.
+
 ### R2 freshness
 
 Do not print credentials, signed URLs, or file contents:

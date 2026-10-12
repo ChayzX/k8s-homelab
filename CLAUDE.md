@@ -27,6 +27,18 @@ gh issue comment <number> --body "..."   # Add a progress note
 project. GitHub Issues is the only issue store; the old local Dolt database and
 `.beads/` directories are retired.
 
+## Service placement
+
+- **JMusicBot runs only on minecraftmachine** (home k3s, amd64), by decision on
+  2026-10-11. There is no Oracle standby and no failover-witness lease. Do not
+  recreate the `jmusicbot` namespace on Oracle, re-add the active-active patch,
+  or build multi-arch images for it. See `docs/recovery/runbooks/jmusicbot.md`.
+- The failover witness (GCP VM, relay on minecraftmachine, Oracle tunnels) is
+  still live for Opsbot and Authentik's PostgreSQL failover. Do not remove it
+  as part of JMusicBot or PantryBot cleanup.
+- Any change under `jmusicbot/`, `scripts/patches/` or the JMusicBot workflow
+  triggers a rebuild and redeploy on merge to `main`.
+
 ## Agent Context Profiles
 
 The GitHub Issues guidance is task-tracking guidance, not permission to override repository, user, or orchestrator instructions.

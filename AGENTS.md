@@ -20,6 +20,18 @@ gh issue create --title "..." --body "..."  # File a new issue
 gh issue comment <number> --body "..."   # Add a progress note
 ```
 
+## Service placement
+
+- **JMusicBot runs only on minecraftmachine** (home k3s, amd64), by decision on
+  2026-10-11. There is no Oracle standby and no failover-witness lease. Do not
+  recreate the `jmusicbot` namespace on Oracle, re-add the active-active patch,
+  or build multi-arch images for it. See `docs/recovery/runbooks/jmusicbot.md`.
+- The failover witness (GCP VM, relay on minecraftmachine, Oracle tunnels) is
+  still live for Opsbot and Authentik's PostgreSQL failover. Do not remove it
+  as part of JMusicBot or PantryBot cleanup.
+- Any change under `jmusicbot/`, `scripts/patches/` or the JMusicBot workflow
+  triggers a rebuild and redeploy on merge to `main`.
+
 ## Non-Interactive Shell Commands
 
 **ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
