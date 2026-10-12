@@ -47,7 +47,7 @@ Current cluster health is not the same as architecture readiness. The three k3s 
 |---|---|---|---|
 | Minecraft | Home | Offsite world plus sanitized configuration backup; isolated Paper/Geyser startup verified | Secret reconstruction and controlled promotion |
 | PantryBot | Home or Oracle, one active writer | R2 restore-on-start exists | Writer fencing, generations, restore test |
-| JMusicBot | Home primary; Oracle standby with zero active replicas | R2 file mirror exists and Oracle restore check passed | Explicit promotion only after home writer fencing; Oracle is not primary because of egress constraints; see [`ORACLE-JMUSICBOT-MIGRATION.md`](docs/recovery/ORACLE-JMUSICBOT-MIGRATION.md) |
+| JMusicBot | Home only (minecraftmachine); Oracle standby retired 2026-10-11 | R2 file mirror (restore-on-start) | None: single site by decision |
 | Opsbot | Oracle candidate | Stateless, multi-arch image | Scoped access to both environments and duplicate-work behavior test |
 | Authentik + Postgres | Keep together initially | Database backup and isolated Authentik readiness restore verified | Non-production login and promotion procedure |
 | Operations | Follows Authentik only after recovery proof | Currently tower-local | Emergency access independent of LDAP and promotion procedure |

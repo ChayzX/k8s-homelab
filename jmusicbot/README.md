@@ -10,8 +10,8 @@ Migrates `/home/chase/docker/jmusicbot/docker-compose.yml` (2 services) to k3s.
 
 Only the health endpoint (see "Design notes") is exposed, and only in-cluster
 via the ClusterIP Service; neither workload talks to the Kubernetes API. The
-main bot uses the neutral witness for a resource-scoped Discord lease; the
-release notifier remains single-site and is not part of active-active capacity.
+main bot and the release notifier run only on minecraftmachine (home);
+there is no standby site and no witness lease.
 
 ---
 
@@ -22,7 +22,7 @@ release notifier remains single-site and is not part of active-active capacity.
 kubectl apply -f 00-namespace.yaml
 
 # 1. secrets (imperative, never in git) — see SECRETS.md
-#    creates: jmusicbot-config-txt, jmusicbot-notifier-secrets, jmusicbot-witness
+#    creates: jmusicbot-config-txt, jmusicbot-notifier-secrets, jmusicbot-r2
 
 # 2. identity + notifier config + optional notifier storage
 kubectl apply -f 10-serviceaccounts.yaml
@@ -60,17 +60,13 @@ The Deployment sets `imagePullPolicy: IfNotPresent`. **Do not change this to
 
 The main bot no longer uses the old `jmusicbot-config` PVC. Its `emptyDir` is
 seeded by the `restore-state` init container and synchronized by the `r2-sync`
-sidecar under `r2:pantry-bot-backups/jmusicbot/`. This makes the main bot
-portable between nodes and independent clusters while retaining one-writer
-semantics through `Recreate` and the migration runbook's fencing step.
+sidecar under `r2:pantry-bot-backups/jmusicbot/`. The pod is pinned to
+minecraftmachine and uses `Recreate`, so it is the only writer of that prefix;
+R2 doubles as the backup and the restore source after a rebuild.
 
-Before starting a new environment, verify that `jmusicbot-r2` exists, that the
-R2 prefix contains a retained generation, and that both clusters have the
-resource-scoped `jmusicbot-witness` Secret. Both main-bot Deployments may be
-running, but only the witness lease holder may connect to Discord; the other
-pod waits without opening a Discord session. Do not copy state files from a
-live pod or place R2 credentials in the repository. The first Oracle cutover
-procedure is documented in `docs/recovery/ORACLE-JMUSICBOT-MIGRATION.md`.
+Before rebuilding the node, verify that `jmusicbot-r2` exists and that the R2
+prefix contains a retained generation. Do not copy state files from a live pod
+or place R2 credentials in the repository.
 
 ### C. Deployment authority
 

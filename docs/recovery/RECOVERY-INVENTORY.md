@@ -158,14 +158,10 @@ separated. The home cluster now has two nodes; ChaseBot does not need Tailscale
 for Kubernetes management, while Oracle's independent server uses the
 Tailscale overlay.
 
-The first independent-environment migration procedure is
-`docs/recovery/ORACLE-JMUSICBOT-MIGRATION.md`. It deliberately selects
-JMusicBot before Opsbot or stateful services and requires writer fencing,
-retained R2 state, independent Oracle k3s, and a tested rollback. On
-2026-09-10 Oracle was converted from a home-cluster agent into an independent
-single-server k3s site. The current controlled posture has Oracle's JMusicBot
-Deployment at 1/1 as the witness lease holder and Home's Deployment at 0/0;
-the Home release notifier remains separate. An isolated R2 restore Job
+On 2026-09-10 Oracle was converted from a home-cluster agent into an
+independent single-server k3s site. JMusicBot's Oracle standby was retired on
+2026-10-11: JMusicBot runs only on minecraftmachine, with state restored from
+and synced to R2. An isolated R2 restore Job
 recovered the two retained state files without starting a second writer.
 Ownership handoff, duplicate-session protection, egress/audio behavior, and
 return-home evidence remain open in homelab Issue #262.

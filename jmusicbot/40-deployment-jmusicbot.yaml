@@ -59,6 +59,9 @@ spec:
         homelab/config-revision: "1"
     spec:
       serviceAccountName: jmusicbot-sa
+      # JMusicBot lives only on minecraftmachine (home, amd64).
+      nodeSelector:
+        kubernetes.io/hostname: minecraftmachine
       # Zero Kubernetes API access required. No token is projected.
       automountServiceAccountToken: false
       # java is PID 1 inside this image (verified: `docker top` shows only the
@@ -137,38 +140,8 @@ spec:
           # tag on each approved release; keep this value usable for restore.
           # `potok` adds ytpotoken/ytvisitordata support (Web client poToken,
           # see scripts/patches/jmusicbot-potoken.patch) — k8s-homelab#41.
-          image: ghcr.io/chayzx/jmusicbot:upstream-0.7.0-3e3116039c64
+          image: ghcr.io/chayzx/jmusicbot:upstream-0.7.0-e35b8b6790da
           imagePullPolicy: IfNotPresent  # see header note 1 — do not change
-          # The active-active image requires the site-scoped witness settings.
-          # Keep them in the declarative workload so a CI image rollout cannot
-          # silently remove fencing from the live process.
-          envFrom:
-            - secretRef:
-                name: jmusicbot-witness
-          # Both independent sites may run this Deployment, but only the site
-          # holding the resource-scoped witness lease may open Discord. The
-          # other pod waits without creating a JDA session until the lease is
-          # available. Keep these as container env (not PodSpec fields).
-          env:
-            - name: JMUSICBOT_SITE
-              valueFrom:
-                secretKeyRef:
-                  name: jmusicbot-witness
-                  key: JMUSICBOT_SITE
-            - name: JMUSICBOT_WITNESS_URL
-              valueFrom:
-                secretKeyRef:
-                  name: jmusicbot-witness
-                  key: JMUSICBOT_WITNESS_URL
-            - name: JMUSICBOT_WITNESS_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: jmusicbot-witness
-                  key: JMUSICBOT_WITNESS_SECRET
-            - name: JMUSICBOT_WITNESS_RESOURCE
-              value: "jmusicbot"
-            - name: JMUSICBOT_LEASE_SECONDS
-              value: "30"
           # Health endpoint: a JDK-built-in HttpServer on
           # 9091 in the patched image. /health returns 200 only after the bot
           # has logged into Discord; /live returns 200 whenever the JVM is
@@ -247,31 +220,28 @@ spec:
           # change rarely (serversettings.json on a config change,
           # youtubetoken.txt on OAuth refresh) -- a 5-minute sync loop is
           # more than tight enough and far simpler than an inotify watcher.
-          # Only the Java owner writes .jmusicbot-lease-owner after acquiring
-          # the witness lease. A standby therefore restores but never syncs
-          # its stale state back into the shared R2 prefix. The heartbeat is
-          # written outside the read-only state volume so its object
-          # LastModified advances even when mutable files do not change. It is
-          # lease-gated, proves a completed sync cycle, and is never restored
-          # into bot state or treated as authority.
+          # JMusicBot runs on minecraftmachine only, so this pod is the sole
+          # writer of the R2 prefix. The excluded .jmusicbot-lease-owner is a
+          # leftover marker from the retired home/Oracle setup. The heartbeat
+          # is written outside the read-only state volume so its object
+          # LastModified advances even when mutable files do not change; it
+          # proves a completed sync cycle and is never restored into bot state.
           command:
             - sh
             - -c
             - |
               while true; do
-                if [ -f /musicbot/.jmusicbot-lease-owner ]; then
-                  rclone sync /musicbot r2:pantry-bot-backups/jmusicbot/ \
-                    --exclude 'config.txt' --exclude 'config.txt.bak*' \
-                    --exclude '.jmusicbot-lease-owner' \
-                    --exclude '.jmusicbot-r2-heartbeat' \
-                    --config=/dev/null --timeout=2m --contimeout=15s \
-                    --retries=2 --low-level-retries=5 --quiet && \
-                  date -u +%Y-%m-%dT%H:%M:%SZ > /tmp/.jmusicbot-r2-heartbeat && \
-                  rclone copyto /tmp/.jmusicbot-r2-heartbeat \
-                    r2:pantry-bot-backups/jmusicbot/.jmusicbot-r2-heartbeat \
-                    --config=/dev/null --timeout=2m --contimeout=15s \
-                    --retries=2 --low-level-retries=5 --s3-no-check-bucket --quiet
-                fi
+                rclone sync /musicbot r2:pantry-bot-backups/jmusicbot/ \
+                  --exclude 'config.txt' --exclude 'config.txt.bak*' \
+                  --exclude '.jmusicbot-lease-owner' \
+                  --exclude '.jmusicbot-r2-heartbeat' \
+                  --config=/dev/null --timeout=2m --contimeout=15s \
+                  --retries=2 --low-level-retries=5 --quiet && \
+                date -u +%Y-%m-%dT%H:%M:%SZ > /tmp/.jmusicbot-r2-heartbeat && \
+                rclone copyto /tmp/.jmusicbot-r2-heartbeat \
+                  r2:pantry-bot-backups/jmusicbot/.jmusicbot-r2-heartbeat \
+                  --config=/dev/null --timeout=2m --contimeout=15s \
+                  --retries=2 --low-level-retries=5 --s3-no-check-bucket --quiet
                 sleep 300
               done
           env: *r2-env
@@ -282,10 +252,10 @@ spec:
           resources:
             requests:
               cpu: 10m
-              memory: 32Mi
+              memory: 64Mi
             limits:
               cpu: 100m
-              memory: 64Mi
+              memory: 256Mi
           securityContext:
             runAsUser: 10001
             runAsGroup: 10001
