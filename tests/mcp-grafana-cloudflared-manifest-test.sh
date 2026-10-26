@@ -11,7 +11,7 @@ grep -q '^                  name: mcp-grafana-cloudflared-tunnel-token$' "$manif
 grep -q '^                  key: TUNNEL_TOKEN$' "$manifest"
 grep -q '^            - name: TUNNEL_TRANSPORT_PROTOCOL$' "$manifest"
 grep -q '^              value: http2$' "$manifest"
-grep -q 'cloudflare/cloudflared:2026.10.0@sha256:' "$manifest"
+grep -q 'cloudflare/cloudflared:2026.10.4@sha256:' "$manifest"
 grep -q '^      automountServiceAccountToken: false$' "$manifest"
 grep -q '^            allowPrivilegeEscalation: false$' "$manifest"
 
