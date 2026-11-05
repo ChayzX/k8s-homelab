@@ -27,13 +27,14 @@ No source changes are required for the four repositories without default-branch 
 - Work directories are bounded emptyDir volumes; no persistent claims, host mounts, host Docker socket, host network, or Kubernetes service-account token are supplied to workers.
 - Standard workers disallow privilege escalation and drop all capabilities. VTube alone allows the official image's container-local sudo because its existing workflow installs cross-compilers. Its pre-job hook installs native build prerequisites. This does not grant host mounts or privileged-container mode.
 - Jobs have a1hour pod deadline. Repositories should set smaller per-job workflow timeouts as appropriate.
-- Before executing a job, the hook fails if root free space is below3GiB. VTube requires7.5GiB free before its build starts so its4.5GiB storage allowance preserves a3GiB reserve. Worker storage limits do not bound cached container images or production database growth. Oracle's fixed45GB filesystem must be monitored; no disk expansion or blanket cache/data cleanup is part of this setup.
+- Before executing a job, the hook fails if root free space is below3GiB. VTube requires7.5GiB free before its build starts to start with3GiB headroom beyond its4.5GiB storage allowance. This is a preflight check, not a reserved filesystem allocation; kubelet enforcement is asynchronous and other workloads can consume space. Worker storage limits do not bound cached container images or production database growth. Oracle's fixed45GB filesystem must be monitored; no disk expansion or blanket cache/data cleanup is part of this setup.
+- Worker network policy permits cluster DNS and public IPv4 HTTP/HTTPS; private address ranges, cloud metadata, and incoming connections are denied. NetworkPolicy does not provide a separate VM boundary or guarantee isolation from the hosting node.
 - ARC controller plus eight idle listeners remain running. They used about83MiB combined during rollout; workers scale to zero.
 - The existing Oracle GitHub CLI login is held in `arc-runners/oracle-ci-github`. No token value is in these files or Helm values. Keep it valid; a dedicated repository-scoped credential/App is preferred when arranging long-term credential rotation.
 
 ## Source files
 
-`values-*.json` are Helm values; JSON is valid YAML. `namespace.json`, `control-quota.json`, `quota.json`, and `hooks.json` are Kubernetes resources. `controller-values.yaml` configures the shared controller. Do not apply the entire directory as Kubernetes manifests because values files are not Kubernetes objects.
+`values-*.json` are Helm values; JSON is valid YAML. `namespace.json`, `control-quota.json`, `quota.json`, `hooks.json`, and `network-policy.json` are Kubernetes resources. `controller-values.yaml` configures the shared controller. Do not apply the entire directory as Kubernetes manifests because values files are not Kubernetes objects.
 
 Current on-host files: `/home/ubuntu/arc-oracle-fleet` on SSH alias `oracle`. Helm binary and pinned chart archives are under `/home/ubuntu/arc-oracle-pilot`. The old `arc-test` pilot release/namespace was retired after fleet routing passed; its workflow in ChayzX/test now selects the fleet labels. Old pilot quota files are superseded by this directory's control-quota.json.
 
@@ -44,7 +45,7 @@ Use Helm3 and the existing administrative kubeconfig. Create the GitHub secret s
 ```bash
 helm_bin=/home/ubuntu/arc-oracle-pilot/bin/helm
 sudo kubectl apply --server-side -f namespace.json
-sudo kubectl apply --server-side -f control-quota.json -f quota.json -f hooks.json
+sudo kubectl apply --server-side -f control-quota.json -f quota.json -f hooks.json -f network-policy.json
 sudo "$helm_bin" upgrade --install arc-controller \
   oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller \
   --version 0.15.1 --namespace arc-systems --create-namespace \
