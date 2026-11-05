@@ -132,7 +132,8 @@ be applied with Oracle's kubeconfig or directly on that host. Apply
 `oracle-prometheus-config.yaml`, and `oracle-prometheus.yaml`. No Grafana
 Cloud credential is needed (Grafana Cloud is no longer used). The Oracle
 collector uses `site=oracle` and `cluster=pantry-bot-oracle` labels and
-remote-writes to the home Prometheus through `prometheus-write-gateway.yaml`,
+remote-writes to the home Prometheus through the write-gateway sidecar in
+`windows-alloy-metrics-cloudflared.yaml`,
 so its metrics appear in the self-hosted Grafana next to the home cluster's.
 It has no local Grafana or Loki dependency. Oracle is where PantryBot runs
 (Oracle-only since 2026-09-25).
@@ -374,5 +375,6 @@ the same reason. Full setup: `MCP-GRAFANA-SETUP.md`. Required Secrets:
 Grafana, Prometheus and Loki run in this `observability` namespace on
 minecraftmachine and are the only observability stack in use. Grafana Cloud is
 no longer used anywhere. The Oracle site's Prometheus collector remote-writes
-to the home Prometheus (`prometheus-write-gateway.yaml`), and Alloy on both
+to the home Prometheus (the write-gateway sidecar in
+`windows-alloy-metrics-cloudflared.yaml`), and Alloy on both
 sites writes logs to the local Loki.
