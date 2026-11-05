@@ -106,7 +106,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: relay
-          image: python:3.12-alpine
+          image: python:3.12-alpine@sha256:e6dae589c1c05976188fd3bd019afd091445fc533ed2ea29001beddc7368a9c8
           imagePullPolicy: IfNotPresent
           # Bind all interfaces on the host-networked node. The Service and
           # node firewall keep this private; loopback binding would prevent

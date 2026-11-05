@@ -48,7 +48,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: basebackup
-          image: postgres:17.10-bookworm
+          image: postgres:17.11-bookworm@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
           envFrom:
             - secretRef:
                 name: auth-postgresql-standby
@@ -72,7 +72,7 @@ spec:
               mountPath: /var/lib/postgresql/data
       containers:
         - name: postgres
-          image: postgres:17.10-bookworm
+          image: postgres:17.11-bookworm@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
           args:
             - -c
             - hot_standby=on

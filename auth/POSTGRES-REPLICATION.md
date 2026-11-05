@@ -95,3 +95,17 @@ On home, query `pg_stat_replication` and `pg_replication_slots` as the
 On Oracle, expected state is `pg_is_in_recovery() = true`, a streaming WAL
 receiver, and matching receive/replay LSNs. A healthy standby alone does not
 authorize routing or promotion.
+
+## Role label on the home writer
+
+`auth-postgresql-home-primary` and `auth-postgresql-transport` select
+`authentik.postgres/role=primary`. The home StatefulSet template now carries
+that label while home is the writable authority, because a template that said
+`standby` left a hand-labeled pod with zero Service endpoints whenever it was
+recreated. That took Authentik and Oracle replication down for three minutes on
+2026-11-04 during a routine PostgreSQL image update.
+
+Before reseeding home as a return standby, set the labels in
+`home-postgresql-return.yaml` back to `standby` and apply them first. Otherwise
+the Services route writers to a read-only standby. The label does not decide
+authority: check `pg_is_in_recovery()` and follow the promotion runbook.

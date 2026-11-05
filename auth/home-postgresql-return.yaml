@@ -1,3 +1,9 @@
+# Home is the current writable authority, so this manifest labels the pod
+# authentik.postgres/role=primary. The auth-postgresql-home-primary and
+# auth-postgresql-transport Services select on that label; a pod template that
+# says "standby" drops them to zero endpoints whenever the pod is recreated.
+# Set all three labels back to "standby" BEFORE reseeding this pod as a return
+# standby (see POSTGRES-REPLICATION.md); promotion then relabels the pod.
 # Fresh Home return standby for Authentik.
 # This StatefulSet uses a new PVC and must never reuse the fenced primary PVC.
 # The Secret is provisioned out of band from the current Oracle authority.
@@ -9,7 +15,7 @@ metadata:
   labels:
     app.kubernetes.io/name: auth-postgresql-home-return
     app.kubernetes.io/part-of: authentik
-    authentik.postgres/role: standby
+    authentik.postgres/role: primary
 spec:
   selector:
     app.kubernetes.io/name: auth-postgresql-home-return
@@ -26,7 +32,7 @@ metadata:
   labels:
     app.kubernetes.io/name: auth-postgresql-home-return
     app.kubernetes.io/part-of: authentik
-    authentik.postgres/role: standby
+    authentik.postgres/role: primary
 spec:
   serviceName: auth-postgresql-home-return
   replicas: 1
@@ -38,7 +44,7 @@ spec:
       labels:
         app.kubernetes.io/name: auth-postgresql-home-return
         app.kubernetes.io/part-of: authentik
-        authentik.postgres/role: standby
+        authentik.postgres/role: primary
     spec:
       nodeSelector:
         kubernetes.io/hostname: minecraftmachine
@@ -48,7 +54,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: basebackup
-          image: postgres:17.10-bookworm
+          image: postgres:17.11-bookworm@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
           envFrom:
             - secretRef:
                 name: auth-postgresql-home-return
@@ -72,7 +78,7 @@ spec:
               mountPath: /var/lib/postgresql/data
       containers:
         - name: postgres
-          image: postgres:17.10-bookworm
+          image: postgres:17.11-bookworm@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
           args:
             - -c
             - hot_standby=on

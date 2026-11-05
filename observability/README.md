@@ -290,13 +290,13 @@ these by hand, with the corresponding old container stopped and the new
 pod scaled to 0, immediately after copying data into each PVC:
 
 ```bash
-# Loki  (grafana/loki:3.3.2 runs as 10001:10001)
+# Loki  (grafana/loki:3.7.9 runs as 10001:10001)
 LOKI_PV=$(kubectl -n observability get pvc loki-data -o jsonpath='{.spec.volumeName}')
 LOKI_DIR=$(kubectl get pv "$LOKI_PV" -o jsonpath='{.spec.local.path}')
 sudo cp -a /home/chase/docker/observability/loki-data/. "$LOKI_DIR"/
 sudo chown -R 10001:10001 "$LOKI_DIR"
 
-# Prometheus  (prom/prometheus:v3.1.0 runs as 65534:65534, "nobody")
+# Prometheus  (prom/prometheus:v3.15.1 runs as 65534:65534, "nobody")
 PROM_PV=$(kubectl -n observability get pvc prometheus-data -o jsonpath='{.spec.volumeName}')
 PROM_DIR=$(kubectl get pv "$PROM_PV" -o jsonpath='{.spec.local.path}')
 sudo cp -a /home/chase/docker/observability/prometheus-data/. "$PROM_DIR"/
