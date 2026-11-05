@@ -5,7 +5,7 @@
 # is deliberately disabled here; Oracle must not create a second writer.
 global:
   image:
-    tag: "2026.5.8"
+    tag: "2026.8.5"
 
 authentik:
   enabled: true
