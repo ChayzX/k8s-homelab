@@ -29,6 +29,6 @@ download_plugin() {
 
 # Geyser 2.11.1 build 1219; Floodgate 2.2.5 build 140.
 download_plugin geyser 2.11.1 1219 spigot Geyser-Spigot.jar \
-    855e38736d67c9ee8354758a0c4ca881b1f329c681be206189c7074667dad8df
+    6c090fac496d8a8b9f51040eb39dc350a5f4e5384e9c76bc0efdd185ba1c9e67
 download_plugin floodgate 2.2.5 140 spigot floodgate-spigot.jar \
-    9f436c42ffd8b1091a437d7a4e16f82181b9d5314f8b1732dfa9d5a4fffb19fe
+    21570aff9ce17d6983928e8552777760e1ede5050026b04c686b0ae112e6fd7e
