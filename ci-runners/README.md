@@ -81,6 +81,12 @@ gh workflow run oracle-arc-pilot.yml --repo ChayzX/test --ref main -f pilot_id=f
 gh run list --repo ChayzX/test --workflow oracle-arc-pilot.yml --limit 3
 ```
 
+## Rollout validation
+
+Real workflows passed on Oracle: [fleet routing](https://github.com/ChayzX/test/actions/runs/41969138768), [homelab security scan after network policy](https://github.com/ChayzX/k8s-homelab/actions/runs/42005905873), [Python CI](https://github.com/ChayzX/ai-tiktok-agent/actions/runs/41969534201), [AIOS security scan](https://github.com/ChayzX/aios/actions/runs/41969740883), and [VTube Rust plus controls build/artifact upload](https://github.com/ChayzX/vtube-input-bridge/actions/runs/42005981751). Windows and release publishing were skipped in the VTube validation.
+
+VTube needed a source compatibility fix: discard job-owned download caches and compiler intermediates after their final use, and move the unpacked Electron bundle into the final package instead of copying it. The successful run sampled a4259.81MiB peak against4608Mi, with at least5.2GiB host free; after cleanup the worker count returned to zero and free disk to9.4GiB. The margin is modest; future dependency growth can fail the bounded job and requires investigation. This is validation of the existing workload, not an unlimited build-capacity promise.
+
 ## MinecraftMachine retirement and rollback
 
 All nine `actions.runner.ChayzX-*` services on MinecraftMachine were drained, stopped, and disabled. Registrations and directories were retained. Their custom labels were changed to `oracle-migration-draining` so an accidental service start cannot take normal homelab-ci work.
