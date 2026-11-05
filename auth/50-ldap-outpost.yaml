@@ -50,7 +50,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: ldap-outpost
-          image: ghcr.io/goauthentik/ldap:2026.5.6
+          image: ghcr.io/goauthentik/ldap:2026.5.8
           ports:
             - name: ldap
               containerPort: 3389

@@ -43,7 +43,7 @@ spec:
       securityContext: {seccompProfile: {type: RuntimeDefault}}
       containers:
       - name: nginx
-        image: nginxinc/nginx-unprivileged:1.27-alpine
+        image: nginxinc/nginx-unprivileged:1.31-alpine@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e
         ports: [{containerPort: 8080, name: http}]
         readinessProbe: {httpGet: {path: /healthz, port: 8080}, periodSeconds: 10}
         resources:

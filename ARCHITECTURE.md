@@ -147,10 +147,10 @@ migrates; don't stop it early.
 
 | Workload | Image (pinned) | Ports | Requests/Limits | UID | SA (API access?) | PVC |
 |---|---|---|---|---|---|---|
-| `loki` (Deployment, Recreate) | `grafana/loki:3.3.2` | 3100 (http), 9095 (grpc) | 50m/500m CPU, 128Mi/512Mi mem | `10001:10001` | `loki-sa`, no | `loki-data` (20Gi) |
-| `prometheus` (Deployment, Recreate) | `prom/prometheus:v3.1.0` | 9090 | 100m/1000m CPU, 512Mi/1Gi mem | `65534:65534` (nobody) | `prometheus-sa`, **yes** (`kubernetes_sd_configs`, scrapes kubelet/cAdvisor) | `prometheus-data` (20Gi) |
+| `loki` (Deployment, Recreate) | `grafana/loki:3.7.9` | 3100 (http), 9095 (grpc) | 50m/500m CPU, 128Mi/512Mi mem | `10001:10001` | `loki-sa`, no | `loki-data` (20Gi) |
+| `prometheus` (Deployment, Recreate) | `prom/prometheus:v3.15.1` | 9090 | 100m/1000m CPU, 512Mi/1Gi mem | `65534:65534` (nobody) | `prometheus-sa`, **yes** (`kubernetes_sd_configs`, scrapes kubelet/cAdvisor) | `prometheus-data` (20Gi) |
 | `grafana` (Deployment, Recreate) | `grafana/grafana:11.4.0` | 3000→3002 externally | 50m/500m CPU, 128Mi/512Mi mem | `472:472` | `grafana-sa`, no | `grafana-data` (2Gi) |
-| `alloy-logs` (**DaemonSet**, not Deployment — log shipper needs one pod per node) | `grafana/alloy:v1.8.3` | 12345 | 50m/200m CPU, 64Mi/256Mi mem | `10001:10001` (non-root) | `alloy-logs-sa`, **yes** (`kubernetes_sd_configs`, role: pod) | none (emptyDir for data) |
+| `alloy-logs` (**DaemonSet**, not Deployment — log shipper needs one pod per node) | `grafana/alloy:v1.21.3` | 12345 | 50m/200m CPU, 64Mi/256Mi mem | `10001:10001` (non-root) | `alloy-logs-sa`, **yes** (`kubernetes_sd_configs`, role: pod) | none (emptyDir for data) |
 | `kube-state-metrics` (Deployment, RollingUpdate — stateless) | `registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.13.0` | 8080, 8081 | 10m/100m CPU, 32Mi/128Mi mem | `65534:65534` | `kube-state-metrics-sa`, **yes** (lists/watches nearly every object type, read-only) | none |
 
 **Historical note — Uptime Kuma (decommissioned 2026-09-06):** the following

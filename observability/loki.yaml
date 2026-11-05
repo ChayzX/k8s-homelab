@@ -3,7 +3,7 @@
 # ============================================================
 # MANUAL STEP REQUIRED AFTER COPYING DATA INTO THE PVC
 # ============================================================
-# The grafana/loki:3.3.2 image runs as UID/GID 10001:10001. The existing
+# The grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28 image runs as UID/GID 10001:10001. The existing
 # data directory (/home/chase/docker/observability/loki-data) is owned
 # 1000:1000. This "works" under Docker Desktop only because virtiofs
 # fakes ownership; bare-metal k3s enforces it and Loki will crash-loop on
@@ -98,7 +98,7 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: loki
-          image: grafana/loki:3.3.2
+          image: grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28
           imagePullPolicy: IfNotPresent
           args:
             - -config.file=/etc/loki/loki-config.yaml

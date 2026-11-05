@@ -3,7 +3,7 @@
 # ============================================================
 # MANUAL STEP REQUIRED AFTER COPYING DATA INTO THE PVC
 # ============================================================
-# prom/prometheus:v3.1.0 runs as UID/GID 65534:65534 ("nobody"). The
+# prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2 runs as UID/GID 65534:65534 ("nobody"). The
 # existing data directory
 # (/home/chase/docker/observability/prometheus-data) is owned 1000:1000.
 # Bare-metal k3s enforces that; Prometheus will fail to open the WAL.
@@ -145,7 +145,7 @@ spec:
       terminationGracePeriodSeconds: 120
       containers:
         - name: prometheus
-          image: prom/prometheus:v3.1.0
+          image: prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
           imagePullPolicy: IfNotPresent
           args:
             - --config.file=/etc/prometheus/prometheus.yml

@@ -2,7 +2,7 @@
 # Do not deploy this while Oracle PostgreSQL reports recovery mode.
 global:
   image:
-    tag: "2026.5.6"
+    tag: "2026.5.8"
 
 authentik:
   enabled: true
