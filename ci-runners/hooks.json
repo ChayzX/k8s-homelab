@@ -1,0 +1,12 @@
+{
+  "apiVersion": "v1",
+  "kind": "ConfigMap",
+  "metadata": {
+    "name": "oracle-ci-hooks",
+    "namespace": "arc-runners"
+  },
+  "data": {
+    "pre-job.sh": "#!/bin/bash\nset -euo pipefail\navailable_kib=$(df -Pk / | awk \"NR==2 {print \\$4}\")\nif (( available_kib < 3145728 )); then\n  echo \"Oracle CI paused: fewer than 3 GiB free on root filesystem.\" >&2\n  exit 1\nfi\necho \"Oracle CI disk preflight passed; execution is ARM64, ephemeral, one fleet worker at a time.\"\n",
+    "pre-job-build.sh": "#!/bin/bash\nset -euo pipefail\n/opt/runner-hooks/pre-job.sh\navailable_kib=$(df -Pk / | awk \"NR==2 {print \\$4}\")\nif (( available_kib < 7864320 )); then\n  echo \"Oracle build refused: VTube needs 7.5 GiB free to retain a 3 GiB reserve.\" >&2\n  exit 1\nfi\nsudo apt-get update -qq\nsudo apt-get install -y --no-install-recommends build-essential pkg-config libssl-dev\nsudo apt-get clean\n"
+  }
+}
