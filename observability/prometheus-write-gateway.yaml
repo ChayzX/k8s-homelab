@@ -1,68 +1,41 @@
-# Remote-write ingress for Home Prometheus (#191). This is the metrics path
-# for Oracle: Oracle is an independent single-node k3s cluster where PantryBot
-# runs, and its Prometheus (oracle-prometheus-config.yaml) pushes every series
-# here, labelled site=oracle, so the self-hosted Grafana on the home cluster
-# shows PantryBot and Oracle node data. Only POST /api/v1/write is forwarded;
-# everything else (queries, admin, /-/quit from --web.enable-lifecycle) is
-# refused, so exposing a NodePort does not expose Prometheus itself.
+# Config for the write-gateway sidecar in
+# windows-alloy-metrics-cloudflared.yaml, which receives metrics and logs from
+# outside the cluster. It forwards only POST /api/v1/write and
+# POST /loki/api/v1/push; queries, admin paths and /-/quit are refused.
 # Requires --web.enable-remote-write-receiver on the Prometheus container.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prometheus-write-gateway
   namespace: observability
+  labels:
+    app.kubernetes.io/name: prometheus-write-gateway
+    app.kubernetes.io/part-of: observability
 data:
   default.conf: |
     server {
-      listen 8080;
+      listen 9090;
       client_max_body_size 32m;
+
       location = /api/v1/write {
         limit_except POST { deny all; }
-        proxy_pass http://prometheus.observability.svc.cluster.local:9090;
+        proxy_pass http://prometheus-origin.observability.svc.cluster.local:9090/api/v1/write;
         proxy_http_version 1.1;
+        proxy_request_buffering off;
       }
-      location = /healthz { return 200 "ok\n"; }
-      location / { return 403; }
+
+      location = /loki/api/v1/push {
+        limit_except POST { deny all; }
+        proxy_pass http://loki.observability.svc.cluster.local:3100/loki/api/v1/push;
+        proxy_http_version 1.1;
+        proxy_request_buffering off;
+      }
+
+      location / { return 404; }
     }
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: prometheus-write-gateway
-  namespace: observability
-  labels: {app.kubernetes.io/name: prometheus-write-gateway}
-spec:
-  replicas: 1
-  selector:
-    matchLabels: {app.kubernetes.io/name: prometheus-write-gateway}
-  template:
-    metadata:
-      labels: {app.kubernetes.io/name: prometheus-write-gateway}
-    spec:
-      nodeSelector: {kubernetes.io/hostname: minecraftmachine}
-      securityContext: {seccompProfile: {type: RuntimeDefault}}
-      containers:
-      - name: nginx
-        image: nginxinc/nginx-unprivileged:1.31-alpine@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e
-        ports: [{containerPort: 8080, name: http}]
-        readinessProbe: {httpGet: {path: /healthz, port: 8080}, periodSeconds: 10}
-        resources:
-          requests: {cpu: 10m, memory: 16Mi}
-          limits: {memory: 64Mi}
-        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true}
-        volumeMounts:
-        - {name: conf, mountPath: /etc/nginx/conf.d}
-        - {name: tmp, mountPath: /tmp}
-      volumes:
-      - {name: conf, configMap: {name: prometheus-write-gateway}}
-      - {name: tmp, emptyDir: {}}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: prometheus-write-gateway
-  namespace: observability
-spec:
-  type: NodePort
-  selector: {app.kubernetes.io/name: prometheus-write-gateway}
-  ports: [{name: http, port: 8080, targetPort: 8080, nodePort: 31090}]
+
+    server {
+      listen 8081;
+      location = /healthz { return 200 "ok\n"; }
+      location / { return 404; }
+    }

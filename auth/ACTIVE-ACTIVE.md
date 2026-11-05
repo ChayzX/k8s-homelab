@@ -80,8 +80,10 @@ post-promotion routing remain required.
 
 ## Current deployment boundary
 
-The repository contract targets two replicas with hostname anti-affinity for
-the application and LDAP tiers. The live cross-site deployment provides
+The LDAP outpost manifest targets one replica because home and Oracle are
+each single-node clusters, where a second replica with hostname anti-affinity
+cannot schedule. The application tier targets two replicas with hostname
+anti-affinity. The live cross-site deployment provides
 Authentik server, worker, and LDAP capacity in both home and Oracle, using the
 same configuration and the home database authority. Same-site replica density
 is a separate capacity concern: home currently runs one server, two workers,

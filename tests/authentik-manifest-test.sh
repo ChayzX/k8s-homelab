@@ -10,7 +10,7 @@ done
 
 grep -q '^apiVersion: apps/v1$' "$manifest"
 grep -q '^  namespace: auth$' "$manifest"
-grep -q '^  replicas: 2$' "$manifest"
+grep -q '^  replicas: 1$' "$manifest"
 grep -q '^      automountServiceAccountToken: false$' "$manifest"
 grep -q '^          image: ghcr.io/goauthentik/ldap:2026.8.5$' "$manifest"
 grep -q '^                  name: ldap-outpost-token$' "$manifest"

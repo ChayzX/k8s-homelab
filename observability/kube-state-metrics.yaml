@@ -65,6 +65,10 @@ rules:
       - cronjobs
       - jobs
     verbs: ["list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources:
+      - endpointslices
+    verbs: ["list", "watch"]
   - apiGroups: ["autoscaling"]
     resources:
       - horizontalpodautoscalers
@@ -88,6 +92,10 @@ rules:
     resources:
       - mutatingwebhookconfigurations
       - validatingwebhookconfigurations
+      - validatingadmissionpolicies
+      - validatingadmissionpolicybindings
+      - mutatingadmissionpolicies
+      - mutatingadmissionpolicybindings
     verbs: ["list", "watch"]
   - apiGroups: ["certificates.k8s.io"]
     resources:

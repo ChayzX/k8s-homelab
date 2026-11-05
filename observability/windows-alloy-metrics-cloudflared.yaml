@@ -93,3 +93,40 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
+        - name: write-gateway
+          image: nginxinc/nginx-unprivileged:1.31-alpine@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: write
+              containerPort: 9090
+              protocol: TCP
+            - name: gateway-health
+              containerPort: 8081
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: gateway-health
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: write-gateway-config
+              mountPath: /etc/nginx/conf.d
+            - name: write-gateway-tmp
+              mountPath: /tmp
+      volumes:
+        - name: write-gateway-config
+          configMap:
+            name: prometheus-write-gateway
+        - name: write-gateway-tmp
+          emptyDir: {}
