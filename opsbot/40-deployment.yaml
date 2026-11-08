@@ -82,7 +82,7 @@ spec:
           # gateway opens and stale replicas fail closed. apply-manifest in
           # opsbot-deploy.yml rolls out THIS image before `set image`, so a
           # stale pin here is a real (if brief) downgrade -- keep it current.
-          image: ghcr.io/chayzx/opsbot:c8a61977cd4fd52444ad58bad480be80b41fe159@sha256:31bb773bb3bfdfd75a70ccaf5c10050c0058ef250ac69b04fc40867bb8cb8b1f
+          image: ghcr.io/chayzx/opsbot:2684e0e5b402f9b313a8c6cb77cc80e90c4182e9
           # Keep the pull policy explicit while the manifest digest provides
           # immutable content and multi-architecture resolution.
           imagePullPolicy: Always
