@@ -22,6 +22,14 @@ permissions:
   contents: read
 
 # Serialize production deploys so an older rollout cannot finish after a newer one.
+concurrency:
+  group: opsbot-deploy
+  cancel-in-progress: false
+
+env:
+  # Portainer's opsbot workflow watches this branch and is the only deployer.
+  DEPLOY_BRANCH: deploy/portainer-home
+
 jobs:
   publish-image:
     name: 1 - Build and publish (merge deploy)
@@ -76,145 +84,101 @@ jobs:
         run: |
           { echo '## Opsbot CI/CD pipeline'; echo ''; echo '### Build and publish: ${{ steps.publish.outcome }}'; echo "- Digest: \`${{ steps.publish.outputs.digest || 'unavailable' }}\`"; echo '### Live deployment: ▶ continuing (merge to main approved deployment)'; } >> "$GITHUB_STEP_SUMMARY"
 
-  apply-manifest:
-    name: 2 - Apply deployment manifest (merge deploy)
+  promote:
+    name: 2 - Promote image to Portainer deploy branch
     needs: publish-image
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - name: Connect to cluster
-        env:
-          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
-          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_OPSBOT }}
-        run: |
-          set -euo pipefail
-          test -n "$TUNNEL_SERVICE_TOKEN_ID"
-          test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
-          test -n "$KUBE_CONFIG_B64"
-          curl -sSL -o cloudflared "https://github.com/cloudflare/cloudflared/releases/download/2026.10.7/cloudflared-linux-amd64"
-          echo "1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872  cloudflared" | sha256sum -c -
-          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
-          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
-          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/opsbot.kubeconfig"
-          chmod 600 "$RUNNER_TEMP/opsbot.kubeconfig"
-          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" scripts/assert-kube-target.sh home
-          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl apply -f opsbot/40-deployment.yaml -n opsbot
-
-  restart-opsbot:
-    name: 3 - Deploy image and restart pod (merge deploy)
-    needs: apply-manifest
-    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
-      previous_pod: ${{ steps.restart.outputs.previous_pod }}
+      previous_image: ${{ steps.promote.outputs.previous_image }}
+      changed: ${{ steps.promote.outputs.changed }}
     steps:
-      # Needed for scripts/assert-kube-target.sh. Without it this job failed
-      # with exit 127 (2026-09-19 and 2026-09-29), AFTER apply-manifest had
-      # already rolled the Deployment to the manifest's pinned image.
       - uses: actions/checkout@v5
-      - name: Connect and restart pod
-        id: restart
-        env:
-          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
-          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_OPSBOT }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          test -n "$TUNNEL_SERVICE_TOKEN_ID"
-          test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
-          test -n "$KUBE_CONFIG_B64"
-          test -n "$IMAGE_TAG"
-          curl -sSL -o cloudflared "https://github.com/cloudflare/cloudflared/releases/download/2026.10.7/cloudflared-linux-amd64"
-          echo "1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872  cloudflared" | sha256sum -c -
-          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
-          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
-          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/opsbot.kubeconfig"
-          chmod 600 "$RUNNER_TEMP/opsbot.kubeconfig"
-          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" scripts/assert-kube-target.sh home
-          POD="$(KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl get pods -n opsbot -l app.kubernetes.io/name=opsbot -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-          echo "previous_pod=$POD" >> "$GITHUB_OUTPUT"
-          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl set image deployment/opsbot "opsbot=ghcr.io/chayzx/opsbot:${IMAGE_TAG}" -n opsbot
-          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl rollout restart deployment/opsbot -n opsbot
-          echo "Previous pod: ${POD:-none}"
+      - name: Commit image to deploy branch
+        id: promote
+        run: scripts/promote-portainer-image.sh opsbot/40-deployment.yaml ghcr.io/chayzx/opsbot "ghcr.io/chayzx/opsbot:${{ github.sha }}"
 
   verify-opsbot:
-    name: 4 - Verify rollout and pod health (merge deploy)
-    needs: restart-opsbot
+    name: 3 - Verify Portainer rollout and pod health (merge deploy)
+    needs: promote
     runs-on: ubuntu-latest
     steps:
-      # Needed for scripts/assert-kube-target.sh. Without it this job failed
-      # with exit 127 (2026-09-19 and 2026-09-29), AFTER apply-manifest had
-      # already rolled the Deployment to the manifest's pinned image.
       - uses: actions/checkout@v5
-      - name: Connect and verify pod health
+      - name: Wait for Portainer and verify pod health
         env:
           TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
           KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_OPSBOT }}
-          IMAGE_TAG: ${{ github.sha }}
+          WAIT_IMAGE: ghcr.io/chayzx/opsbot:${{ github.sha }}
         run: |
           set -euo pipefail
           test -n "$TUNNEL_SERVICE_TOKEN_ID"
           test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
           test -n "$KUBE_CONFIG_B64"
-          test -n "$IMAGE_TAG"
           curl -sSL -o cloudflared "https://github.com/cloudflare/cloudflared/releases/download/2026.10.7/cloudflared-linux-amd64"
           echo "1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872  cloudflared" | sha256sum -c -
           chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
           cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
-          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/opsbot.kubeconfig"
-          chmod 600 "$RUNNER_TEMP/opsbot.kubeconfig"
-          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" scripts/assert-kube-target.sh home
-          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl rollout status deployment/opsbot -n opsbot --timeout=180s
-          # rollout status can return while the old pod is still terminating;
-          # selecting .items[0] then races the replacement assertion. Wait for
-          # a Running+Ready pod and explicitly reject the recorded old pod.
-          POD=""
-          for attempt in $(seq 1 30); do
-            POD="$(KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl get pods -n opsbot -l app.kubernetes.io/name=opsbot -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.phase}{" "}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}' | awk '$2 == "Running" && $3 == "True" { print $1; exit }')"
-            PREVIOUS_POD='${{ needs.restart-opsbot.outputs.previous_pod }}'
-            if [ -n "$POD" ] && [ "$POD" != "$PREVIOUS_POD" ]; then
-              break
-            fi
+          printf '%s' "$KUBE_CONFIG_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/opsbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/opsbot.kubeconfig"
+          export KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig"
+          scripts/assert-kube-target.sh home
+          # Portainer polls the deploy branch; allow several poll intervals.
+          current=''
+          for _ in $(seq 1 90); do
+            current="$(kubectl get deployment/opsbot -n opsbot -o jsonpath='{.spec.template.spec.containers[?(@.name=="opsbot")].image}')" || true
+            if [ "$current" = "$WAIT_IMAGE" ]; then break; fi
+            sleep 10
+          done
+          if [ "$current" != "$WAIT_IMAGE" ]; then echo "::error::Portainer did not apply $WAIT_IMAGE; live image is $current" >&2; exit 1; fi
+          kubectl rollout status deployment/opsbot -n opsbot --timeout=180s
+          # rollout status can return while the old pod is still terminating, so
+          # require a Ready pod that is running the promoted image.
+          POD=''
+          for _ in $(seq 1 30); do
+            POD="$(kubectl get pods -n opsbot -l app.kubernetes.io/name=opsbot -o json | jq -r --arg image "$WAIT_IMAGE" '.items[] | select(.metadata.deletionTimestamp == null) | select(.spec.containers[] | select(.name == "opsbot") | .image == $image) | select(any(.status.conditions[]?; .type == "Ready" and .status == "True")) | .metadata.name' | head -n1)" || true
+            if [ -n "$POD" ]; then break; fi
             sleep 2
           done
           test -n "$POD"
-          READY="$(KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl get pod "$POD" -n opsbot -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')"
-          IMAGE_ID="$(KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl get pod "$POD" -n opsbot -o jsonpath='{.status.containerStatuses[?(@.name=="opsbot")].imageID}')"
-          test "$READY" = True; test -n "$IMAGE_ID"
-          if [ -n "$PREVIOUS_POD" ] && [ "$POD" = "$PREVIOUS_POD" ]; then
-            echo "Expected a replacement Opsbot pod, but the pod name did not change: $POD" >&2
-            exit 1
-          fi
-          { echo '## Opsbot deployment pipeline'; echo ''; echo '### Manifest apply: ✅ passed'; echo '### Pod restart: ✅ passed'; echo "- Previous pod: \`${PREVIOUS_POD:-none}\`"; echo "- Current pod: \`$POD\`"; echo '### Pod health: ✅ passed'; echo "- Ready: \`$READY\`"; echo "- Image ID: \`$IMAGE_ID\`"; } >> "$GITHUB_STEP_SUMMARY"
+          { echo '## Opsbot deployment pipeline'; echo ''; echo '### Portainer rollout: ✅ passed'; echo "- Pod: \`$POD\`"; echo "- Image: \`$WAIT_IMAGE\`"; } >> "$GITHUB_STEP_SUMMARY"
 
   rollback-on-failure:
     name: Roll back failed release
-    needs: [apply-manifest, restart-opsbot, verify-opsbot]
-    # Also roll back when restart-opsbot fails: by then apply-manifest has
-    # already changed the Deployment (2026-09-29 left the pinned image live).
-    if: ${{ always() && (needs.verify-opsbot.result == 'failure' || needs.restart-opsbot.result == 'failure') }}
+    needs: [promote, verify-opsbot]
+    if: ${{ always() && needs.verify-opsbot.result == 'failure' && needs.promote.outputs.changed == 'true' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      # Needed for scripts/assert-kube-target.sh. Without it this job failed
-      # with exit 127 (2026-09-19 and 2026-09-29), AFTER apply-manifest had
-      # already rolled the Deployment to the manifest's pinned image.
       - uses: actions/checkout@v5
-      - name: Roll back to previous ReplicaSet
+      - name: Restore previous image on deploy branch
+        run: scripts/promote-portainer-image.sh opsbot/40-deployment.yaml ghcr.io/chayzx/opsbot "${{ needs.promote.outputs.previous_image }}"
+      - name: Wait for Portainer to apply the rollback
         env:
           TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
           KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_OPSBOT }}
+          WAIT_IMAGE: ${{ needs.promote.outputs.previous_image }}
         run: |
           set -euo pipefail
+          test -n "$TUNNEL_SERVICE_TOKEN_ID"
+          test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
           test -n "$KUBE_CONFIG_B64"
           curl -sSL -o cloudflared "https://github.com/cloudflare/cloudflared/releases/download/2026.10.7/cloudflared-linux-amd64"
           echo "1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872  cloudflared" | sha256sum -c -
           chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
           cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
-          echo "$KUBE_CONFIG_B64" | base64 -d > "$RUNNER_TEMP/opsbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/opsbot.kubeconfig"
-          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" scripts/assert-kube-target.sh home
-          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl rollout undo deployment/opsbot -n opsbot
-          KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig" kubectl rollout status deployment/opsbot -n opsbot --timeout=180s
+          printf '%s' "$KUBE_CONFIG_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/opsbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/opsbot.kubeconfig"
+          export KUBECONFIG="$RUNNER_TEMP/opsbot.kubeconfig"
+          scripts/assert-kube-target.sh home
+          # Portainer polls the deploy branch; allow several poll intervals.
+          current=''
+          for _ in $(seq 1 90); do
+            current="$(kubectl get deployment/opsbot -n opsbot -o jsonpath='{.spec.template.spec.containers[?(@.name=="opsbot")].image}')" || true
+            if [ "$current" = "$WAIT_IMAGE" ]; then break; fi
+            sleep 10
+          done
+          if [ "$current" != "$WAIT_IMAGE" ]; then echo "::error::Portainer did not apply $WAIT_IMAGE; live image is $current" >&2; exit 1; fi
+          kubectl rollout status deployment/opsbot -n opsbot --timeout=180s
           echo '### Automatic rollback: ✅ completed' >> "$GITHUB_STEP_SUMMARY"
