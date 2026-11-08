@@ -140,7 +140,7 @@ spec:
           # tag on each approved release; keep this value usable for restore.
           # `potok` adds ytpotoken/ytvisitordata support (Web client poToken,
           # see scripts/patches/jmusicbot-potoken.patch) — k8s-homelab#41.
-          image: ghcr.io/chayzx/jmusicbot:upstream-0.7.0-e35b8b6790da
+          image: ghcr.io/chayzx/jmusicbot:upstream-0.7.0-2684e0e5b402
           imagePullPolicy: IfNotPresent  # see header note 1 — do not change
           # Health endpoint: a JDK-built-in HttpServer on
           # 9091 in the patched image. /health returns 200 only after the bot
