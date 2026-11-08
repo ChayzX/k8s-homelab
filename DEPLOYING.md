@@ -12,7 +12,7 @@ pod changed. Only a workflow whose summary contains **Apply**, **Restart**, and
 | PantryBot application | Builds, applies, restarts, and verifies on merge | No second click; merge is approval |
 | Grafana dashboards/config | Applies ConfigMap, restarts, and verifies Grafana automatically | No; push is the deployment (a manual dispatch also works) |
 | Minecraft source/image inputs | Resolves newest Paper version, builds, applies, restarts, and verifies on merge | No second click; merge is approval |
-| JMusicBot source/patch changes | Resolves latest upstream release, builds, applies, restarts, and verifies on merge | No second click; merge is approval |
+| JMusicBot source/patch changes | Resolves latest upstream release, builds, promotes the image to `deploy/portainer-home`, and verifies Portainer's rollout on merge | No second click; merge is approval |
 | k3s-watcher source | Git changes only | Yes: update the host checkout and restart its systemd user unit |
 
 If the Actions run shows only **Build and publish**, nothing was deployed yet.
@@ -81,8 +81,10 @@ Deployment).
 
 Merging a JMusicBot workflow/patch change runs **JMusicBot CI/CD**. It resolves
 the maintainer's latest `arif-banai/MusicBot` release, applies the tracked
-voice-channel and health patches, then publishes, applies, restarts, and checks
-`/health`. Configure `KUBE_CONFIG_JMUSICBOT` before merging the first deployable
+voice-channel and health patches, publishes the image, and commits its tag to
+`deploy/portainer-home`. Portainer's `jmusicbot` workflow is the only deployer;
+CI then waits for that rollout and checks `/health`. A failed check commits the
+previous image back to the deploy branch. Configure `KUBE_CONFIG_JMUSICBOT` before merging the first deployable
 change.
 Make the `jmusicbot` GHCR package readable by the cluster before its first
 deployment (public package, or an image-pull Secret in the namespace).

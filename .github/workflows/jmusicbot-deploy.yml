@@ -20,8 +20,14 @@ permissions:
   contents: read
 
 # A second release must not race the first release's image/health verification.
+concurrency:
+  group: jmusicbot-deploy
+  cancel-in-progress: false
+
 env:
   IMAGE: ghcr.io/chayzx/jmusicbot
+  # Portainer's jmusicbot workflow watches this branch and is the only deployer.
+  DEPLOY_BRANCH: deploy/portainer-home
 
 jobs:
   publish-image:
@@ -103,66 +109,54 @@ jobs:
             echo '## JMusicBot CI/CD pipeline'; echo '';
             echo '### Resolve/build/publish: ${{ steps.publish.outcome }}';
             echo '- Image: `${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}`';
-            echo '### Apply/restart/verify: ▶ continuing (merge to main approved deployment)'
+            echo '### Promote/verify: ▶ continuing (merge to main approved deployment)'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  apply-release:
-    name: 2 - Apply image release (merge deploy)
+  promote:
+    name: 2 - Promote image to Portainer deploy branch
     needs: publish-image
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      previous_image: ${{ steps.promote.outputs.previous_image }}
+      changed: ${{ steps.promote.outputs.changed }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v5
-      - name: Connect to cluster and set image
+      - name: Commit image to deploy branch
+        id: promote
         env:
-          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
-          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_JMUSICBOT }}
-          IMAGE_TAG: ${{ needs.publish-image.outputs.tag }}
+          TARGET_IMAGE: ${{ env.IMAGE }}:${{ needs.publish-image.outputs.tag }}
         run: |
           set -euo pipefail
-          test -n "$TUNNEL_SERVICE_TOKEN_ID"; test -n "$TUNNEL_SERVICE_TOKEN_SECRET"; test -n "$KUBE_CONFIG_B64"
-          curl -fsSL -o cloudflared https://github.com/cloudflare/cloudflared/releases/download/2026.10.7/cloudflared-linux-amd64
-          echo '1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872  cloudflared' | sha256sum -c -
-          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
-          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
-          printf '%s' "$KUBE_CONFIG_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/jmusicbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/jmusicbot.kubeconfig"
-          KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" scripts/assert-kube-target.sh home
-          KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl get deployment/jmusicbot -n jmusicbot
-          KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl set image deployment/jmusicbot jmusicbot="${IMAGE}:${IMAGE_TAG}" -n jmusicbot
-          echo '### Image release applied: ✅' >> "$GITHUB_STEP_SUMMARY"
-
-  restart:
-    name: 3 - Restart JMusicBot pod (merge deploy)
-    needs: apply-release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v5
-      - name: Restart deployment
-        env:
-          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
-          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_JMUSICBOT }}
-        run: |
-          set -euo pipefail
-          test -n "$KUBE_CONFIG_B64"
-          curl -fsSL -o cloudflared https://github.com/cloudflare/cloudflared/releases/download/2026.10.7/cloudflared-linux-amd64
-          echo '1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872  cloudflared' | sha256sum -c -
-          chmod +x cloudflared; sudo mv cloudflared /usr/local/bin/
-          cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
-          printf '%s' "$KUBE_CONFIG_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/jmusicbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/jmusicbot.kubeconfig"
-          KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" scripts/assert-kube-target.sh home
-          # set image in the preceding job already triggers the Recreate
-          # rollout. Do not issue a second restart or re-run the Ready-owner
-          # guard after that mutation: the new pod is expected to be NotReady
-          # while it reconnects to Discord, which would falsely fail closed.
-          KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl get deployment/jmusicbot -n jmusicbot
-          echo '### Image-triggered rollout observed: ✅' >> "$GITHUB_STEP_SUMMARY"
+          manifest=jmusicbot/40-deployment-jmusicbot.yaml
+          git fetch origin "$DEPLOY_BRANCH"
+          git worktree add --detach "$RUNNER_TEMP/deploy" FETCH_HEAD
+          previous="$(sed -nE 's|^ +image: (ghcr\.io/chayzx/jmusicbot:[^[:space:]]+).*$|\1|p' "$RUNNER_TEMP/deploy/$manifest")"
+          test -n "$previous"
+          # The deploy branch mirrors main's manifest; only the image is CI-owned.
+          cp "$manifest" "$RUNNER_TEMP/deploy/$manifest"
+          sed -i -E "s|^( +image: )ghcr\.io/chayzx/jmusicbot:[^[:space:]]+|\1${TARGET_IMAGE}|" "$RUNNER_TEMP/deploy/$manifest"
+          test "$(grep -cF "image: ${TARGET_IMAGE}" "$RUNNER_TEMP/deploy/$manifest")" = 1
+          cd "$RUNNER_TEMP/deploy"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$manifest"
+          if git diff --cached --quiet; then
+            changed=false
+          else
+            git commit -q -m "jmusicbot: promote ${TARGET_IMAGE##*:}"
+            git push origin "HEAD:refs/heads/${DEPLOY_BRANCH}"
+            changed=true
+          fi
+          echo "previous_image=$previous" >> "$GITHUB_OUTPUT"
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo '### Image promoted to deploy branch: ✅' >> "$GITHUB_STEP_SUMMARY"
 
   verify:
-    name: 4 - Verify JMusicBot rollout and health (merge deploy)
-    needs: [publish-image, restart]
+    name: 3 - Verify Portainer rollout and health (merge deploy)
+    needs: [publish-image, promote]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
@@ -173,6 +167,7 @@ jobs:
           TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
           KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_JMUSICBOT }}
           EXPECTED_TAG: ${{ needs.publish-image.outputs.tag }}
+          WAIT_IMAGE: ${{ env.IMAGE }}:${{ needs.publish-image.outputs.tag }}
         run: |
           set -euo pipefail
           test -n "$KUBE_CONFIG_B64"
@@ -182,6 +177,14 @@ jobs:
           cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
           printf '%s' "$KUBE_CONFIG_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/jmusicbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/jmusicbot.kubeconfig"
           KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" scripts/assert-kube-target.sh home
+          # Portainer polls the deploy branch; allow several poll intervals.
+          current=''
+          for _ in $(seq 1 90); do
+            current="$(KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl get deployment/jmusicbot -n jmusicbot -o jsonpath='{.spec.template.spec.containers[?(@.name=="jmusicbot")].image}')" || true
+            if [ "$current" = "${WAIT_IMAGE}" ]; then break; fi
+            sleep 10
+          done
+          if [ "$current" != "${WAIT_IMAGE}" ]; then echo "::error::Portainer did not apply ${WAIT_IMAGE}; live image is $current" >&2; exit 1; fi
           KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl rollout status deployment/jmusicbot -n jmusicbot --timeout=180s
           pod="$(KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl get pod -n jmusicbot -l app.kubernetes.io/name=jmusicbot -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}' | awk '{print $1}')"
           test -n "$pod"
@@ -193,17 +196,47 @@ jobs:
 
   rollback-on-failure:
     name: Roll back failed release
-    needs: [apply-release, restart, verify]
-    if: ${{ always() && needs.verify.result == 'failure' }}
+    needs: [promote, verify]
+    if: ${{ always() && needs.verify.result == 'failure' && needs.promote.outputs.changed == 'true' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout source
         uses: actions/checkout@v5
-      - name: Roll back to previous ReplicaSet
+      - name: Restore previous image on deploy branch
+        env:
+          TARGET_IMAGE: ${{ needs.promote.outputs.previous_image }}
+        run: |
+          set -euo pipefail
+          manifest=jmusicbot/40-deployment-jmusicbot.yaml
+          git fetch origin "$DEPLOY_BRANCH"
+          git worktree add --detach "$RUNNER_TEMP/deploy" FETCH_HEAD
+          previous="$(sed -nE 's|^ +image: (ghcr\.io/chayzx/jmusicbot:[^[:space:]]+).*$|\1|p' "$RUNNER_TEMP/deploy/$manifest")"
+          test -n "$previous"
+          # The deploy branch mirrors main's manifest; only the image is CI-owned.
+          cp "$manifest" "$RUNNER_TEMP/deploy/$manifest"
+          sed -i -E "s|^( +image: )ghcr\.io/chayzx/jmusicbot:[^[:space:]]+|\1${TARGET_IMAGE}|" "$RUNNER_TEMP/deploy/$manifest"
+          test "$(grep -cF "image: ${TARGET_IMAGE}" "$RUNNER_TEMP/deploy/$manifest")" = 1
+          cd "$RUNNER_TEMP/deploy"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$manifest"
+          if git diff --cached --quiet; then
+            changed=false
+          else
+            git commit -q -m "jmusicbot: promote ${TARGET_IMAGE##*:}"
+            git push origin "HEAD:refs/heads/${DEPLOY_BRANCH}"
+            changed=true
+          fi
+          echo "previous_image=$previous" >> "$GITHUB_OUTPUT"
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+      - name: Wait for Portainer to apply the rollback
         env:
           TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
           KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_JMUSICBOT }}
+          WAIT_IMAGE: ${{ needs.promote.outputs.previous_image }}
         run: |
           set -euo pipefail
           test -n "$KUBE_CONFIG_B64"
@@ -213,6 +246,13 @@ jobs:
           cloudflared access tcp --hostname k8s-api.greeniespantry.uk --url 127.0.0.1:16443 & sleep 3
           printf '%s' "$KUBE_CONFIG_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/jmusicbot.kubeconfig"; chmod 600 "$RUNNER_TEMP/jmusicbot.kubeconfig"
           KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" scripts/assert-kube-target.sh home
-          KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl rollout undo deployment/jmusicbot -n jmusicbot
+          # Portainer polls the deploy branch; allow several poll intervals.
+          current=''
+          for _ in $(seq 1 90); do
+            current="$(KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl get deployment/jmusicbot -n jmusicbot -o jsonpath='{.spec.template.spec.containers[?(@.name=="jmusicbot")].image}')" || true
+            if [ "$current" = "${WAIT_IMAGE}" ]; then break; fi
+            sleep 10
+          done
+          if [ "$current" != "${WAIT_IMAGE}" ]; then echo "::error::Portainer did not apply ${WAIT_IMAGE}; live image is $current" >&2; exit 1; fi
           KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl rollout status deployment/jmusicbot -n jmusicbot --timeout=180s
           echo '### Automatic rollback: ✅ completed' >> "$GITHUB_STEP_SUMMARY"

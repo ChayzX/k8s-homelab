@@ -18,9 +18,10 @@
 #    10001, so the bot can write serversettings.json / youtubetoken.txt without
 #    a host-path ownership migration.
 #
-# 3. This Deployment is managed by the GitHub Actions JMusicBot pipeline.
-#    The pipeline publishes a multi-arch GHCR image and changes the image
-#    reference. Do not reintroduce Keel or a local-only image authority.
+# 3. Portainer deploys this Deployment from the deploy/portainer-home branch.
+#    The GitHub Actions pipeline publishes the GHCR image and commits its tag
+#    to that branch, so the image below can lag the live tag on main. Do not
+#    kubectl-edit the image or reintroduce Keel or a local-only image authority.
 #
 # 4. The health probes below depend on the health-endpoint patch in
 #    scripts/patches/jmusicbot-health-endpoint.patch. The published image below
