@@ -90,6 +90,17 @@ data:
         database: pantry
         user: pantry_grafana
         jsonData:
+          # type: postgres is the legacy plugin-id alias for
+          # grafana-postgresql-datasource. That alias path skips Grafana's
+          # fallback that would otherwise copy the top-level `database`
+          # field above into jsonData.database (grafana/grafana#132582).
+          # Without it, the query editor's frontend blocks every panel
+          # client-side ("you do not currently have a default database
+          # configured") before a single /api/ds/query call is made, even
+          # though the datasource health check and a manually-targeted
+          # query both still work -- neither needs a resolved database.
+          # Set it explicitly so panel queries actually fire.
+          database: pantry
           sslmode: disable
           postgresVersion: 1600
           timescaledb: false
@@ -109,17 +120,27 @@ data:
   dashboards.yaml: |
     apiVersion: 1
 
+    # Three providers, each pointed at its own subdirectory of the
+    # grafana-dashboards ConfigMap mount (grafana.yaml remaps each
+    # dashboard key under items: into general/, pantry-bot/, or
+    # pc-health/). This is why three providers instead of one with
+    # foldersFromFilesStructure: true -- that option creates a NEW
+    # folder per directory name, which would collide with (and
+    # duplicate) the pantry-bot/PC Health folders the alerting
+    # provisioning below already owns. folderUid targets those exact
+    # existing folders instead.
     providers:
       - name: default
         folder: ""
         type: file
         updateIntervalSeconds: 30
         # This path is why grafana.yaml MUST mount the grafana-dashboards
-        # ConfigMap at /etc/grafana/dashboards. If that mount is missing,
-        # Grafana logs a provisioning error and shows an empty dashboard
-        # list -- this is the exact defect rev. 1 of the plan shipped.
+        # ConfigMap at /etc/grafana/dashboards/general. If that mount is
+        # missing, Grafana logs a provisioning error and shows an empty
+        # dashboard list -- this is the exact defect rev. 1 of the plan
+        # shipped.
         options:
-          path: /etc/grafana/dashboards
+          path: /etc/grafana/dashboards/general
         # ConfigMap-provisioned dashboards are read-only by definition:
         # the volume is immutable, so a user "Save" would be lost on the
         # next pod restart. Say so in the UI rather than letting people
@@ -130,6 +151,24 @@ data:
         # left the dashboard stranded in Grafana forever -- that is how the
         # retired "Apps" dashboard outlived its file by weeks. The repo is
         # the source of truth, so deletion has to flow through as well.
+        disableDeletion: false
+      - name: pantry-bot
+        folder: pantry-bot
+        folderUid: dfzr9bp674e80f
+        type: file
+        updateIntervalSeconds: 30
+        options:
+          path: /etc/grafana/dashboards/pantry-bot
+        allowUiUpdates: false
+        disableDeletion: false
+      - name: pc-health
+        folder: PC Health
+        folderUid: pc-health
+        type: file
+        updateIntervalSeconds: 30
+        options:
+          path: /etc/grafana/dashboards/pc-health
+        allowUiUpdates: false
         disableDeletion: false
 ---
 # Grafana Alerting provisioning -- Pantry-bot / Twitch-bot alerts to the
