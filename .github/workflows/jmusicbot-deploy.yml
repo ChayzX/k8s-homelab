@@ -180,7 +180,7 @@ jobs:
           # Portainer polls the deploy branch; allow several poll intervals.
           current=''
           for _ in $(seq 1 90); do
-            current="$(KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl get deployment/jmusicbot -n jmusicbot -o jsonpath='{.spec.template.spec.containers[?(@.name=="jmusicbot")].image}')"
+            current="$(KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl get deployment/jmusicbot -n jmusicbot -o jsonpath='{.spec.template.spec.containers[?(@.name=="jmusicbot")].image}')" || true
             if [ "$current" = "${WAIT_IMAGE}" ]; then break; fi
             sleep 10
           done
@@ -249,7 +249,7 @@ jobs:
           # Portainer polls the deploy branch; allow several poll intervals.
           current=''
           for _ in $(seq 1 90); do
-            current="$(KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl get deployment/jmusicbot -n jmusicbot -o jsonpath='{.spec.template.spec.containers[?(@.name=="jmusicbot")].image}')"
+            current="$(KUBECONFIG="$RUNNER_TEMP/jmusicbot.kubeconfig" kubectl get deployment/jmusicbot -n jmusicbot -o jsonpath='{.spec.template.spec.containers[?(@.name=="jmusicbot")].image}')" || true
             if [ "$current" = "${WAIT_IMAGE}" ]; then break; fi
             sleep 10
           done
