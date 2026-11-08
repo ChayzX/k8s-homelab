@@ -18,9 +18,10 @@
 #    10001, so the bot can write serversettings.json / youtubetoken.txt without
 #    a host-path ownership migration.
 #
-# 3. This Deployment is managed by the GitHub Actions JMusicBot pipeline.
-#    The pipeline publishes a multi-arch GHCR image and changes the image
-#    reference. Do not reintroduce Keel or a local-only image authority.
+# 3. Portainer deploys this Deployment from the deploy/portainer-home branch.
+#    The GitHub Actions pipeline publishes the GHCR image and commits its tag
+#    to that branch, so the image below can lag the live tag on main. Do not
+#    kubectl-edit the image or reintroduce Keel or a local-only image authority.
 #
 # 4. The health probes below depend on the health-endpoint patch in
 #    scripts/patches/jmusicbot-health-endpoint.patch. The published image below
@@ -140,7 +141,7 @@ spec:
           # tag on each approved release; keep this value usable for restore.
           # `potok` adds ytpotoken/ytvisitordata support (Web client poToken,
           # see scripts/patches/jmusicbot-potoken.patch) — k8s-homelab#41.
-          image: ghcr.io/chayzx/jmusicbot:upstream-0.7.0-2684e0e5b402
+          image: ghcr.io/chayzx/jmusicbot:upstream-0.7.0-481891142d75
           imagePullPolicy: IfNotPresent  # see header note 1 — do not change
           # Health endpoint: a JDK-built-in HttpServer on
           # 9091 in the patched image. /health returns 200 only after the bot
