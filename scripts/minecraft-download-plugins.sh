@@ -4,7 +4,7 @@
 # the upstream Geyser/Floodgate release notes and Paper compatibility.
 set -euo pipefail
 
-ROOT_DIR="${ROOT_DIR:-/home/chase/k8s-homelab}"
+ROOT_DIR="${ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 PLUGIN_DIR="${MINECRAFT_BUILD_DIR:-$ROOT_DIR/minecraft}/plugins"
 mkdir -p "$PLUGIN_DIR"
 
@@ -27,8 +27,8 @@ download_plugin() {
     echo "verified ${filename} ${project} ${version} build ${build} sha256=${actual}"
 }
 
-# Geyser 2.11.1 build 1219; Floodgate 2.2.5 build 140.
-download_plugin geyser 2.11.1 1219 spigot Geyser-Spigot.jar \
-    6c090fac496d8a8b9f51040eb39dc350a5f4e5384e9c76bc0efdd185ba1c9e67
-download_plugin floodgate 2.2.5 140 spigot floodgate-spigot.jar \
+# Keep the Geyser pin in sync with the NetherNet patch in minecraft/Dockerfile.
+download_plugin geyser 2.12.1 1295 spigot Geyser-Spigot.jar \
+    b60ff8f9a007f30823cf40173532a0390e6150cdfc577551f6f37bdd5ccd1528
+download_plugin floodgate 2.2.5 141 spigot floodgate-spigot.jar \
     21570aff9ce17d6983928e8552777760e1ede5050026b04c686b0ae112e6fd7e

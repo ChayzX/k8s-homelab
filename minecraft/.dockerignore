@@ -8,3 +8,4 @@
 !geyser-config.yml
 !plugins/
 !plugins/*.jar
+!geyser-nethernet-mtu.patch

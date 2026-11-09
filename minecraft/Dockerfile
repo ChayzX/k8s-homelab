@@ -61,6 +61,27 @@ RUN set -eux; \
     jar --create --file rcon.jar --main-class Rcon -C classes .
 
 
+# Recompile the built-in NetherNet server against the exact Geyser release
+# and its Netty version. MinecraftMachine's Flannel pod MTU is 1200 bytes.
+# Geyser's advanced.bedrock.mtu setting only changes RakNet packet sizing.
+FROM rcon-build AS geyser-build
+
+WORKDIR /geyser
+COPY plugins/Geyser-Spigot.jar ./
+ADD --checksum=sha256:88dcc8ea6bfd124dc46ce8d6ca718931119c6cebd5478b182d1b19b271097db1 https://raw.githubusercontent.com/GeyserMC/Geyser/1955f5151e2af01a7b51db1679e4324345690e70/core/src/main/java/org/geysermc/geyser/network/bedrock/nethernet/NetherNetServer.java ./
+ADD --checksum=sha256:794136fc6be78e44a286c2b1420a182e135c6d06eb8c397030c1551ee50acccd https://repo.maven.apache.org/maven2/io/netty/netty-buffer/4.2.20.Final/netty-buffer-4.2.20.Final.jar ./
+ADD --checksum=sha256:5807fef7eb619bc0a5d1c0e6c83199ea9bca8503203a3eb73cfdccec2d215743 https://repo.maven.apache.org/maven2/io/netty/netty-common/4.2.20.Final/netty-common-4.2.20.Final.jar ./
+ADD --checksum=sha256:cb7a6027e4f366fb28dcea7e1f7088ca16bd23c2cc38e8ddfdac77a77bd144dc https://repo.maven.apache.org/maven2/io/netty/netty-resolver/4.2.20.Final/netty-resolver-4.2.20.Final.jar ./
+ADD --checksum=sha256:ff4f1f8158c714c1b485ef10cf2456fbd3c1b2930256b70287aeb7dc3ad94783 https://repo.maven.apache.org/maven2/io/netty/netty-transport/4.2.20.Final/netty-transport-4.2.20.Final.jar ./
+RUN apt-get update && apt-get install -y --no-install-recommends patch \
+    && rm -rf /var/lib/apt/lists/*
+COPY geyser-nethernet-mtu.patch ./
+RUN set -eux; \
+    echo 'b60ff8f9a007f30823cf40173532a0390e6150cdfc577551f6f37bdd5ccd1528  Geyser-Spigot.jar' | sha256sum -c -; \
+    patch --batch --fuzz=0 -p0 < geyser-nethernet-mtu.patch; \
+    javac --release 21 -cp './*' -d classes NetherNetServer.java; \
+    jar --update --file Geyser-Spigot.jar -C classes .
+
 # ---------------------------------------------------------------------------
 # Stage 2 — runtime
 # ---------------------------------------------------------------------------
@@ -92,7 +113,8 @@ RUN set -eux; \
 
 # The server jar. Read-only at runtime; root-owned by design.
 COPY paper.jar /opt/minecraft/paper.jar
-COPY plugins/*.jar /opt/minecraft/plugins/
+COPY plugins/floodgate-spigot.jar /opt/minecraft/plugins/
+COPY --from=geyser-build /geyser/Geyser-Spigot.jar /opt/minecraft/plugins/
 COPY geyser-config.yml /opt/minecraft/geyser-config.yml
 COPY --from=rcon-build /build/rcon.jar /opt/minecraft/rcon.jar
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh

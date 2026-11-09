@@ -70,10 +70,7 @@ jobs:
           mkdir -p minecraft/plugins
           curl -fsSL "$paper_url" -o minecraft/paper.jar
           echo "$paper_sha  minecraft/paper.jar" | sha256sum -c -
-          curl -fsSL "https://download.geysermc.org/v2/projects/geyser/versions/2.12.1/builds/1288/downloads/spigot" -o minecraft/plugins/Geyser-Spigot.jar
-          echo '6c090fac496d8a8b9f51040eb39dc350a5f4e5384e9c76bc0efdd185ba1c9e67  minecraft/plugins/Geyser-Spigot.jar' | sha256sum -c -
-          curl -fsSL "https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/141/downloads/spigot" -o minecraft/plugins/floodgate-spigot.jar
-          echo '21570aff9ce17d6983928e8552777760e1ede5050026b04c686b0ae112e6fd7e  minecraft/plugins/floodgate-spigot.jar' | sha256sum -c -
+          bash scripts/minecraft-download-plugins.sh
           echo "tag=${mc_version}-b${build}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
           echo "minecraft_version=${mc_version}" >> "$GITHUB_OUTPUT"
           echo "Paper ${mc_version}-${build} prepared"

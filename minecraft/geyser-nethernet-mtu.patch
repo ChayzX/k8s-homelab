@@ -1,0 +1,20 @@
+--- NetherNetServer.java
++++ NetherNetServer.java
+@@ -31,5 +31,5 @@
+ import io.netty.util.NetUtil;
+ import io.netty.util.concurrent.DefaultThreadFactory;
+-import org.checkerframework.checker.nullness.qual.Nullable;
++import org.jspecify.annotations.Nullable;
+ import org.cloudburstmc.netty.channel.nethernet.NetherNetChannelFactory;
+ import org.cloudburstmc.netty.channel.nethernet.config.NetherChannelOption;
+@@ -66 +66,2 @@
+-import tel.schich.libdatachannel.LibDataChannelArchDetect;
++import tel.schich.libdatachannel.LibDataChannelArchDetect;
++import tel.schich.libdatachannel.PeerConnectionConfiguration;
+@@ -369,4 +370,6 @@
+             b.group(inbuiltEventLoopGroup)
+                     .channelFactory(NetherNetChannelFactory.server(signaling))
++                    .option(NetherChannelOption.NETHER_PEER_CONNECTION_CONFIG,
++                            PeerConnectionConfiguration.DEFAULT.withMtu(1200))
+                     .option(NetherChannelOption.NETHER_SERVER_PROXY_PROTOCOL,
+                             TrustedProxies.parse(geyser.config().advanced().bedrock().webrtcProxyProtocolRelays()))
