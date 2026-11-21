@@ -1,0 +1,137 @@
+{
+  "githubConfigSecret": "oracle-ci-github",
+  "minRunners": 0,
+  "maxRunners": 1,
+  "controllerServiceAccount": {
+    "namespace": "arc-systems",
+    "name": "arc-controller-gha-rs-controller"
+  },
+  "githubConfigUrl": "https://github.com/ChayzX/test",
+  "runnerScaleSetName": "oracle-ci-test",
+  "scaleSetLabels": [
+    "self-hosted",
+    "Linux",
+    "ARM64",
+    "homelab-ci",
+    "oracle-arc"
+  ],
+  "listenerTemplate": {
+    "spec": {
+      "containers": [
+        {
+          "name": "listener",
+          "resources": {
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi",
+              "ephemeral-storage": "32Mi"
+            },
+            "limits": {
+              "cpu": "200m",
+              "memory": "128Mi",
+              "ephemeral-storage": "128Mi"
+            }
+          },
+          "securityContext": {
+            "allowPrivilegeEscalation": false,
+            "runAsNonRoot": true,
+            "capabilities": {
+              "drop": [
+                "ALL"
+              ]
+            },
+            "seccompProfile": {
+              "type": "RuntimeDefault"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "template": {
+    "metadata": {
+      "labels": {
+        "homelab.chase/purpose": "oracle-ci"
+      }
+    },
+    "spec": {
+      "nodeSelector": {
+        "kubernetes.io/arch": "arm64"
+      },
+      "automountServiceAccountToken": false,
+      "activeDeadlineSeconds": 3600,
+      "terminationGracePeriodSeconds": 30,
+      "securityContext": {
+        "runAsUser": 1001,
+        "runAsGroup": 1001,
+        "fsGroup": 1001,
+        "seccompProfile": {
+          "type": "RuntimeDefault"
+        }
+      },
+      "containers": [
+        {
+          "name": "runner",
+          "image": "ghcr.io/actions/actions-runner@sha256:2089924d7fb6a96f1d1d2aca242ad6a07315b4ec2d7d275391ee265de70e941b",
+          "imagePullPolicy": "IfNotPresent",
+          "command": [
+            "/home/runner/run.sh"
+          ],
+          "env": [
+            {
+              "name": "ACTIONS_RUNNER_HOOK_JOB_STARTED",
+              "value": "/opt/runner-hooks/pre-job.sh"
+            }
+          ],
+          "resources": {
+            "requests": {
+              "cpu": "100m",
+              "memory": "512Mi",
+              "ephemeral-storage": "512Mi"
+            },
+            "limits": {
+              "cpu": "1",
+              "memory": "2Gi",
+              "ephemeral-storage": "1500Mi"
+            }
+          },
+          "securityContext": {
+            "runAsNonRoot": true,
+            "allowPrivilegeEscalation": false,
+            "capabilities": {
+              "drop": [
+                "ALL"
+              ]
+            }
+          },
+          "volumeMounts": [
+            {
+              "name": "work",
+              "mountPath": "/home/runner/_work"
+            },
+            {
+              "name": "hooks",
+              "mountPath": "/opt/runner-hooks",
+              "readOnly": true
+            }
+          ]
+        }
+      ],
+      "volumes": [
+        {
+          "name": "work",
+          "emptyDir": {
+            "sizeLimit": "1280Mi"
+          }
+        },
+        {
+          "name": "hooks",
+          "configMap": {
+            "name": "oracle-ci-hooks",
+            "defaultMode": 365
+          }
+        }
+      ]
+    }
+  }
+}

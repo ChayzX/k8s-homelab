@@ -1,0 +1,19 @@
+{
+  "apiVersion": "v1",
+  "kind": "ResourceQuota",
+  "metadata": {
+    "name": "arc-pilot-control",
+    "namespace": "arc-systems"
+  },
+  "spec": {
+    "hard": {
+      "pods": "12",
+      "requests.cpu": "512m",
+      "requests.memory": "1Gi",
+      "limits.cpu": "3",
+      "limits.memory": "3Gi",
+      "requests.ephemeral-storage": "1Gi",
+      "limits.ephemeral-storage": "2Gi"
+    }
+  }
+}
