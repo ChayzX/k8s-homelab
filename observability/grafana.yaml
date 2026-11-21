@@ -236,6 +236,47 @@ spec:
         - name: dashboards
           configMap:
             name: grafana-dashboards
+            # Explicit items: remaps each dashboard key into the
+            # subdirectory its matching provider in
+            # grafana-provisioning-dashboards reads from (general/,
+            # pantry-bot/, or pc-health/) -- see that ConfigMap for why.
+            # A ConfigMap volume with items: is exhaustive: every key in
+            # grafana-dashboards must be listed here or it won't be
+            # mounted at all. Adding a new dashboard file means adding
+            # its key here too.
+            items:
+              - key: cloudflared.json
+                path: general/cloudflared.json
+              - key: cluster-overview.json
+                path: general/cluster-overview.json
+              - key: greenies-main-pc-health.json
+                path: general/greenies-main-pc-health.json
+              - key: host-pc.json
+                path: general/host-pc.json
+              - key: jmusicbot.json
+                path: general/jmusicbot.json
+              - key: logs.json
+                path: general/logs.json
+              - key: machines.json
+                path: general/machines.json
+              - key: minecraft.json
+                path: general/minecraft.json
+              - key: overview.json
+                path: general/overview.json
+              - key: pods-and-workloads.json
+                path: general/pods-and-workloads.json
+              - key: services.json
+                path: general/services.json
+              - key: site-service-health.json
+                path: general/site-service-health.json
+              - key: start-here.json
+                path: general/start-here.json
+              - key: pantry-bot.json
+                path: pantry-bot/pantry-bot.json
+              - key: pantry-bot-usage.json
+                path: pantry-bot/pantry-bot-usage.json
+              - key: truffles-streaming.json
+                path: pc-health/truffles-streaming.json
         - name: data
           persistentVolumeClaim:
             claimName: grafana-data
