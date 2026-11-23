@@ -49,7 +49,8 @@ rules:
       - pods
       - replicationcontrollers
       - resourcequotas
-      - secrets
+      # Secrets intentionally excluded: KSM only needs object status and
+      # must not have cluster-wide access to secret contents.
       - services
       - serviceaccounts
     verbs: ["list", "watch"]
