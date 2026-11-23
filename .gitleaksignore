@@ -1,0 +1,11 @@
+# Historical token revoked automatically by Discord months before 2026-11-22.
+# Reviewed in https://github.com/ChayzX/k8s-homelab/issues/455
+# Suppress exactly this commit/path/rule/line fingerprint; retain all other token detection.
+7d3114591f62b3a59f6e676b36e4d948739b4bf7:observability/k3s-watcher/watcher.env:generic-api-key:1
+
+# Discord user ID is public identity metadata, not an authentication credential.
+7d3114591f62b3a59f6e676b36e4d948739b4bf7:observability/k3s-watcher/watcher.env:discord-client-id:2
+
+# Historical Canada startup script uses image identifiers, not API credentials.
+25e62d5044b2fa227abdb452d802c2b05c6ea1bc:observability/failover-witness/canada/start-canada-production.ps1:generic-api-key:6
+90f95185054fcee1121d3fefad8c72f145c3fe96:observability/failover-witness/canada/start-canada-production.ps1:generic-api-key:5
