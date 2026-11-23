@@ -30,12 +30,12 @@ jobs:
         with:
           go-version: stable
       - name: Install Cariddi
-        run: go install github.com/edoardottt/cariddi/cmd/cariddi@latest
+        run: go install github.com/edoardottt/cariddi/cmd/cariddi@v1.4.6
       - name: Crawl approved public site conservatively
         env:
           TARGET: ${{ vars.CARIDDI_TARGET_URL }}
         run: |
-          printf '%s\n' "$TARGET" | "$(go env GOPATH)/bin/cariddi" -s -e -err -md 2 -c 2 -d 1000 -t 10 -json > cariddi-results.json
+          printf '%s\n' "$TARGET" | "$(go env GOPATH)/bin/cariddi" -s -e -err -md 2 -c 2 -d 2 -t 10 -json > cariddi-results.json
           test -s cariddi-results.json || echo 'No results were returned.'
           echo 'Scan completed. Download the restricted artifact to inspect findings; do not copy suspected secrets into issues or chat.'
       - name: Retain findings briefly for private review
