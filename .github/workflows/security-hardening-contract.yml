@@ -1,0 +1,39 @@
+name: Security Hardening Contract
+
+on:
+  pull_request:
+    paths:
+      - 'ci-tunnel/20-deployment.yaml'
+      - 'observability/mcp-grafana-cloudflared.yaml'
+      - 'observability/windows-alloy-metrics-cloudflared.yaml'
+      - 'pantry-bot/62-deployment-commands-cloudflared.yaml'
+      - 'pantry-bot/66-deployment-app-cloudflared.yaml'
+      - 'observability/kube-state-metrics.yaml'
+      - 'tests/security-hardening-contract.py'
+      - '.github/workflows/security-hardening-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'ci-tunnel/20-deployment.yaml'
+      - 'observability/mcp-grafana-cloudflared.yaml'
+      - 'observability/windows-alloy-metrics-cloudflared.yaml'
+      - 'pantry-bot/62-deployment-commands-cloudflared.yaml'
+      - 'pantry-bot/66-deployment-app-cloudflared.yaml'
+      - 'observability/kube-state-metrics.yaml'
+      - 'tests/security-hardening-contract.py'
+      - '.github/workflows/security-hardening-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Assert least-privilege and immutable tunnel containers
+        run: python3 tests/security-hardening-contract.py
