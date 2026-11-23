@@ -1,0 +1,47 @@
+name: Controlled Public Web Exposure Scan
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  crawl:
+    # Configure an approved HTTPS URL in repository variable CARIDDI_TARGET_URL.
+    if: ${{ vars.CARIDDI_TARGET_URL != '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Validate explicitly approved target
+        env:
+          TARGET: ${{ vars.CARIDDI_TARGET_URL }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from urllib.parse import urlsplit
+          u = urlsplit(os.environ["TARGET"])
+          if u.scheme != "https" or not u.hostname or u.username or u.password or u.query or u.fragment:
+              raise SystemExit("Set CARIDDI_TARGET_URL to an approved HTTPS website root without credentials or query parameters")
+          if u.path not in ("", "/"):
+              raise SystemExit("Use only a site root, not an application action endpoint")
+          PY
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v6
+        with:
+          go-version: stable
+      - name: Install Cariddi
+        run: go install github.com/edoardottt/cariddi/cmd/cariddi@v1.4.6
+      - name: Crawl approved public site conservatively
+        env:
+          TARGET: ${{ vars.CARIDDI_TARGET_URL }}
+        run: |
+          printf '%s\n' "$TARGET" | "$(go env GOPATH)/bin/cariddi" -s -e -err -md 2 -c 2 -d 2 -t 10 -json > cariddi-results.json
+          test -s cariddi-results.json || echo 'No results were returned.'
+          echo 'Scan completed. Download the restricted artifact to inspect findings; do not copy suspected secrets into issues or chat.'
+      - name: Retain findings briefly for private review
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cariddi-sensitive-findings
+          path: cariddi-results.json
+          retention-days: 1
+          if-no-files-found: error
