@@ -1,0 +1,4 @@
+# Historical token revoked automatically by Discord months before 2026-11-22.
+# Reviewed in https://github.com/ChayzX/k8s-homelab/issues/455
+# Suppress exactly this commit/path/rule/line fingerprint; retain all other token detection.
+7d3114591f62b3a59f6e676b36e4d948739b4bf7:observability/k3s-watcher/watcher.env:generic-api-key:1
