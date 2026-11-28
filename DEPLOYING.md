@@ -8,7 +8,7 @@ pod changed. Only a workflow whose summary contains **Apply**, **Restart**, and
 
 | Change | Push to `main` does | Manual action needed? |
 |---|---|---|
-| Opsbot application (`opsbot/bot/**`) | Builds, applies, restarts, and verifies on merge | No second click; merge is approval |
+| Opsbot application (`opsbot/bot/**`) | Builds, promotes the image to `deploy/portainer-home`, and verifies Portainer's rollout on merge | No second click; merge is approval |
 | PantryBot application | Builds, applies, restarts, and verifies on merge | No second click; merge is approval |
 | Grafana dashboards/config | Applies ConfigMap, restarts, and verifies Grafana automatically | No; push is the deployment (a manual dispatch also works) |
 | Minecraft source/image inputs | Resolves newest Paper version, builds, applies, restarts, and verifies on merge | No second click; merge is approval |

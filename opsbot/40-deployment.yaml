@@ -8,6 +8,9 @@
 # connection to Discord's gateway — zero new inbound network exposure, same
 # trust model jmusicbot/pantry-bot already use in this cluster.
 #
+# Portainer deploys this Deployment from the deploy/portainer-home branch; CI
+# commits the image tag there, so the image below can lag the live tag.
+#
 # Built and pushed to GHCR by .github/workflows/opsbot-deploy.yml, same
 # pattern as pantry-bot -- CI runs on a plain GitHub-hosted runner, no Docker
 # or local side-loading into this node's containerd required. This replaced
